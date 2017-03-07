@@ -27,7 +27,13 @@ target_link_libraries(Tournament_Pivoting gfortran)
 target_link_libraries(Tournament_Pivoting pthread)
 target_link_libraries(Tournament_Pivoting )
 
-add_definitions(-DTP_VERBOSITY=0) 
+# Verbosity
+set(TP_VERBOSITY 0 CACHE STRING "Controls the verbosity. Default is 0.")
+
+if (TP_VERBOSITY GREATER 0)
+  add_definitions(-DTP_VERBOSITY=${TP_VERBOSITY})
+endif()
+ 
 message(STATUS " libs     ${PLASMA_LIBRARIES} ")
 message(STATUS " includes ${PLASMA_INCLUDE_DIRS} ")
 
@@ -38,6 +44,6 @@ link_directories(${PLASMA_LIBRARY_DIRS})
 
 
 
-add_executable(test ${PROJECT_SOURCE_DIR}/test/test.c)
+add_executable(tp_test ${PROJECT_SOURCE_DIR}/test/test.c)
 
-target_link_libraries(test Tournament_Pivoting)
+target_link_libraries(tp_test Tournament_Pivoting)
