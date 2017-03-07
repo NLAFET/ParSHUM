@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <math.h>
 #include <strings.h>
+#include <stdbool.h>
+
 #include "spral_rutherford_boeing.h"
 #include "spral_matrix_util.h"
 

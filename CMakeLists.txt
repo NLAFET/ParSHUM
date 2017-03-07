@@ -15,8 +15,20 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -g -lm -Wall")
 
 # The following folder will be included
 include_directories(include)
-include_directories(/home/cseg/numanlys/scarf523/install/spral/include)
-link_directories(/home/cseg/numanlys/scarf523/install/spral/lib/)
+
+# Spral
+set(SPRAL_DIR "/home/cseg/numanlys/scarf523/install/spral" CACHE PATH "Root directory containing Spral")
+
+if( SPRAL_DIR )
+
+  set(ENV{PKG_CONFIG_PATH} "${SPRAL_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+
+  include_directories(${SPRAL_DIR}/include)
+  link_directories(${SPRAL_DIR}/lib/)
+endif()
+
+
+# Plasma
 pkg_check_modules(Plasma plasma )
 
 file(GLOB_RECURSE SOURCES control/*.c pivots/*.c smatrix/*.c )
@@ -42,8 +54,7 @@ target_include_directories(Tournament_Pivoting PUBLIC ${PLASMA_INCLUDE_DIRS})
 target_compile_options(Tournament_Pivoting PUBLIC ${PLASMA_CFLAGS_OTHER})
 link_directories(${PLASMA_LIBRARY_DIRS})
 
-
-
+# Test driver: tp_test
 add_executable(tp_test ${PROJECT_SOURCE_DIR}/test/test.c)
 
 target_link_libraries(tp_test Tournament_Pivoting)
