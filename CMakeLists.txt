@@ -24,7 +24,7 @@ if( SPRAL_DIR )
   set(ENV{PKG_CONFIG_PATH} "${SPRAL_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
 
   include_directories(${SPRAL_DIR}/include)
-  link_directories(${SPRAL_DIR}/lib/)
+  link_directories(${SPRAL_DIR} ${SPRAL_DIR}/lib/)
 endif()
 
 
