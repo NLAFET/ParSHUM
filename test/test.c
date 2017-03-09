@@ -63,7 +63,7 @@ main(int argc, char **argv)
   TP_vector_memset(sol, 0.0);
   // init sol = b
   for (i = 0; i < self->A->n; i++)
-     sol->vect[i] = rhs->vect[i]; 
+     sol->vect[i] = rhs->vect[i];
 
   TP_solver_solve(self, sol, sol);
 
@@ -75,6 +75,26 @@ main(int argc, char **argv)
      /* printf("x-x0[i] %e\n", abs(X->vect[i] - sol->vect[i])); */
      fwd_err = fmax(fwd_err, fabs(X->vect[i] - sol->vect[i]));
   }
+
+  // Compute backward error in inf norm
+
+  // Compute residual
+  TP_vector res_vec;
+  double res = 0.0, x_norm = 0.0, b_norm = 0.0;
+
+  res_vec = TP_vector_create(self->A->m);
+  
+  TP_matrix_SpMV(self->A, sol, res_vec);
+  for (i = 0; i < self->A->m; i++) {
+     res_vec->vect[i] = res_vec->vect[i] - rhs->vect[i];
+     res = fmax(res, res_vec->vect[i]);
+     b_norm = fmax(b_norm, rhs->vect[i]);
+  }
+
+  for (i = 0; i < self->A->n; i++)
+     x_norm = fmax(x_norm, sol->vect[i]);
+
+  
 
   TP_vector_destroy(sol);
 
