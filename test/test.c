@@ -1,5 +1,9 @@
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <math.h>
+
 #include "TP_solver.h" 
 #include "TP_matrix.h" 
 #include "TP_dense.h"
@@ -9,7 +13,23 @@
 
 
 
+double get_swtime()
+{
+  struct timeval tp;
+  /* struct timezone tzp; */
 
+  gettimeofday(&tp, NULL);
+  return  ( (double) tp.tv_sec + (double) tp.tv_usec * 1.e-6 );
+}
+
+double get_uwtime() 
+{
+  struct timeval t;
+  /* struct timezone tzp; */
+
+  gettimeofday(&t,NULL);
+  return (double) t.tv_sec*1e6+t.tv_usec;
+}
 
 int 
 main(int argc, char **argv)
@@ -18,6 +38,8 @@ main(int argc, char **argv)
   int retval = 0; 
   TP_vector X, rhs;
 
+  double t_sa;
+  int i;
   
   self = TP_solver_create();
   TP_solver_init(self, argc, argv);
@@ -25,12 +47,40 @@ main(int argc, char **argv)
   X   = TP_vector_create(self->A->n);
   rhs = TP_vector_create(self->A->n);
   
-  TP_vector_memset(X, 100.0);
+  TP_vector_memset(X, 1.0);
+  TP_vector_memset(rhs, 0.0);
   TP_matrix_SpMV(self->A, X, rhs);
-  TP_vector_memset(X, 10.0);
+  /* TP_vector_memset(X, 10.0); */
 
+  // Factor
+  t_sa = get_uwtime();
   TP_solver_factorize(self);
-  TP_solver_solve(self, rhs, rhs);
+  double t_facto = get_uwtime() - t_sa;
+
+  // Solve
+  TP_vector sol;
+  sol = TP_vector_create(self->A->n);
+  TP_vector_memset(sol, 0.0);
+  // init sol = b
+  for (i = 0; i < self->A->n; i++)
+     sol->vect[i] = rhs->vect[i]; 
+
+  TP_solver_solve(self, sol, sol);
+
+  // Compute errors
+
+  // Compute forward error in inf norm
+  double fwd_err = 0.0;
+  for (i = 0; i < self->A->n; i++) {
+     /* printf("x-x0[i] %e\n", abs(X->vect[i] - sol->vect[i])); */
+     fwd_err = fmax(fwd_err, fabs(X->vect[i] - sol->vect[i]));
+  }
+
+  TP_vector_destroy(sol);
+
+  printf("[tp_test] Time for factorize (s): %e\n", t_facto/1e6);
+
+  printf("[tp_test] Forward error || ||_inf : %e\n", fwd_err);
   
   TP_solver_finalize(self);
   

@@ -250,6 +250,7 @@ TP_solver_solve(TP_solver self, TP_vector X, TP_vector rhs)
   		self->S_dense->pivots, &X_vals[self->done_pivots], self->S_dense->n);
   
   TP_matrix_solve_UD(self->U, self->D, X, self->col_perm);
+
   TP_vector_print(X, "x after the U solve");
 }
 
