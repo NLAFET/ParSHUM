@@ -212,29 +212,40 @@ TP_solver_factorize(TP_solver self)
 {
   int needed_pivots = self->A->n < self->A->m ? self->A->n : self->A->m;
 
+  double sa, t_facto_sparse, t_facto_dense;
+ 
+  TP_verbose_timing_start(&sa);
+     
   while (self->done_pivots < (int) needed_pivots * 0.8 )
-    { 
-      DD_verbose_step_start(self->verbose)
-      TP_solver_find_pivot_set(self);
-      TP_solver_update_matrix(self);
-      /* TP_schur_matrix_check_perms(self->S, self->row_perm, self->col_perm, self->done_pivots); */
+     { 
+        DD_verbose_step_start(self->verbose)
+           TP_solver_find_pivot_set(self);
+        TP_solver_update_matrix(self);
+        /* TP_schur_matrix_check_perms(self->S, self->row_perm, self->col_perm, self->done_pivots); */
+           
+        /* printf("checking col_perms\n"); */
+        /* check_vlaid_perms(self->col_perm, self->A->n); */
+        /* printf("checking row_perms\n"); */
+        /* check_vlaid_perms(self->row_perm, self->A->m); */
+     }
 
-      /* printf("checking col_perms\n"); */
-      /* check_vlaid_perms(self->col_perm, self->A->n); */
-      /* printf("checking row_perms\n"); */
-      /* check_vlaid_perms(self->row_perm, self->A->m); */
-    }
+  TP_verbose_timing_start(&t_facto_sparse);
 
   /* print_int(self->col_perm, self->A->n, "col_perms"); */
   /* print_int(self->row_perm, self->A->m, "row_perms"); */
   self->S_dense = TP_schur_matrix_convert(self->S, self->done_pivots);
   TP_dense_matrix_factorize(self->S_dense);
+
+  TP_verbose_timing_start(&t_facto_dense);
    
   memcpy(&self->row_perm[self->done_pivots], self->S_dense->original_rows,
   	 (self->A->m - self->done_pivots) * sizeof(*self->row_perm));
   memcpy(&self->col_perm[self->done_pivots], self->S_dense->original_cols,
   	 (self->A->n - self->done_pivots) * sizeof(*self->col_perm));
   fflush(stdout);
+
+  printf("[TP_solver_factorize] Time factor sparse (s): %f\n", (t_facto_sparse-sa)/1e6);
+  printf("[TP_solver_factorize] Time factor dense (s): %f\n", (t_facto_dense-sa)/1e6);
 }
 
 

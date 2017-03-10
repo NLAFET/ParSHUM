@@ -65,7 +65,9 @@ main(int argc, char **argv)
   for (i = 0; i < self->A->n; i++)
      sol->vect[i] = rhs->vect[i];
 
+  t_sa = get_uwtime();
   TP_solver_solve(self, sol, sol);
+  double t_solve = get_uwtime() - t_sa;
 
   // Compute errors
 
@@ -113,7 +115,18 @@ main(int argc, char **argv)
 
   TP_vector_destroy(sol);
 
+  printf("[tp_test] m: %d\n", self->A->m);
+  printf("[tp_test] n: %d\n", self->A->n);
+  printf("[tp_test] nnz: %ld\n", self->A->nnz);
+
+  printf("\n");
+
+  printf("[tp_test] Order of dense matrix: %d\n", self->S_dense->n);
+
+  printf("\n");
+
   printf("[tp_test] Time for factorize (s): %e\n", t_facto/1e6);
+  printf("[tp_test] Time for solve (s): %e\n", t_solve/1e6);
 
   printf("[tp_test] Forward error || ||_inf : %e\n", fwd_err);
   printf("[tp_test] Backward error || ||_inf : %e\n", bwd_err);
