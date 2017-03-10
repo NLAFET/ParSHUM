@@ -78,7 +78,7 @@ main(int argc, char **argv)
 
   // Compute backward error in inf norm
 
-  // Compute residual
+  // Compute residual and norm of b
   TP_vector res_vec;
   double res = 0.0, x_norm = 0.0, b_norm = 0.0;
 
@@ -91,16 +91,32 @@ main(int argc, char **argv)
      b_norm = fmax(b_norm, rhs->vect[i]);
   }
 
+  // compute norm of x
   for (i = 0; i < self->A->n; i++)
      x_norm = fmax(x_norm, sol->vect[i]);
 
-  
+  // Compute inf norm of A
+  TP_vector row_norm;
+  row_norm = TP_vector_create(self->A->n);
+  TP_vector_memset(row_norm, 0.0);
+
+  for (i = 0; i < self->A->col_ptr[self->A->n]; i++)
+     row_norm->vect[self->A->row[i]] = row_norm->vect[self->A->row[i]] + fabs(self->A->val[i]); 
+
+  double A_norm = 0.0;
+  for (i = 0; i < self->A->n; i++)
+     A_norm = fmax(A_norm, row_norm->vect[i]);
+
+  // Scaled residual
+  double tmp = A_norm * x_norm + b_norm;
+  double bwd_err = res / tmp;
 
   TP_vector_destroy(sol);
 
   printf("[tp_test] Time for factorize (s): %e\n", t_facto/1e6);
 
   printf("[tp_test] Forward error || ||_inf : %e\n", fwd_err);
+  printf("[tp_test] Backward error || ||_inf : %e\n", bwd_err);
   
   TP_solver_finalize(self);
   

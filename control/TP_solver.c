@@ -251,7 +251,7 @@ TP_solver_solve(TP_solver self, TP_vector X, TP_vector rhs)
   
   TP_matrix_solve_UD(self->U, self->D, X, self->col_perm);
 
-  TP_vector_print(X, "x after the U solve");
+  /* TP_vector_print(X, "x after the U solve"); */
 }
 
 
