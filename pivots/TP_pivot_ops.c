@@ -18,7 +18,7 @@ struct pivot_candidates
 
 
 struct pivot_candidates *
-get_cadidates(TP_schur_matrix matrix, double value_tol,
+get_candidates(TP_schur_matrix matrix, double value_tol,
 	      int first_col, int last_col)
 {
   struct pivot_candidates *self;
@@ -39,8 +39,8 @@ get_cadidates(TP_schur_matrix matrix, double value_tol,
   for(i = first_col; i < last_col; i++)
     {
       struct CSC_struct *CSC = &matrix->CSC[i];
-      int *rows       = CSC->row;
-      double *vals    = CSC->val;
+      int *rows       = matrix->row + CSC->offset;
+      double *vals    = matrix->val + CSC->offset;
       int col_nb_elem = CSC->nb_elem;
       double col_max  = CSC->col_max;
 
@@ -67,38 +67,32 @@ get_cadidates(TP_schur_matrix matrix, double value_tol,
 TP_pivot_list
 get_possible_pivots(TP_schur_matrix matrix, int *random_col, 
 		    double value_tol, double markov_tol,
-		    int nb_init_block)
+		    int nb_candidates_per_block)
 {
   TP_pivot_list self;
-  int i, elems_per_block, elems_per_set = 0, nb_blocks = 1;
+  int i, candidates_per_set = 0, pivots_per_set = 0;
   int n = matrix->n;
   struct pivot_candidates *candidates;
 
   self = TP_pivot_list_create();
   
-  candidates = get_cadidates(matrix, value_tol, 0, n);
-  if ( nb_init_block  > candidates->nb_found ) 
-    nb_init_block = candidates->nb_found;
+  candidates = get_candidates(matrix, value_tol, 0, n);
 
-  elems_per_block = candidates->nb_found / nb_init_block;
-  
   for(i = 0; i < n; i++) {
     int col = random_col[i];
-    if (elems_per_set > elems_per_block && nb_blocks < nb_init_block) {
-      elems_per_set = 0;
-      nb_blocks++;
-    }
-
+    if (candidates_per_set > nb_candidates_per_block) 
+      candidates_per_set = pivots_per_set = 0;
+    
     if (candidates->row[col] == -1 ) 
       continue;
 
-    if ( matrix->CSC[col].nb_elem * matrix->CSR[candidates->row[col]].nb_elem >
-	 markov_tol * candidates->best_markov) 
-      continue;
-    /* else */
-    /*   TP_pivot_list_insert_new_set(self, matrix, candidates->row[i], i, candidates->markov[i]); */
+    candidates_per_set++;
     
-    if ( elems_per_set == 0) {
+    if ( matrix->CSC[col].nb_elem * matrix->CSR[candidates->row[col]].nb_elem >
+	 markov_tol * candidates->best_markov)
+      continue;
+
+    if ( pivots_per_set == 0) {
       TP_pivot_list_insert_new_set(self, matrix, candidates->row[col], col, candidates->markov[col]);
     } else {
       TP_pivot_set set = self->last;
@@ -107,9 +101,9 @@ get_possible_pivots(TP_schur_matrix matrix, int *random_col,
     	add_cell_to_sorted_set(set, cell, matrix);
       }
     }
-    elems_per_set++;
+    pivots_per_set++;
   }
-    
+
   free(candidates->row);
   free(candidates->markov);
   free(candidates);
@@ -174,8 +168,8 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
     cell->next   = tmp;
   }
   set->nb_elem++;
-  update_counter(set->cols_count, matrix->CSR[cell->row].col, matrix->CSR[cell->row].nb_elem);
-  update_counter(set->rows_count, matrix->CSC[cell->col].row, matrix->CSC[cell->col].nb_elem);
+  update_counter(set->cols_count, matrix->col + matrix->CSR[cell->row].offset, matrix->CSR[cell->row].nb_elem);
+  update_counter(set->rows_count, matrix->row + matrix->CSC[cell->col].offset, matrix->CSC[cell->col].nb_elem);
 }
 
 

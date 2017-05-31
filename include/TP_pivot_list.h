@@ -48,8 +48,6 @@ void           add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_s
 void           TP_pivot_list_destroy(TP_pivot_list self);
 void           TP_pivot_set_destroy(TP_pivot_set self);
 void           print_pivot_list(TP_pivot_list self, char *mess);
-// returns the number of pivots
-int            TP_pivot_get_pivots(TP_pivot_set set, int *row_pivots, int *col_pivots);
 
 
 

@@ -40,7 +40,7 @@ target_link_libraries(Tournament_Pivoting pthread)
 target_link_libraries(Tournament_Pivoting )
 
 # Verbosity
-set(TP_VERBOSITY 0 CACHE STRING "Controls the verbosity. Default is 0.")
+set(TP_VERBOSITY 1 CACHE STRING "Controls the verbosity. Default is 0.")
 
 if (TP_VERBOSITY GREATER 0)
   add_definitions(-DTP_VERBOSITY=${TP_VERBOSITY})

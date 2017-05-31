@@ -47,8 +47,8 @@ TP_pivot_list TP_pivot_list_insert_new_set(TP_pivot_list self, TP_schur_matrix m
   set->cells   = cell;
   set->next    = NULL;
   set->nb_elem = 1;
-  update_counter(set->cols_count, matrix->CSR[row].col, matrix->CSR[row].nb_elem);
-  update_counter(set->rows_count, matrix->CSC[col].row, matrix->CSC[col].nb_elem);
+  update_counter(set->cols_count, matrix->col + matrix->CSR[row].offset, matrix->CSR[row].nb_elem);
+  update_counter(set->rows_count, matrix->row + matrix->CSC[col].offset, matrix->CSC[col].nb_elem);
 
   cell->row   = row;
   cell->col   = col;
@@ -182,24 +182,6 @@ merge_sorted_sets(TP_pivot_set self)
   return self;
 }
 
-int 
-TP_pivot_get_pivots(TP_pivot_set set, int *row_pivots, int *col_pivots)
-{
-  TP_pivot_cell cells = set->cells;
-  int nb_pivots = 0;
-
-  while (cells)
-    {
-      row_pivots[nb_pivots] = cells->row;
-      col_pivots[nb_pivots] = cells->col;
-      nb_pivots++;
-      cells = cells->next;
-    }
-
-  return nb_pivots;
-}
-
-
 
 TP_pivot_set
 get_independent_pivots(TP_pivot_set candidates, TP_schur_matrix matrix)
@@ -223,8 +205,8 @@ get_independent_pivots(TP_pivot_set candidates, TP_schur_matrix matrix)
       int i, j, independent = 1;
       int row = candidates_cell->row;
       int col = candidates_cell->col;
-      int *rows = CSC[col].row;
-      int *cols = CSR[row].col;
+      int *rows = matrix->row + CSC[col].offset;
+      int *cols = matrix->col + CSR[row].offset;
       int nb_rows = CSC[col].nb_elem;
       int nb_cols = CSR[row].nb_elem;
 
@@ -299,8 +281,6 @@ print_pivot_list(TP_pivot_list self, char *mess)
       print_set = print_set->next;
     }
 }
-
-
 
 void
 TP_pivot_set_destroy(TP_pivot_set self)

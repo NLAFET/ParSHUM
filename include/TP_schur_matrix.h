@@ -6,14 +6,13 @@
 
 
 typedef struct _TP_schur_matrix *TP_schur_matrix;
-typedef struct _free_space_CSC  *free_space_CSC;
-typedef struct _free_space_CSR  *free_space_CSR;
+typedef struct _free_space  *free_space;
 
 
 struct CSR_struct {
   int nb_elem;
   int nb_free;
-  int *col;
+  long offset;
 };
 
 
@@ -21,25 +20,29 @@ struct CSC_struct {
   double col_max;
   int    nb_elem;
   int    nb_free;
-  int    *row;
-  double *val;
+  long offset;
 };
 
 
 struct _TP_schur_matrix {
   struct CSC_struct *CSC;
   struct CSR_struct *CSR;
-  free_space_CSC unused_CSC;
-  free_space_CSR unused_CSR;
+  free_space unused_CSC;
+  free_space unused_CSR;
 
   int n;
   int m;
-  double **val;
-  int    **row;
-  int    **col;
+  long nnz;
   
-  int nb_CSC_memories;
-  int nb_CSR_memories;
+  int debug;
+
+  long allocated_CSC;
+  long allocated_CSR;
+  
+  double *val;
+  int    *row;
+  int    *col;
+  
   double extra_space;
   double extra_space_inbetween;
 };
@@ -47,7 +50,7 @@ struct _TP_schur_matrix {
 
 TP_schur_matrix TP_schur_matrix_create();
 
-void TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, 
+void TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug,
 			      double extra_space, double extra_space_inbetween);
 
 void TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self);
@@ -67,7 +70,16 @@ void TP_schur_matrix_destroy(TP_schur_matrix self);
 
 TP_dense_matrix  TP_schur_matrix_convert(TP_schur_matrix self, int done_pivots);
 
-void   TP_schur_matrix_check_perms(TP_schur_matrix self, int *row_perms, 
-				   int *col_perms, int nb_pivots);
+void  TP_schur_matrix_check_pivots(TP_schur_matrix self,
+				   int *row_perms, int *col_perms,
+				   int *invr_row_perms, int *invr_col_perms,
+				   int nb_pivots);
+
+void  TP_schur_matrix_memory_check(TP_schur_matrix self);
+
+void  TP_schur_matrix_check_symetry(TP_schur_matrix self);
+void  TP_print_GB(TP_schur_matrix self, char *mess);
+void  TP_print_single_GB(free_space self, char *mess);
 
 #endif //  _TP_SCHUR_MATRIX_H 
+
