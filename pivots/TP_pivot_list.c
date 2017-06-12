@@ -255,6 +255,11 @@ print_pivot_list(TP_pivot_list self, char *mess)
       print_set = print_set->next;
     }
 }
+void 
+TP_pivot_cell_destroy(TP_pivot_cell self)
+{
+  free(self);
+}
 
 void
 TP_pivot_set_destroy(TP_pivot_set self)

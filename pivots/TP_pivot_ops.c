@@ -68,7 +68,8 @@ create_init_set(TP_schur_matrix matrix,
       //double marko_count = (double) ( (matrix->CSC[col].nb_elem - 1) * (matrix->CSR[candidates->row[col]].nb_elem - 1));
       if ( candidates->marko[col]  <=  max_marko) {
 	TP_pivot_cell cell = TP_pivot_cell_create(candidates->row[col], col, candidates->marko[col]);
-	add_cell_to_sorted_set(set, cell, matrix);
+	if ( (add_cell_to_sorted_set(set, cell, matrix)) ) 
+	  TP_pivot_cell_destroy(cell);
       }
     }
 
@@ -179,8 +180,8 @@ merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix)
 		{
 		  TP_pivot_list_insert_set(merged_list, merged_set);
 		}
-	      }
-	    }
+	      }// task
+	    }// for 
 #pragma omp taskwait
 	  TP_pivot_list_destroy(self);
 	  self = merged_list;
@@ -254,16 +255,12 @@ merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix)
 
   while(cells_to_merge)
     {
-      if( !cols_count[cells_to_merge->col] && !rows_count[cells_to_merge->row] ) {
-	TP_pivot_cell tmp = cells_to_merge;
-	cells_to_merge = cells_to_merge->next;
-	tmp->next = NULL;
-	add_cell_to_sorted_set(large, tmp, matrix);
-      }  else { 
-	TP_pivot_cell tmp = cells_to_merge;
-	cells_to_merge = cells_to_merge->next;
-	free(tmp);
-      }
+      TP_pivot_cell cell = cells_to_merge;
+      cells_to_merge = cells_to_merge->next;
+      cell->next = NULL;
+
+      if ( (add_cell_to_sorted_set(large, cell, matrix)) )
+	TP_pivot_cell_destroy(cell);
     }
 
   TP_pivot_set_destroy(small);

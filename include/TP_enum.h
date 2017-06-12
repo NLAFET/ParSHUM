@@ -35,11 +35,20 @@ typedef enum _TP_why_KO
 typedef enum _TP_overlaps
   {
     TP_overlap_none,
-    TP_overlap_begin, 
+    TP_overlap_begin,
     TP_overlap_end, 
     TP_overlap_total
   } TP_overlaps;
 
+
+typedef enum _TP_exe_parm
+  {
+    TP_value_tol,
+    TP_marko_tol,
+    TP_schur_density,
+    TP_nb_candidates,
+    TP_min_pivots
+  } TP_exe_parm;
 
 #define  TP_DEBUG_NONE              0
 #define  TP_CHECK_PIVOTS            (1<<0)
@@ -51,8 +60,8 @@ typedef enum _TP_overlaps
 #define  TP_CHECK_TP_W_PLASMA_PERM  (1<<10)
 #define  TP_CHECK_DENSE_W_TP_PERM   (1<<11)
 
-#define TP_UNUSED_PIVOT     -100
+#define TP_UNUSED_PIVOT  -100
 
-#define PATH_LENGTH 2048  
+#define PATH_LENGTH 2048
 
 #endif  // _TP_ENUM_H 
