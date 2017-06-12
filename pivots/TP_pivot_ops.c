@@ -3,38 +3,27 @@
 #include <string.h>
 #include <math.h>
 #include <limits.h> 
+#include <omp.h>
 
 #include "TP_auxiliary.h"
 
 #include "TP_pivot_list.h"
 
-struct pivot_candidates
+
+void
+get_candidates(TP_schur_matrix matrix,
+	       TP_pivot_candidates candidates,
+	       double value_tol,
+	       int first_col, int last_col)
 {
-  int best_markov;
-  int nb_found;
-  int *row;
-  int *markov;
-};
-
-
-struct pivot_candidates *
-get_candidates(TP_schur_matrix matrix, double value_tol,
-	      int first_col, int last_col)
-{
-  struct pivot_candidates *self;
-
-  int best_markov = INT_MAX;
+  int best_marko = INT_MAX;
   int i, j;
-  
-  self           = malloc((size_t) sizeof(*self));
-  self->row      = malloc( (last_col - first_col) * sizeof(*self->row));
-  self->markov   = malloc( (last_col - first_col) * sizeof(*self->markov));
-  self->nb_found = 0;
- 
+  int me =  omp_get_thread_num();
+
   for(i = first_col; i < last_col; i++)
-    self->row[i] = -1;
+    candidates->row[i] = -1;
   for(i = first_col; i < last_col; i++)
-    self->markov[i] = INT_MAX;
+    candidates->marko[i] = INT_MAX;
 
   for(i = first_col; i < last_col; i++)
     {
@@ -48,66 +37,112 @@ get_candidates(TP_schur_matrix matrix, double value_tol,
   	{
 	  int row    = rows[j];
 	  double val = vals[j]; 
-  	  int current_markov = col_nb_elem * matrix->CSR[row].nb_elem;
+  	  int current_marko = (col_nb_elem - 1) * (matrix->CSR[row].nb_elem - 1);
   	  if ( fabs(val) >= value_tol * col_max &&
-  	       current_markov < self->markov[i] ) {
-  	    self->row[i]  = row;
-  	    self->markov[i]  = current_markov;
-	    self->nb_found++;
+  	       current_marko < candidates->marko[i] ) {
+  	    candidates->row[i]  = row;
+  	    candidates->marko[i]  = current_marko;
   	  }
   	}
-      best_markov = ( self->markov[i] < best_markov  ) ? self->markov[i] : best_markov;
+      best_marko = ( candidates->marko[i] < best_marko  ) ? candidates->marko[i] : best_marko;
     }
 
-  self->best_markov = best_markov;
-  return self;
+  candidates->best_marko[me] = best_marko;
 }
 
 
-TP_pivot_list
-get_possible_pivots(TP_schur_matrix matrix, int *random_col, 
-		    double value_tol, double markov_tol,
-		    int nb_candidates_per_block)
+void
+create_init_set(TP_schur_matrix matrix,
+		TP_pivot_list list,
+		int *random_col, 
+		TP_pivot_candidates candidates,
+		int max_marko, int start, int end)
 {
-  TP_pivot_list self;
-  int i, candidates_per_set = 0, pivots_per_set = 0;
-  int n = matrix->n;
-  struct pivot_candidates *candidates;
-
-  self = TP_pivot_list_create();
+  int i;
+  TP_pivot_set set = TP_pivot_set_create(matrix->n, matrix->m);
   
-  candidates = get_candidates(matrix, value_tol, 0, n);
-
-  for(i = 0; i < n; i++) {
-    int col = random_col[i];
-    if (candidates_per_set > nb_candidates_per_block) 
-      candidates_per_set = pivots_per_set = 0;
-    
-    if (candidates->row[col] == -1 ) 
-      continue;
-
-    candidates_per_set++;
-    
-    if ( matrix->CSC[col].nb_elem * matrix->CSR[candidates->row[col]].nb_elem >
-	 markov_tol * candidates->best_markov)
-      continue;
-
-    if ( pivots_per_set == 0) {
-      TP_pivot_list_insert_new_set(self, matrix, candidates->row[col], col, candidates->markov[col]);
-    } else {
-      TP_pivot_set set = self->last;
-      if( !set->cols_count[col] && !set->rows_count[candidates->row[col]] ) {
-    	TP_pivot_cell cell = TP_pivot_cell_create(candidates->row[col], col, candidates->markov[col]);
-    	add_cell_to_sorted_set(set, cell, matrix);
+  for( i = start; i < end; i++) 
+    {
+      /* int col = random_col[i]; */
+      int col = i;
+      //double marko_count = (double) ( (matrix->CSC[col].nb_elem - 1) * (matrix->CSR[candidates->row[col]].nb_elem - 1));
+      if ( candidates->marko[col]  <=  max_marko) {
+	TP_pivot_cell cell = TP_pivot_cell_create(candidates->row[col], col, candidates->marko[col]);
+	add_cell_to_sorted_set(set, cell, matrix);
       }
     }
-    pivots_per_set++;
-  }
 
-  free(candidates->row);
-  free(candidates->markov);
-  free(candidates);
+  if( set->nb_elem) 
+#pragma omp critical
+    {
+      TP_pivot_list_insert_set(list, set);
+    }
+  else 
+    TP_pivot_set_destroy(set);
+}
 
+TP_pivot_list
+get_possible_pivots(TP_schur_matrix matrix, int *random_col, 
+                    TP_pivot_candidates candidates, int nb_threads,
+		    double value_tol, double marko_tol,
+		    int nb_candidates_per_block)
+{
+  TP_pivot_list self = TP_pivot_list_create();
+  int i, candidates_per_set = 0;
+  int n = matrix->n, best_marko;
+
+#pragma omp parallel num_threads(nb_threads)
+  {
+    int me =  omp_get_thread_num();
+    int start = me * ( n / nb_threads);
+    int  end  = (me+1) * ( n / nb_threads);
+    if ( me == (nb_threads - 1) )
+      end = n;
+    
+    get_candidates(matrix, candidates, value_tol, start, end);
+  }  
+
+  best_marko = candidates->best_marko[0];
+  for(i = 1; i < nb_threads; i++) 
+    best_marko = (best_marko > candidates->best_marko[i]) ? candidates->best_marko[i] : best_marko;
+  best_marko = (best_marko == 0) ? 1 : best_marko;
+
+#pragma omp parallel num_threads(nb_threads)
+  {
+#pragma omp single
+    {
+      int last_step;
+      for(i = 0, last_step = 0; i < n; i++) {
+	/* int col = random_col[i]; */
+	int col = i;
+	
+	if (candidates->row[col] == -1 ) 
+	  continue;
+	
+	candidates_per_set++;
+	
+	
+	if (candidates_per_set > nb_candidates_per_block) {
+	  candidates_per_set = 0;
+#pragma omp task shared (self, random_col, candidates) 
+	  {
+	  int start = last_step, end = i;
+	  int markov_tolerance = (int) (best_marko * marko_tol);
+				/* best_marko * marko_tol could overbuff, if marko tol is too large  */
+	  create_init_set(matrix, self, random_col, candidates, markov_tolerance, start, end);
+	  }
+	  last_step = i;
+	}
+      }
+      if (candidates_per_set)
+#pragma omp task shared (self, random_col, candidates)
+	{
+	  create_init_set(matrix, self, random_col, candidates, (int) (best_marko * marko_tol), last_step, i);
+	}
+#pragma omp taskwait
+    } //single
+  } //parallel
+  
   return self;
 }
 
@@ -117,38 +152,54 @@ get_possible_pivots(TP_schur_matrix matrix, int *random_col,
 TP_pivot_list 
 merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix)
 {
-  while (self->nb_elem > 1)
+  TP_pivot_list merged_list;
+#pragma omp parallel shared(self, merged_list)
+  {
+#pragma omp single
     {
-      TP_pivot_list merged_list = TP_pivot_list_create();
-      int i;
-      int nb_merges = (self->nb_elem + 1) / 2;
-
-      for( i = 0; i < nb_merges; i++)
+      while (self->nb_elem > 1)
 	{
-	  TP_pivot_set merged_set;
+	  merged_list = TP_pivot_list_create();
+	  int i;
+	  int nb_merges = (self->nb_elem + 1) / 2;
 	  
-	  merged_set = get_next_merging_set(self);
-	  merged_set = merge_to_larger_set(merged_set, matrix);
-
-/* #ifdef MERGING_INTO_ONE_SET */
-	  /* merged_set = merge_sorted_sets(merged_set); */
-	  /* merged_set = get_independent_pivots(merged_set, matrix); */
-/* #endif */
-	  TP_pivot_list_insert_set(merged_list, merged_set);
-	}
-
-      TP_pivot_list_destroy(self);
-      self = merged_list;
-  }
+	  for( i = 0; i < nb_merges; i++)
+	    {
+#pragma omp task shared(self, merged_list)
+              {
+		TP_pivot_set merged_set;
+		
+#pragma omp critical
+		{
+		  merged_set = get_next_merging_set(self);
+		}
+		merged_set = merge_to_larger_set(merged_set, matrix);
+		
+#pragma omp critical
+		{
+		  TP_pivot_list_insert_set(merged_list, merged_set);
+		}
+	      }
+	    }
+#pragma omp taskwait
+	  TP_pivot_list_destroy(self);
+	  self = merged_list;
+	}// while
+    } // single
+  } // parallel
 
   return self;
 }
 
 
-void
+TP_pivot_cell
 add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix matrix)
 {
   TP_pivot_cell merged = set->cells;
+
+  if( set->cols_count[cell->col] ||
+      set->rows_count[cell->row] )
+    return cell;
   
   if (set->nb_elem == 0) 
     set->cells = cell;
@@ -170,6 +221,8 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
   set->nb_elem++;
   update_counter(set->cols_count, matrix->col + matrix->CSR[cell->row].offset, matrix->CSR[cell->row].nb_elem);
   update_counter(set->rows_count, matrix->row + matrix->CSC[cell->col].offset, matrix->CSC[cell->col].nb_elem);
+
+  return NULL;
 }
 
 

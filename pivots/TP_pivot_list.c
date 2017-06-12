@@ -37,11 +37,12 @@ TP_pivot_cell_create(int row, int col, int marko)
 }
 
 
-TP_pivot_list TP_pivot_list_insert_new_set(TP_pivot_list self, TP_schur_matrix matrix, 
-					   int row, int col, int marko)
+TP_pivot_list
+TP_pivot_list_insert_new_set(TP_pivot_list self, TP_schur_matrix matrix, 
+			     int row, int col, int marko)
 {
   int m = matrix->m, n = matrix->n;
-  TP_pivot_set  set  = TP_pivot_set_create(n, m);
+  TP_pivot_set  set  = TP_pivot_set_create(n, m), tmp;
   TP_pivot_cell cell = malloc( (size_t) sizeof(*cell));
 
   set->cells   = cell;
@@ -54,18 +55,12 @@ TP_pivot_list TP_pivot_list_insert_new_set(TP_pivot_list self, TP_schur_matrix m
   cell->col   = col;
   cell->marko = marko;
   cell->next  = NULL;
-  
-  if (self->first) {  
-    TP_pivot_set  tmp = self->last; 
-    tmp->next = set;
-    self->last = set;
-  }  else 
-    self->first = self->midle = self->last = set;
-  
-  // the midle pointer should be moved only on even number of elements 
-  if ( ! ( ++self->nb_elem % 2 ) )  
-    self->midle = self->midle->next;
-  
+
+  tmp = self->sets;
+  self->sets = set;
+  set->next = tmp;
+  self->nb_elem++;
+
   return self;
 }
 
@@ -73,17 +68,12 @@ TP_pivot_list TP_pivot_list_insert_new_set(TP_pivot_list self, TP_schur_matrix m
 TP_pivot_list 
 TP_pivot_list_insert_set(TP_pivot_list self, TP_pivot_set set)
 {
-  if (self->first) {  
-    TP_pivot_set  tmp = self->last; 
-    tmp->next  = set;
-    self->last = set;
-    set->next  = NULL;
-  }  else 
-    self->first = self->midle = self->last = set;
-  
-  // the midle pointer should be moved only on even number of elements 
-  if ( ! ( ++self->nb_elem % 2 ) )  
-    self->midle = self->midle->next;
+  TP_pivot_set  tmp;
+
+  tmp = self->sets;
+  self->sets = set;
+  set->next = tmp;
+  self->nb_elem++;
   
   return self;
 }
@@ -92,38 +82,21 @@ TP_pivot_list_insert_set(TP_pivot_list self, TP_pivot_set set)
 TP_pivot_set
 get_next_merging_set(TP_pivot_list self)
 {
-  TP_pivot_set first  = self->first;
-  TP_pivot_set second = self->midle;
+  TP_pivot_set set;
 
-  if (self->nb_elem <= 2) { 
-    self->first = self->midle = self->last = NULL;
-    if (self->nb_elem == 0) {
-      first = NULL;
-    } else if (self->nb_elem == 1) {
-      first->next = NULL;
-    } else if (self->nb_elem == 2) {
-      first->next  = second;
-      second->next = NULL;
-    }
+  if(self->nb_elem < 3) {
     self->nb_elem = 0;
-
+    set = self->sets;
+    self->sets = NULL;
+    return set;
   } else {
-
-    // handle the second
-    TP_pivot_set tmp = self->first; 
-    while( tmp->next != second) 
-      tmp = tmp->next;
-    tmp->next = second->next;
-    self->midle = second->next;
-    second->next = NULL;
-    
-    // handle the first
-    self->first = first->next;
-    first->next = second;
+    set = self->sets;
+    self->sets = self->sets->next->next;
+    set->next->next = NULL;
     self->nb_elem -= 2;
   }
 
-  return first;
+  return set;
 }
 
 
@@ -181,6 +154,7 @@ merge_sorted_sets(TP_pivot_set self)
 
   return self;
 }
+
 
 
 TP_pivot_set
@@ -264,7 +238,7 @@ get_independent_pivots(TP_pivot_set candidates, TP_schur_matrix matrix)
 void
 print_pivot_list(TP_pivot_list self, char *mess)
 {
-  TP_pivot_set print_set = self->first;
+  TP_pivot_set print_set = self->sets;
 
   printf("%s\n", mess);
   printf("List contains %d elements\n", self->nb_elem);
@@ -298,7 +272,7 @@ TP_pivot_set_destroy(TP_pivot_set self)
 void
 TP_pivot_list_destroy(TP_pivot_list self)
 {
-  TP_pivot_set set = self->first;
+  TP_pivot_set set = self->sets;
 
   // while the set is not empty
   while(set) 

@@ -355,6 +355,11 @@ TP_solver_alloc_internal(TP_solver self)
 
   self->previous_pivots = malloc(self->exe_parms->nb_previous_pivots *  sizeof(*self->previous_pivots));
   int_array_memset(self->previous_pivots, INT_MAX / self->exe_parms->nb_previous_pivots, self->exe_parms->nb_previous_pivots);
+
+  self->candidates = calloc(1, sizeof(*self->candidates));
+  self->candidates->row        = malloc(self->A->n * sizeof(*self->candidates->row));
+  self->candidates->marko      = malloc(self->A->n * sizeof(*self->candidates->marko));
+  self->candidates->best_marko = malloc(self->exe_parms->nb_threads * sizeof(*self->candidates->best_marko));
 }
 
 void
@@ -423,9 +428,10 @@ TP_solver_find_pivot_set(TP_solver self)
   TP_pivot_list list;
   TP_exe_parms exe_parms = self->exe_parms;
   TP_verbose_per_step step = TP_verbose_get_step(self->verbose);
+  int nb_threads = self->exe_parms->nb_threads;
 
   TP_verbose_start_timing(&step->timing_extracting_candidates);
-  list = get_possible_pivots(self->S, self->random_col,
+  list = get_possible_pivots(self->S, self->random_col, self->candidates, nb_threads,
   			     exe_parms->value_tol, exe_parms->marko_tol,
   			     exe_parms->nb_candidates_per_block);
   TP_verbose_stop_timing(&step->timing_extracting_candidates);
@@ -436,7 +442,7 @@ TP_solver_find_pivot_set(TP_solver self)
   TP_verbose_start_timing(&step->timing_merging_pivots);
   list = merge_pivot_sets(list, self->S);
 
-  TP_solver_get_pivots(self, list->first);
+  TP_solver_get_pivots(self, list->sets);
 
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
     print_pivot_list(list, "found pivots");
@@ -745,6 +751,11 @@ TP_solver_destroy(TP_solver self)
     
     if(self->S_dense)
       TP_dense_matrix_destroy(self->S_dense);
+
+    free(self->candidates->row);
+    free(self->candidates->marko);
+    free(self->candidates->best_marko);
+    free(self->candidates);
     
     free(self->row_perm);
     free(self->col_perm);

@@ -6,14 +6,18 @@
 typedef struct _TP_pivot_list *TP_pivot_list;
 typedef struct _TP_pivot_set  *TP_pivot_set;
 typedef struct _TP_pivot_cell *TP_pivot_cell;
+typedef struct  _TP_pivot_candidates *TP_pivot_candidates;
 
-
+struct _TP_pivot_candidates
+{
+  int *row;
+  int *marko;
+  int *best_marko;
+};
 
 struct _TP_pivot_list 
 {
-  TP_pivot_set first;
-  TP_pivot_set midle;
-  TP_pivot_set last;
+  TP_pivot_set sets;
   int nb_elem;
 };
 
@@ -44,7 +48,7 @@ TP_pivot_set   get_next_merging_set(TP_pivot_list self);
 TP_pivot_set   merge_sorted_sets(TP_pivot_set self);
 TP_pivot_set   get_independent_pivots(TP_pivot_set candidates, TP_schur_matrix matrix);
 TP_pivot_set   merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix);
-void           add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix matrix);
+TP_pivot_cell  add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix matrix);
 void           TP_pivot_list_destroy(TP_pivot_list self);
 void           TP_pivot_set_destroy(TP_pivot_set self);
 void           print_pivot_list(TP_pivot_list self, char *mess);
@@ -52,7 +56,9 @@ void           print_pivot_list(TP_pivot_list self, char *mess);
 
 
 // OPS
-TP_pivot_list  get_possible_pivots(TP_schur_matrix matrix, int *random_col, double value_tol, double marko_tol, int nb_init_blocks);
+TP_pivot_list  get_possible_pivots(TP_schur_matrix matrix, int *random_col,
+				   TP_pivot_candidates candidates, int nb_threads,
+				   double value_tol, double marko_tol, int nb_init_blocks);
 TP_pivot_list  merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix);
 
 

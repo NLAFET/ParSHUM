@@ -5,6 +5,7 @@
 #include "TP_enum.h"
 #include "TP_matrix.h" 
 #include "TP_schur_matrix.h" 
+#include "TP_pivot_list.h" 
 #include "TP_dense.h"
 #include "TP_verbose.h"
 
@@ -19,6 +20,7 @@ struct _TP_solver {
   TP_matrix U;
   TP_schur_matrix S;
   TP_dense_matrix S_dense;
+  TP_pivot_candidates candidates;
 
   int *row_perm;
   int *col_perm;
