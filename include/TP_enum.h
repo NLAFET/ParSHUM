@@ -14,13 +14,13 @@ enum TP_return_code
     TP_uninitialized_data
   };
 
-enum TP_matrix_type 
+typedef  enum _TP_matrix_type 
   {
     TP_CSC_matrix,    
     TP_CSR_matrix,
     TP_Diag_matrix,
     TP_Rutherford_matrix
-  };
+  } TP_matrix_type;
 
 typedef enum _TP_why_KO 
   {
@@ -31,7 +31,6 @@ typedef enum _TP_why_KO
     TP_because
   } TP_why_KO;
 
-
 typedef enum _TP_overlaps
   {
     TP_overlap_none,
@@ -40,15 +39,16 @@ typedef enum _TP_overlaps
     TP_overlap_total
   } TP_overlaps;
 
-
-typedef enum _TP_exe_parm
+typedef enum _TP_parm_type
   {
+    TP_parm_none,
     TP_value_tol,
     TP_marko_tol,
     TP_schur_density,
     TP_nb_candidates,
-    TP_min_pivots
-  } TP_exe_parm;
+    TP_min_pivots,
+    TP_nb_threads
+  } TP_parm_type;
 
 #define  TP_DEBUG_NONE              0
 #define  TP_CHECK_PIVOTS            (1<<0)
@@ -56,7 +56,7 @@ typedef enum _TP_exe_parm
 #define  TP_CHECK_SCHUR_SYMETRY     (1<<2)
 #define  TP_DEBUG_VERBOSE_EACH_STEP (1<<3)
 #define  TP_DEBUG_GOSSIP_GIRL       (1<<4)
-#define  TP_DEBUG_GARBAGE_COLLECTOR (1<<4)
+#define  TP_DEBUG_GARBAGE_COLLECTOR (1<<5)
 #define  TP_CHECK_TP_W_PLASMA_PERM  (1<<10)
 #define  TP_CHECK_DENSE_W_TP_PERM   (1<<11)
 

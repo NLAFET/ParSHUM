@@ -1,8 +1,11 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <libgen.h>
 #include <plasma.h>
+#include <math.h>
+#include <limits.h>
 
 #include "TP_verbose.h"
 #include "TP_enum.h" 
@@ -12,17 +15,22 @@
 #include "TP_pivot_list.h" 
 #include "TP_auxiliary.h"
 #include "TP_solver.h" 
-#include <limits.h>
 
 const char *usageStrign[] = {
-  "usage test: [-h] [--matrix matrix] [--debug_mode] [--verbosity level] [--marko_tol tol] [--value_tol tol]",
+  "usage test: [--help] [--matrix matrix] [--debug_mode] [--verbosity level] [--marko_tol tol] [--value_tol tol]",
   "            [--extra_space factor] [--extra_space_inbetween factor] [--nb_threads #threads] [--nb_candidates_per_block #blocks] ", 
   "            [--ouput_dir dir] [--output_file file] [--nb_previous_pivots #pivtos] [--schur_density_tolerance tol]",
-  "            [--min_pivot_per_steps #steps] [--output_dir dir] [--prog_name name ] [--debug_mode]  ",
+  "            [--min_pivot_per_steps #steps] [--output_dir dir] [--prog_name name ] [--check_schur_symetry]   ",
+  "            [--check_TP_with_plasma_perm] [--check_dense_with_TP_perm] [--print_each_step] [--check_GC]",
+  "            [--group_run marko_tol|schur_density|nb_candidates|min_pivots|nb_threads, init inc nb_steps]",
   NULL,
 };
 
 int is_plasma_init;
+
+
+int  TP_solver_run_group(TP_solver solver, TP_parm_type type, 
+			 void *init_val, int nb_steps, void *inc);
 
 TP_solver 
 TP_solver_create()
@@ -195,7 +203,8 @@ check_dense_with_TP_perm(int argc, char **argv)
 void 
 TP_solver_parse_args(TP_solver self, int argc, char **argv)
 {
-  int i;
+  int i, run_args_start = 0;
+
   for (i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--verbosity")) {
       self->verbose->parms->verbosity = atoi(argv[++i]);
@@ -270,7 +279,7 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       if ( tmp < self->exe_parms->nb_previous_pivots ) 
 	TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "min_pivot_per_steps should be at least nb_previous_pivots");
       self->exe_parms->min_pivot_per_steps = tmp;
-      continue;
+      continue; 
     } else if (!strcmp(argv[i], "--debug_mode")) {
       TP_warning(__FUNCTION__, __FILE__, __LINE__,"debug mode is not implemented");	  
       continue;
@@ -283,6 +292,12 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
     }  else if (!strcmp(argv[i], "--check_schur_symetry")) {
       self->debug |= TP_CHECK_SCHUR_SYMETRY;
       continue;
+    } else if (!strcmp(argv[i], "--print_each_step")) {
+      self->debug |= TP_DEBUG_VERBOSE_EACH_STEP;
+      continue;
+    } else if (!strcmp(argv[i], "--verbose_gossip_girl")) {
+      self->debug |= TP_DEBUG_GOSSIP_GIRL;
+      continue;
     }  else if (!strcmp(argv[i], "--check_TP_with_plasma_perm")) {
       TP_solver_dealloc(self);
       exit(check_TP_with_plasma_perm(argc, argv));
@@ -290,32 +305,231 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       TP_solver_dealloc(self);
       exit(check_dense_with_TP_perm(argc, argv));
       continue;
+    }  else if (!strcmp(argv[i], "--group_run")) {
+      run_args_start = ++i;
+      i += 3;
+      continue;
     } else if (!strcmp(argv[i], "--help")) {
-      int i = 0;
-      while( usageStrign[i] !=  NULL)
-	printf("%s\n", usageStrign[i++]);
+      int j = 0;
+      while( usageStrign[j] !=  NULL)
+	printf("%s\n", usageStrign[j++]);
       exit(0);
     } else {
       char mess[2048];
       snprintf(mess, 2048, "unrecognized option \"%s\" ", argv[i]);
-      while( usageStrign[i] !=  NULL)
-	printf("%s\n", usageStrign[i++]);
+      int j = 0;
+      while( usageStrign[j] !=  NULL)
+	printf("%s\n", usageStrign[j++]);
       TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, mess);
     }
+  }
+
+  if (run_args_start) {
+    TP_parm_type type;
+    if ( !strcmp(argv[run_args_start], "value_tol") ) {
+      type = TP_value_tol;
+      double init = atof(argv[++run_args_start]), inc = atof(argv[++run_args_start]);
+      int nb_steps = atoi(argv[++run_args_start]);
+      exit(TP_solver_run_group(self, type, (void *) &init, nb_steps, (void *) &inc)); 
+    } else if ( !strcmp(argv[run_args_start], "marko_tol") ) {
+      type = TP_marko_tol;
+      double init = atof(argv[++run_args_start]), inc = atof(argv[++run_args_start]);
+      int nb_steps = atoi(argv[++run_args_start]);
+      exit(TP_solver_run_group(self, type, (void *) &init, nb_steps, (void *) &inc)); 
+    } else if ( !strcmp(argv[run_args_start], "schur_density") ) {
+      type = TP_schur_density;
+      int init = atoi(argv[++run_args_start]), inc = atoi(argv[++run_args_start]);
+      int nb_steps = atoi(argv[++run_args_start]);
+      exit(TP_solver_run_group(self, type, (void *) &init, nb_steps, (void *) &inc)); 
+    } else if ( !strcmp(argv[run_args_start], "nb_candidates") ) {
+      type = TP_nb_candidates;
+      int init = atoi(argv[++run_args_start]), inc = atoi(argv[++run_args_start]);
+      int nb_steps = atoi(argv[++run_args_start]);
+      exit(TP_solver_run_group(self, type, (void *) &init, nb_steps, (void *) &inc)); 
+    } else if ( !strcmp(argv[run_args_start], "min_pivots") ) {
+      type = TP_min_pivots;
+      int init = atoi(argv[++run_args_start]), inc = atoi(argv[++run_args_start]);
+      int nb_steps = atoi(argv[++run_args_start]);
+      exit(TP_solver_run_group(self, type, (void *) &init, nb_steps, (void *) &inc)); 
+    } else if ( !strcmp(argv[run_args_start], "nb_threads") ) {
+      type = TP_nb_threads;
+      int init = atoi(argv[++run_args_start]), inc = atoi(argv[++run_args_start]);
+      int nb_steps = atoi(argv[++run_args_start]);
+      exit(TP_solver_run_group(self, type, (void *) &init, nb_steps, (void *) &inc)); 
+    } else  {
+      TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "for the group run, unrecognized type of argument is given" );
+    }  
+  }
+}
+
+void
+update_exe_parms(TP_exe_parms parms, TP_parm_type type,
+		 void *init_val, int step, void *val, void *inc)
+{
+  double *Dinit, *Dinc, *Dval;
+  int *Iinit, *Iinc, *Ival; 
+
+  switch (type) {
+  case (TP_value_tol) :
+    Dinit = (double *) init_val; Dinc = (double *) inc; Dval = (double *) val; 
+    *Dval = *Dinit * pow(*Dinc, (double) step);
+    parms->value_tol = *Dval;
+    break;
+  case (TP_marko_tol) :
+    Dinit = (double *) init_val; Dinc = (double *) inc;  Dval = (double *) val; 
+    *Dval = *Dinit + *Dinc * step;
+    parms->marko_tol = *Dval;
+    break;
+  case (TP_schur_density) :
+    Dinit = (double *) init_val; Dinc = (double *) inc;  Dval = (double *) val; 
+    *Dval = *Dinit + *Dinc * step;
+    parms->density_tolerance = *Dval;
+    break;
+  case (TP_nb_candidates) :
+    Iinit = (int *) init_val, Iinc = (int *) inc;  Ival = (int *) val; 
+    *Ival = *Iinit + *Iinc * step;
+    parms->nb_candidates_per_block = *Ival;
+    break;
+  case (TP_min_pivots) :
+    Iinit = (int *) init_val, Iinc = (int *) inc; Ival = (int *) val;
+    *Ival = *Iinit + *Iinc * step;
+    parms->min_pivot_per_steps =  *Ival;
+    break;
+  case (TP_nb_threads) :
+    Iinit = (int *) init_val, Iinc = (int *) inc; Ival = (int *) val;
+    *Ival = *Iinit + *Iinc * step;
+    parms->nb_threads =  *Ival;
+    break;
+  default :
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "unrecognized type of exe_parms");
   }
 }
 
 
+
 char *
-get_outfile_prefix(TP_exe_parms exe_parms)
+get_outfile_prefix(TP_exe_parms exe_parms, TP_parm_type type)
 {
-  char *self = malloc(2048*sizeof(*self));
-  snprintf(self, 2048,"%s_%fValTol_%fMarkoTol_%dthreads_%dcandidates_%fdensityTol_%dminPivots",
-	   basename(exe_parms->matrix_file), exe_parms->value_tol, exe_parms->marko_tol, 
-	   exe_parms->nb_threads, exe_parms->nb_candidates_per_block, exe_parms->density_tolerance, 
-	   exe_parms->min_pivot_per_steps);
+  char *self = malloc(PATH_LENGTH*sizeof(*self));
+  size_t length = 0;
+  *self = '\0';
+  
+  if (exe_parms->matrix_file)
+    snprintf(self, 2058, "%s", basename(exe_parms->matrix_file));
+
+  length = strnlen(self, PATH_LENGTH - length);
+  if (type == TP_value_tol)
+    snprintf(self + length, PATH_LENGTH - length,"_MULTIValTol");
+  else
+    snprintf(self + length, PATH_LENGTH - length,"_%fValTol", exe_parms->value_tol);
+
+  length = strnlen(self, PATH_LENGTH - length);
+  if (type == TP_value_tol)
+    snprintf(self + length, PATH_LENGTH - length,"_MULTIMarkoTol");
+  else
+    snprintf(self + length, PATH_LENGTH - length,"_%fMarkoTol", exe_parms->marko_tol);
+  
+  length = strnlen(self, PATH_LENGTH - length);
+  if (type == TP_value_tol)
+    snprintf(self + length, PATH_LENGTH - length,"_MULTIthreads");
+  else
+    snprintf(self + length, PATH_LENGTH - length,"_%dthreads", exe_parms->nb_threads);
+  
+  length = strnlen(self, PATH_LENGTH - length);
+  if (type == TP_value_tol)
+    snprintf(self + length, PATH_LENGTH - length,"_MULTIcandidates");
+  else
+    snprintf(self + length, PATH_LENGTH - length,"_%dcandidates", exe_parms->nb_candidates_per_block);
+  
+  length = strnlen(self, PATH_LENGTH - length);
+  if (type == TP_value_tol)
+    snprintf(self + length, PATH_LENGTH - length,"_MULTIdensityTol");
+  else
+    snprintf(self + length, PATH_LENGTH - length,"_%fdensityTol", exe_parms->density_tolerance);
+  
+  length = strnlen(self, PATH_LENGTH - length);
+  if (type == TP_value_tol)
+    snprintf(self + length, PATH_LENGTH - length,"_MULTIminPivots");
+  else
+    snprintf(self + length, PATH_LENGTH - length,"_%dminPivots", exe_parms->min_pivot_per_steps);
+  
   return self;
 }
+
+int 
+TP_solver_run_group(TP_solver solver, TP_parm_type type, 
+		    void *init_val, int nb_steps, void *inc)
+{
+  FILE *file;
+  int i;
+  TP_matrix A = TP_matrix_create();
+  TP_exe_parms exe_parms = solver->exe_parms;
+  char *file_ext = strrchr(exe_parms->matrix_file, '.');
+  TP_vector X, rhs, sol;
+  char *output_runs_file = get_outfile_prefix(exe_parms, type);
+  char filename[PATH_LENGTH];
+  double current_val;
+
+  snprintf(filename, PATH_LENGTH, "%s/data/MULTI_%s_raw.dat", solver->verbose->parms->output_dir, output_runs_file);
+  file = fopen(filename, "w+");
+  free(output_runs_file);
+	       
+  if (!strcmp(file_ext, ".rb")) 
+    read_rutherford_boeing(A, exe_parms->matrix_file);
+  else if (!strcmp(file_ext, ".mtl"))
+    TP_read_mtl_file(A, exe_parms->matrix_file);
+  else 
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unrecognized file type format");
+  
+  solver->A = A;
+  X   = TP_vector_create(A->n);
+  rhs = TP_vector_create(A->n);
+  sol = TP_vector_create(A->n);
+  for(i=0; i<X->n; i++)
+    X->vect[i] = (1+i) * 200;
+  TP_vector_memset(rhs, 0.0);
+  TP_matrix_SpMV(A, X, rhs);
+  
+  TP_verbose_print_parms_raw(exe_parms, type, file);
+  for( i = 0; i < nb_steps; i++)
+    {
+      TP_solver run = TP_solver_create();
+      TP_matrix matrix = TP_matrix_create();
+      TP_exe_parms run_exe_parms = malloc(sizeof(*run_exe_parms));
+
+      TP_matrix_copy(A, matrix);
+      *run_exe_parms = *exe_parms;
+      
+      free(run->exe_parms);
+      run->A = matrix;
+      run->exe_parms = run->verbose->exe_parms = run_exe_parms;
+      update_exe_parms(run->exe_parms, type, init_val, i, (void *) &current_val, inc);
+
+      TP_solver_init(run);
+      TP_vector_copy(rhs, sol);
+      TP_solver_factorize(run);
+      TP_solver_solve(run, sol);
+      
+      TP_solver_copmpute_norms(run, X, sol, rhs);
+      
+      TP_solver_finalize(run);
+      TP_verbose_print_group_run(run->verbose, type, (void *) &current_val, i, file);
+      TP_solver_destroy(run);
+    }
+
+  fclose(file);
+  
+  TP_vector_destroy(X);
+  TP_vector_destroy(rhs);
+  TP_vector_destroy(sol);
+
+  TP_matrix_destroy(A);
+
+  TP_solver_dealloc(solver);
+  
+  return 0;
+}
+
 
 
 void
@@ -369,7 +583,7 @@ TP_solver_init(TP_solver self)
   self->verbose->m = self->A->m;
   self->verbose->nnz_input = self->verbose->nnz_final = self->A->nnz;
 
-  self->verbose->parms->outfiles_prefix = get_outfile_prefix(self->exe_parms);
+  self->verbose->parms->outfiles_prefix = get_outfile_prefix(self->exe_parms, TP_parm_none);
   
   if (!is_plasma_init) {
     plasma_init(self->exe_parms->nb_threads);
@@ -377,7 +591,7 @@ TP_solver_init(TP_solver self)
   }
   
   if ( ! (self->debug & TP_CHECK_DENSE_W_TP_PERM) )
-       TP_solver_alloc_internal(self);
+    TP_solver_alloc_internal(self);
 }
 
 void

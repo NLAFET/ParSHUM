@@ -20,7 +20,6 @@ struct _TP_verbose_parms {
   int verbosity;
 };
 
-
 struct _TP_exe_parms {
   double value_tol;
   double marko_tol;
@@ -29,14 +28,12 @@ struct _TP_exe_parms {
   double density_tolerance;
 
   char *matrix_file;
-  int  read_matrix;
 
   int min_pivot_per_steps;
   int nb_threads;
   int nb_candidates_per_block;
   int nb_previous_pivots;
 };
-
 
 struct _TP_verbose_per_step {
   double timing_step;
@@ -71,11 +68,11 @@ struct _TP_verbose {
   double timing_total_extracting_candidates;
   double timing_total_merging_pivots;
 
-
   double timing_solve;
   double timing_solve_L;
   double timing_solve_dense;
   double timing_solve_U;
+  double timing_total_update;
   double timing_total_update_LD;
   double timing_total_update_U;
   double timing_total_update_S;
@@ -108,13 +105,16 @@ struct _TP_verbose {
   TP_exe_parms exe_parms;
 };
 
-
+/* TODO: this should not be here! make macros for all of them*/
 TP_verbose          TP_verbose_create_V0(TP_exe_parms exe_parms);
 TP_verbose_per_step TP_verbose_step_start_V0(TP_verbose self);
 void                TP_verbose_print_V0(TP_verbose self);
 void                TP_verbose_create_dirs_V0(char *dir);
 void                TP_verbose_draw_graph_V0(TP_verbose verbose);
 void                TP_verbose_destroy_V0(TP_verbose self);
+void                TP_verbose_print_parms_raw(TP_exe_parms exe_parms, TP_parm_type type, FILE *file);
+void                TP_verbose_print_group_run(TP_verbose verbose, TP_parm_type type, void *val,
+					       int current_run, FILE *file);
 
 static inline void
 TP_verbose_timing_start_V0(double *timing)
@@ -131,7 +131,6 @@ TP_verbose_timing_stop_V0(double *timing)
   gettimeofday(&time, NULL);
   *timing =  (double) (time.tv_sec * 1e6 + time.tv_usec) - *timing;
 }
-
 
 #ifdef TP_VERBOSITY 
 #if TP_VERBOSITY == 1

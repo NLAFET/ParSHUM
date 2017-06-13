@@ -8,6 +8,7 @@
 
 #include "TP_verbose.h"
 #include "TP_enum.h"
+#include "TP_auxiliary.h"
 
 TP_verbose_parms
 TP_verbose_default_parms()
@@ -41,9 +42,6 @@ TP_verbose_create_V0(TP_exe_parms exe_parms)
   return self;
 }
 
-
-
-
 TP_verbose_per_step
 TP_verbose_step_start_V0(TP_verbose self)
 {
@@ -58,6 +56,12 @@ TP_verbose_step_start_V0(TP_verbose self)
   
   self->nb_steps++;
   return step;
+}
+
+void
+TP_verbose_print_run(TP_verbose self, FILE *file)
+{
+
 }
 
 
@@ -78,6 +82,87 @@ TP_verbose_print_steps(TP_verbose_per_step self, TP_verbose_parms parms)
 	      self->timing_apply_perms, self->timing_update_LD, self->timing_update_U, self->timing_update_S);
       self = self->next;
     }
+  fprintf(file,"[%s]----------------------------------------------------------------------------------------------------------------------------------------\n", prog_name);
+}
+
+
+void
+TP_verbose_print_parms_raw(TP_exe_parms exe_parms, TP_parm_type type, FILE *file)
+{
+  fprintf(file,"###################PARAMETERS########################\n");
+  fprintf(file,"#matrix\t%s\n", exe_parms->matrix_file);
+  if (type != TP_value_tol)
+    fprintf(file,"#valut_tol\t%f\n", exe_parms->value_tol);
+  if (type != TP_marko_tol)
+    fprintf(file,"#marko_tol\t%f\n", exe_parms->marko_tol);
+  /* TODO: add this two  parms to the TP_parm_type and everywhere that is used */
+  fprintf(file,"#extra_space\t%f\n", exe_parms->extra_space);
+  fprintf(file,"#extra_space_inbetween\t%f\n", exe_parms->extra_space_inbetween);
+  if (type != TP_schur_density)
+    fprintf(file,"#density_tolerance\t%f\n", exe_parms->density_tolerance);
+  if (type != TP_min_pivots)
+    fprintf(file,"#min_pivot_per_steps\t%d\n", exe_parms->min_pivot_per_steps);
+  if (type != TP_nb_threads)
+    fprintf(file,"#nb_threads\t%d\n", exe_parms->nb_threads);
+  if (type != TP_nb_candidates)
+    fprintf(file,"#nb_candidates_per_block\t%d\n", exe_parms->nb_candidates_per_block);
+  /* TODO: add this parm to the TP_parm_type and everywhere that is used */
+  fprintf(file,"#nb_previous_pivots\t%d\n", exe_parms->nb_previous_pivots);
+  fprintf(file,"#\n");
+}
+void
+TP_verbose_print_group_run(TP_verbose verbose, TP_parm_type type,
+			   void *val, int current_run, FILE *file)
+{
+  if( !current_run ) {
+    fprintf(file, " \"timing total\" \"timing sparse\"  \"timing dense\" \"timing convert\"");
+    fprintf(file, " \"timing pivot search\" \"timing creating init sets\"  \"timing merging pivots\"");
+    fprintf(file, " \"timing update\" \"timing update LD\"  \"timing update U\" \"timing update S\"");
+    fprintf(file, " \"timing solve\" \"timing solve L\"  \"timing solve dense\" \"timing solve U\"");
+    fprintf(file, " \"forward error\" \"backward error\"  \"schur density\" \"sparse pivots S\"");
+    fprintf(file, " \"dense pivots\" \"nnz\"  \"nnz L\" \"nnz U \" #steps\n");
+  }
+  
+  switch (type) {
+  case (TP_value_tol) :
+  case (TP_marko_tol) :
+  case (TP_schur_density) :
+    fprintf(file, "%f\t", *((double *) val));
+    break;
+  case (TP_nb_candidates) :
+  case (TP_min_pivots) :
+  case (TP_nb_threads) :
+    fprintf(file, "%d\t", *((int *) val));
+    break;
+  default :
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "unrecognized type of exe_parms");
+  }
+  
+  fprintf(file, "%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%d\t%d\t%ld\t%ld\t%ld\t%d\t\n",
+	  verbose->timing_facto,
+	  verbose->timing_facto_sparse,
+	  verbose->timing_facto_dense,
+	  verbose->timing_convert_schur,
+	  verbose->timing_total_pivot_search,
+	  verbose->timing_total_extracting_candidates, 
+	  verbose->timing_total_merging_pivots,
+	  verbose->timing_total_update, 
+	  verbose->timing_total_update_LD, 
+	  verbose->timing_total_update_U, 
+	  verbose->timing_total_update_S,
+	  verbose->timing_solve, 
+	  verbose->timing_solve_L, 
+	  verbose->timing_solve_dense, 
+	  verbose->timing_solve_U,
+	  verbose->forward_error, 
+	  verbose->backward_error, 
+	  verbose->schur_density, 
+	  verbose->sparse_pivots,
+	  verbose->dense_pivots, 
+	  verbose->nnz_final, 
+	  verbose->nnz_L, 
+	  verbose->nnz_U, 
+	  verbose->nb_steps);
 }
 
 void
@@ -101,6 +186,7 @@ TP_verbose_print_raw(TP_verbose verbose)
       verbose->timing_total_update_LD             += step->timing_update_LD;
       verbose->timing_total_update_U              += step->timing_update_U;
       verbose->timing_total_update_S              += step->timing_update_S;
+      verbose->timing_total_update += step->timing_update_LD + step->timing_update_U + step->timing_update_S;
       step = step->next;
     }
   step = verbose->stats_first;
@@ -114,19 +200,8 @@ TP_verbose_print_raw(TP_verbose verbose)
   step = verbose->stats_first;
   pivots_stddev /= verbose->nb_steps;
   pivots_stddev = sqrt(pivots_stddev);
-
-  fprintf(file,"###################PARAMETERS########################\n");
-  fprintf(file,"#matrix\t%s\n", exe_parms->matrix_file);
-  fprintf(file,"#valut_tol\t%f\n", exe_parms->value_tol);
-  fprintf(file,"#marko_tol\t%f\n", exe_parms->marko_tol);
-  fprintf(file,"#extra_space\t%f\n", exe_parms->extra_space);
-  fprintf(file,"#extra_space_inbetween\t%f\n", exe_parms->extra_space_inbetween);
-  fprintf(file,"#density_tolerance\t%f\n", exe_parms->density_tolerance);
-  fprintf(file,"#min_pivot_per_steps\t%d\n", exe_parms->min_pivot_per_steps);
-  fprintf(file,"#nb_threads\t%d\n", exe_parms->nb_threads);
-  fprintf(file,"#nb_candidates_per_block\t%d\n", exe_parms->nb_candidates_per_block);
-  fprintf(file,"#nb_previous_pivots\t%d\n", exe_parms->nb_previous_pivots);
-  fprintf(file,"#\n");
+  
+  TP_verbose_print_parms_raw(exe_parms, TP_parm_none, file);
   fprintf(file,"####################OUTPUT##########################\n");
   fprintf(file,"#        ###########TIMING##################\n");
   fprintf(file,"#timing_facto\t%f\n", verbose->timing_facto);
@@ -135,6 +210,7 @@ TP_verbose_print_raw(TP_verbose verbose)
   fprintf(file,"#timing_total_pivot_search\t%f\n", verbose->timing_total_pivot_search);
   fprintf(file,"#timing_total_merging_pivots\t%f\n", verbose->timing_total_merging_pivots);
   fprintf(file,"#timing_total_extracting_candidates\t%f\n", verbose->timing_total_extracting_candidates);
+  fprintf(file,"#timing_total_update\t%f\n", verbose->timing_total_update);
   fprintf(file,"#timing_total_update_LD\t%f\n", verbose->timing_total_update_LD);
   fprintf(file,"#timing_total_update_U\t%f\n",  verbose->timing_total_update_U);
   fprintf(file,"#timing_total_update_S\t%f\n",  verbose->timing_total_update_S);
@@ -187,17 +263,31 @@ TP_verbose_print_raw(TP_verbose verbose)
   fclose(file);
 }
 
+
 void
 TP_verbose_print_V0(TP_verbose self)
 {
-  FILE *file      = self->parms->out_file;
-  char *prog_name = self->parms->prog_name;
+  FILE *file             = self->parms->out_file;
+  char *prog_name        = self->parms->prog_name;
+  TP_exe_parms exe_parms = self->exe_parms;
   
-  fprintf(file,"[%s] matrix: n = (%d)\tm = (%d)\tinput_nnz = (%ld)\tnnz_final=(%ld) \n", 
+  fprintf(file,"[%s] \n", prog_name);
+  fprintf(file,"[%s] Parameters:\n", prog_name);
+  if (exe_parms->matrix_file)
+    fprintf(file,"[%s] matrix: %s\n", prog_name, exe_parms->matrix_file);
+  fprintf(file,"[%s] matrix: n = (%d)\tm = (%d)\t\tinput_nnz = (%ld)\tnnz_final=(%ld)\n", 
 	  prog_name, self->n, self->m, self->nnz_input, self->nnz_final);
+  fprintf(file,"[%s] value tolerance (%f)\t\tmarkowitz  tolerance (%f)\n",
+	  prog_name, exe_parms->value_tol, exe_parms->marko_tol);
+  fprintf(file,"[%s] initial extra space (%f)\tinitial inbetween extra space (%f)\n",
+	  prog_name, exe_parms->extra_space, exe_parms->extra_space_inbetween);
+  fprintf(file,"[%s] #previous pivots (%d)\t\t#min pivots per steps (%d)\n",
+	  prog_name, exe_parms->nb_previous_pivots, exe_parms->min_pivot_per_steps);
+  fprintf(file,"[%s] #threads (%d)\t\t\t#candidates per bloc (%d)\n",
+	  prog_name, exe_parms->nb_threads, exe_parms->nb_candidates_per_block);
   fprintf(file,"[%s] \n", prog_name);
 
-  fprintf(file,"[%s] %d independent sets of pivots were found with a total of %d pivots in %f seconds  \n", 
+  fprintf(file,"[%s] %d independent sets of pivots were found with a total of %d pivots in %f seconds\n", 
 	  prog_name, self->nb_steps, self->sparse_pivots, self->timing_facto_sparse / 1e6);
   if (self->dense_pivots) {
     fprintf(file,"[%s] %d pivots were handeled by the dense code in %f seconds\n", 
@@ -207,24 +297,24 @@ TP_verbose_print_V0(TP_verbose self)
   }
 
   fprintf(file,"[%s] \n", prog_name);
-  fprintf(file,"[%s] The solve was performed in %f seconds \n", prog_name, self->timing_solve/1e6);
+  fprintf(file,"[%s] The solve was performed in %f seconds\n", prog_name, self->timing_solve/1e6);
   fprintf(file,"[%s] The solve on L took %f seconds ", prog_name, self->timing_solve_L/1e6);
   if (self->dense_pivots)  fprintf(file,", the dense part in %f seconds ", self->timing_solve_dense/1e6);
   fprintf(file,"and the U in %f seconds.\n", self->timing_solve_U/1e6);
 
-  fprintf(file,"[%s] The switch to dense code was done   ", prog_name);
+  fprintf(file,"[%s] The switch to dense code was done ", prog_name);
   switch  (self->reason){ 
   case (TP_reason_unknown) :
-    fprintf(file," for uknown reason\n");
+    fprintf(file," for uknown reason.\n");
     break;
   case (TP_density) :
-    fprintf(file,"beacuse the schur became too dense\n");
+    fprintf(file,"beacuse the schur became too dense.\n");
     break;
   case (TP_no_pivots) : 
     fprintf(file,"because we did not found engough pibots.\n");
     break;
   case (TP_because) : 
-    fprintf(file,"just because \n");
+    fprintf(file,"just because.\n");
     break;
   default:
     break;
@@ -232,11 +322,12 @@ TP_verbose_print_V0(TP_verbose self)
 
   fprintf(file,"[%s] ", prog_name);
   if(self->backward_error)
-  fprintf(file,"[%s]  The backward error is (%e)  and the forward error is (%e) \n",
+  fprintf(file,"[%s] The backward error is (%e) and the forward error is (%e)\n",
  	  prog_name, self->backward_error, self->forward_error);
 
   TP_verbose_print_steps(self->stats_first, self->parms);
 }
+
 
 void
 create_plot_file(char *plot_file, char *data_file, 
@@ -245,14 +336,14 @@ create_plot_file(char *plot_file, char *data_file,
 {
   FILE *file = fopen(plot_file, "w+");
   int i ;  
-  fprintf(file, "set terminal eps \n");
-  fprintf(file, "set style data  histogram \n");
-  fprintf(file, "set style fill solid border \n");
-  fprintf(file, "set style histogram rowstacked \n");
-  fprintf(file, "set title \"%s\" \n", title);
-  fprintf(file, "set boxwidth 0.6 \n");
-  fprintf(file, "set output \"%s\" \n", fig_file);
-  fprintf(file, "set ylabel \"%s\" \n", ylabel);
+  fprintf(file, "set terminal eps\n");
+  fprintf(file, "set style data  histogram\n");
+  fprintf(file, "set style fill solid border\n");
+  fprintf(file, "set style histogram rowstacked\n");
+  fprintf(file, "set title \"%s\"\n", title);
+  fprintf(file, "set boxwidth 0.6\n");
+  fprintf(file, "set output \"%s\"\n", fig_file);
+  fprintf(file, "set ylabel \"%s\"\n", ylabel);
   fprintf(file, "set datafile missing \"?\"\n");
   fprintf(file, "plot \'%s\' u 1 t columnheader",data_file);
   for(i = 2; i <= nb_graphs; i++)
@@ -260,6 +351,7 @@ create_plot_file(char *plot_file, char *data_file,
   fprintf(file, "\n");
   fclose(file);
 }
+
 
 void
 create_time_data(char *filename, TP_verbose verbose)
@@ -279,6 +371,7 @@ create_time_data(char *filename, TP_verbose verbose)
 
   fclose(file);
 }
+
 
 void
 create_pivots_data(char *filename, TP_verbose verbose)

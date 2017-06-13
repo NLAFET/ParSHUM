@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include <strings.h>
+#include <string.h>
 #include <stdbool.h>
 
 #include "spral_matrix_util.h"
@@ -20,44 +20,6 @@ TP_matrix_create()
 {
   TP_matrix self = calloc(1, sizeof(*self));
   return self;
-}
-
-void
-TP_matrix_destroy(TP_matrix self)
-{
-  int    *index;
-  long   *ptr;
-  double *val;
-  switch (self->type)  
-    {
-    case TP_CSC_matrix:
-      ptr   = self->col_ptr;
-      index = self->row;
-      val   = self->val;
-      break;
-
-    case TP_CSR_matrix:
-      ptr   = self->row_ptr;
-      index = self->col;
-      val   = self->val;
-      break;
-
-    case TP_Diag_matrix:
-      free(self->val);
-      free(self);
-      return;
-
-    case TP_Rutherford_matrix:
-      spral_rb_free_handle(&self->handle);
-       free(self);
-      return;
-    }
-
-  free(index);
-  free(ptr);
-  free(val);
-    
-  free(self);
 }
 
 
@@ -121,6 +83,7 @@ TP_read_mtl_file(TP_matrix self, const char*filename)
   fclose(file);
 
   self->n         = _n;
+  /* for this function we supose that the matrix is square */
   self->m         = _n;
   self->nnz       = _nnz;
   self->allocated = _nnz;
@@ -130,10 +93,41 @@ TP_read_mtl_file(TP_matrix self, const char*filename)
   self->type      = TP_CSC_matrix;
 }
 
+void 
+TP_matrix_copy(TP_matrix src, TP_matrix dest)
+{
+  TP_matrix_type type = src->type;
+  type = (type == TP_Rutherford_matrix) ? TP_CSC_matrix : type;
+  TP_matrix_allocate(dest, src->n, src->m, src->nnz, 1.00, type);
+  
+  dest->n         = src->n;
+  dest->m         = src->m;
+  dest->nnz       = src->nnz;
+  dest->allocated = src->nnz;
+
+  switch (type)  
+    {
+    case TP_CSC_matrix:
+      memcpy(dest->col_ptr, src->col_ptr, (size_t) (src->n + 1) * sizeof(*src->col_ptr));
+      memcpy(dest->row,     src->row,     (size_t) src->nnz * sizeof(*src->row));
+      memcpy(dest->val,     src->val,     (size_t) src->nnz * sizeof(*src->val));
+      break;
+    case TP_CSR_matrix:
+      memcpy(dest->row_ptr, src->row_ptr, (size_t) (src->m + 1) * sizeof(*src->row_ptr));
+      memcpy(dest->col,     src->col,     (size_t) src->nnz * sizeof(*src->col));
+      memcpy(dest->val,     src->val,     (size_t) src->nnz * sizeof(*src->val));
+      break;
+    case TP_Diag_matrix:
+      memcpy(dest->val, src->val, (size_t) src->n * sizeof(*src->val));
+      break;
+    default:
+      TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "unsuported format for this operation"); 
+    }
+}
 
 void
 TP_matrix_allocate(TP_matrix self, int n, int m, long nnz,
-		   double extra_space, enum TP_matrix_type type)
+		   double extra_space, TP_matrix_type type)
 {
   int  **index;
   long **ptr;
@@ -168,7 +162,7 @@ TP_matrix_allocate(TP_matrix self, int n, int m, long nnz,
       return;
 
     case TP_Rutherford_matrix:
-      TP_warning(__FUNCTION__, __FILE__, __LINE__,"No memory is allocated, Rutherford Boeing matrices are allocated by SPRAL.");
+     TP_warning(__FUNCTION__, __FILE__, __LINE__,"No memory is allocated, Rutherford Boeing matrices are allocated by SPRAL.");
       return;
     }
 
@@ -200,13 +194,6 @@ TP_matrix_get_val(TP_matrix A, int row, int col)
 void 
 TP_matrix_realloc(TP_matrix self)
 {
-  /* double **vect; */
-  /* int    **index; */
-  /* long   *allocated; */
-
-  /* vect      = &self->val; */
-  /* allocated = &self->allocated; */
-
   switch (self->type)  
     {
     case TP_CSC_matrix:
@@ -223,10 +210,6 @@ TP_matrix_realloc(TP_matrix self)
     default:
       TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "unsuported format");
     }
-  
-  /* *allocated *= 2; */
-  /* *vect  = realloc(*vect,  (size_t) *allocated * sizeof(**vect)); */
-  /* *index = realloc(*index, (size_t) *allocated * sizeof(**index)); */
 }
 
 double 
@@ -522,4 +505,43 @@ TP_dense_2D_convert_sparse(TP_matrix A)
 	self->vals[A->row[j]] [i] = A->val[j];
     }
   return self;
+}
+
+
+void
+TP_matrix_destroy(TP_matrix self)
+{
+  int    *index;
+  long   *ptr;
+  double *val;
+  switch (self->type)  
+    {
+    case TP_CSC_matrix:
+      ptr   = self->col_ptr;
+      index = self->row;
+      val   = self->val;
+      break;
+
+    case TP_CSR_matrix:
+      ptr   = self->row_ptr;
+      index = self->col;
+      val   = self->val;
+      break;
+
+    case TP_Diag_matrix:
+      free(self->val);
+      free(self);
+      return;
+
+    case TP_Rutherford_matrix:
+      spral_rb_free_handle(&self->handle);
+       free(self);
+      return;
+    }
+
+  free(index);
+  free(ptr);
+  free(val);
+    
+  free(self);
 }

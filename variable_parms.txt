@@ -1,0 +1,18 @@
+value_tol
+for(i=$1; i<$2; i*=$3)
+
+
+marko_tol
+for(i=$1; i<$2; i+=$3)
+
+density_tolerance
+for(i=$1; i<$2; i+=$3)
+
+nb_candidates_per_block
+for(i=$1; i<$2; i+=$3)
+
+min_pivot_per_set
+for(i=$1; i<$2; i+=$3)
+
+nb_threads
+for(i=$1; i<$2; i+=$3)
