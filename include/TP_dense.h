@@ -26,6 +26,7 @@ struct _TP_dense_2D {
 };
 
 TP_vector TP_vector_create(int n);
+void      TP_vector_read_file(TP_vector self, char *filename);
 void      TP_vector_permute(TP_vector self, int *perms);
 void      TP_vector_memset(TP_vector self, double val);
 void      TP_vector_print(TP_vector self, char *mess);

@@ -17,7 +17,7 @@
 #include "TP_solver.h" 
 
 const char *usageStrign[] = {
-  "usage test: [--help] [--matrix matrix] [--debug_mode] [--verbosity level] [--marko_tol tol] [--value_tol tol]",
+  "usage test: [--help] [--matrix matrix] [--RHS_file file] [--debug_mode] [--verbosity level] [--marko_tol tol] [--value_tol tol]",
   "            [--extra_space factor] [--extra_space_inbetween factor] [--nb_threads #threads] [--nb_candidates_per_block #blocks] ", 
   "            [--ouput_dir dir] [--output_file file] [--nb_previous_pivots #pivtos] [--schur_density_tolerance tol]",
   "            [--min_pivot_per_steps #steps] [--output_dir dir] [--prog_name name ] [--check_schur_symetry]   ",
@@ -85,9 +85,11 @@ check_TP_with_plasma_perm(int argc, char **argv)
   sol_plasma = TP_vector_create(plasma->A->n);
   sol_TP     = TP_vector_create(plasma->A->n);
   
-  for(i=0; i < plasma->A->n; i++)
-    X->vect[i] = i * 10;
-  TP_vector_memset(X, 1.0);
+  if (plasma->exe_parms->RHS_file)
+    TP_vector_read_file(X, plasma->exe_parms->RHS_file);
+  else 
+    for(i=0; i < plasma->A->n; i++)
+      X->vect[i] = (i+1) * 10;
   TP_vector_memset(rhs, 0.0);
   TP_matrix_SpMV(plasma->A, X, rhs);
   TP_vector_copy(rhs, sol_plasma);
@@ -153,8 +155,11 @@ check_dense_with_TP_perm(int argc, char **argv)
   sol_TP    = TP_vector_create(self->A->n);
   sol_dense = TP_vector_create(self->A->n);
   
-  for(i=0; i < self->A->n; i++)
-    X->vect[i] = i * 10;
+  if (self->exe_parms->RHS_file)
+    TP_vector_read_file(X, self->exe_parms->RHS_file);
+  else 
+    for(i=0; i < self->A->n; i++)
+      X->vect[i] = i * 10;
   TP_vector_memset(rhs, 0.0);
   TP_matrix_SpMV(self->A, X, rhs);
   TP_vector_copy(rhs, sol_TP);
@@ -212,6 +217,9 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       continue;
     } else if (!strcmp(argv[i], "--matrix")) {
       self->exe_parms->matrix_file = argv[++i];
+      continue;
+    }  else if (!strcmp(argv[i], "--RHS_file")) {
+      self->exe_parms->RHS_file = argv[++i];
       continue;
     } else if (!strcmp(argv[i], "--value_tol")) {
       double tmp = atof(argv[++i]);
@@ -485,8 +493,12 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
   X   = TP_vector_create(A->n);
   rhs = TP_vector_create(A->n);
   sol = TP_vector_create(A->n);
-  for(i=0; i<X->n; i++)
-    X->vect[i] = (1+i) * 200;
+
+  if (solver->exe_parms->RHS_file)
+    TP_vector_read_file(X, solver->exe_parms->RHS_file);
+  else 
+    for(i=0; i<X->n; i++)
+      X->vect[i] = (1+i) * 200;
   TP_vector_memset(rhs, 0.0);
   TP_matrix_SpMV(A, X, rhs);
   
@@ -503,6 +515,7 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
       free(run->exe_parms);
       run->A = matrix;
       run->exe_parms = run->verbose->exe_parms = run_exe_parms;
+      run->verbose->parms->ouput_dir = solver->verbose->parms->ouput_dir;
       update_exe_parms(run->exe_parms, type, init_val, i, (void *) &current_val, inc);
 
       TP_solver_init(run);
@@ -605,7 +618,7 @@ TP_solver_read_matrix(TP_solver self)
   else if (!strcmp(file_ext, ".mtl"))
     TP_read_mtl_file(self->A, self->exe_parms->matrix_file);
   else 
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the input matrix is not sorted column-wise ");
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsupported matrix file");
 }
 
 void 

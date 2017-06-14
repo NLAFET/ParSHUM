@@ -28,8 +28,11 @@ main(int argc, char **argv)
   rhs = TP_vector_create(self->A->n);
   sol = TP_vector_create(self->A->n);
   
-  for(i=0; i<X->n; i++)
-    X->vect[i] = (1+i) * 200;
+  if (self->exe_parms->RHS_file)
+    TP_vector_read_file(X, self->exe_parms->RHS_file);
+  else 
+    for(i=0; i<X->n; i++)
+      X->vect[i] = (1+i) * 200;
   TP_vector_memset(rhs, 0.0);
   TP_matrix_SpMV(self->A, X, rhs);
   TP_vector_copy(rhs, sol);
@@ -37,7 +40,6 @@ main(int argc, char **argv)
   TP_solver_factorize(self);
   
   TP_solver_solve(self, sol);
-  
   TP_solver_copmpute_norms(self, X, sol, rhs);
 
   TP_solver_finalize(self);

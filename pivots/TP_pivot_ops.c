@@ -232,7 +232,6 @@ merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix)
 {
   TP_pivot_set large, small;
   TP_pivot_cell cells_to_merge;
-  int *rows_count, *cols_count;
 
   if (!self || !self->next )
     return self;
@@ -249,8 +248,6 @@ merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix)
   }
 
   cells_to_merge = small->cells;
-  rows_count     = large->rows_count;
-  cols_count     = large->cols_count;
   small->cells   = NULL;
 
   while(cells_to_merge)

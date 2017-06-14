@@ -17,6 +17,39 @@ TP_vector_create(int n)
   return self;
 }
 
+
+void
+TP_vector_read_mtl_file(TP_vector self, char *filename)
+{
+  FILE *file;
+  int i, unused, n = self->n;
+  double *vect;
+  
+  vect = self->vect;
+
+  file = fopen(filename, "r");
+  if (!file)
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"error while opening the vector file");
+  
+  for ( i = 0; i < n; i++) {
+    int index;
+    if ( fscanf(file, "%d %d %lf\n", &index, &unused, &vect[i]) != 3)
+      TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"error while reading the vector file");
+    if (index != (i + 1) ) 
+      TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the indices are wrong in the vector file");
+  }
+}
+
+void 
+TP_vector_read_file(TP_vector self, char *filename)
+{
+  char *file_ext = strrchr(filename, '.');
+  if (!strcmp(file_ext, ".mtl"))
+    TP_vector_read_mtl_file(self, filename);
+  else 
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsupported vector file");
+}
+
 void
 TP_vector_permute(TP_vector self, int *perms)
 {

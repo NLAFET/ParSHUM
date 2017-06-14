@@ -28,6 +28,7 @@ struct _TP_exe_parms {
   double density_tolerance;
 
   char *matrix_file;
+  char *RHS_file;
 
   int min_pivot_per_steps;
   int nb_threads;
