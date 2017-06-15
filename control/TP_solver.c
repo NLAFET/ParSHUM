@@ -19,10 +19,10 @@
 const char *usageStrign[] = {
   "usage test: [--help] [--matrix matrix] [--RHS_file file] [--debug_mode] [--verbosity level] [--marko_tol tol] [--value_tol tol]",
   "            [--extra_space factor] [--extra_space_inbetween factor] [--nb_threads #threads] [--nb_candidates_per_block #blocks] ", 
-  "            [--ouput_dir dir] [--output_file file] [--nb_previous_pivots #pivtos] [--schur_density_tolerance tol]",
+  "            [--output_dir dir] [--output_file file] [--nb_previous_pivots #pivtos] [--schur_density_tolerance tol]",
   "            [--min_pivot_per_steps #steps] [--output_dir dir] [--prog_name name ] [--check_schur_symetry]   ",
   "            [--check_TP_with_plasma_perm] [--check_dense_with_TP_perm] [--print_each_step] [--check_GC]",
-  "            [--group_run marko_tol|schur_density|nb_candidates|min_pivots|nb_threads, init inc nb_steps]",
+  "            [--group_run value_tol|marko_tol|schur_density|nb_candidates|min_pivots|nb_threads init inc nb_steps]",
   NULL,
 };
 
@@ -346,7 +346,7 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       exit(TP_solver_run_group(self, type, (void *) &init, nb_steps, (void *) &inc)); 
     } else if ( !strcmp(argv[run_args_start], "schur_density") ) {
       type = TP_schur_density;
-      int init = atoi(argv[++run_args_start]), inc = atoi(argv[++run_args_start]);
+      double init = atof(argv[++run_args_start]), inc = atof(argv[++run_args_start]);
       int nb_steps = atoi(argv[++run_args_start]);
       exit(TP_solver_run_group(self, type, (void *) &init, nb_steps, (void *) &inc)); 
     } else if ( !strcmp(argv[run_args_start], "nb_candidates") ) {
@@ -365,6 +365,9 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       int nb_steps = atoi(argv[++run_args_start]);
       exit(TP_solver_run_group(self, type, (void *) &init, nb_steps, (void *) &inc)); 
     } else  {
+      int j = 0;
+      while( usageStrign[j] !=  NULL)
+	printf("%s\n", usageStrign[j++]);
       TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "for the group run, unrecognized type of argument is given" );
     }  
   }
@@ -418,7 +421,7 @@ update_exe_parms(TP_exe_parms parms, TP_parm_type type,
 char *
 get_outfile_prefix(TP_exe_parms exe_parms, TP_parm_type type)
 {
-  char *self = malloc(PATH_LENGTH*sizeof(*self));
+  char *self = calloc(PATH_LENGTH, sizeof(*self));
   size_t length = 0;
   *self = '\0';
   
@@ -438,28 +441,30 @@ get_outfile_prefix(TP_exe_parms exe_parms, TP_parm_type type)
     snprintf(self + length, PATH_LENGTH - length,"_%fMarkoTol", exe_parms->marko_tol);
   
   length = strnlen(self, PATH_LENGTH - length);
-  if (type == TP_value_tol)
+  if (type == TP_nb_threads)
     snprintf(self + length, PATH_LENGTH - length,"_MULTIthreads");
   else
     snprintf(self + length, PATH_LENGTH - length,"_%dthreads", exe_parms->nb_threads);
   
   length = strnlen(self, PATH_LENGTH - length);
-  if (type == TP_value_tol)
+  if (type == TP_nb_candidates)
     snprintf(self + length, PATH_LENGTH - length,"_MULTIcandidates");
   else
     snprintf(self + length, PATH_LENGTH - length,"_%dcandidates", exe_parms->nb_candidates_per_block);
   
   length = strnlen(self, PATH_LENGTH - length);
-  if (type == TP_value_tol)
+  if (type == TP_schur_density)
     snprintf(self + length, PATH_LENGTH - length,"_MULTIdensityTol");
   else
     snprintf(self + length, PATH_LENGTH - length,"_%fdensityTol", exe_parms->density_tolerance);
   
   length = strnlen(self, PATH_LENGTH - length);
-  if (type == TP_value_tol)
+  if (type == TP_min_pivots)
     snprintf(self + length, PATH_LENGTH - length,"_MULTIminPivots");
   else
     snprintf(self + length, PATH_LENGTH - length,"_%dminPivots", exe_parms->min_pivot_per_steps);
+  length = strnlen(self, PATH_LENGTH - length);
+  self[length] = '\0';
   
   return self;
 }
@@ -478,10 +483,11 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
   char filename[PATH_LENGTH];
   double current_val;
 
+  TP_verbose_create_dirs(solver->verbose->parms->output_dir);
   snprintf(filename, PATH_LENGTH, "%s/data/MULTI_%s_raw.dat", solver->verbose->parms->output_dir, output_runs_file);
+ 
   file = fopen(filename, "w+");
-  free(output_runs_file);
-	       
+       
   if (!strcmp(file_ext, ".rb")) 
     read_rutherford_boeing(A, exe_parms->matrix_file);
   else if (!strcmp(file_ext, ".mtl"))
@@ -516,8 +522,9 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
       run->A = matrix;
       run->exe_parms = run->verbose->exe_parms = run_exe_parms;
       run->verbose->parms->output_dir = solver->verbose->parms->output_dir;
+      run->verbose->parms->user_out_dir = 1;
       update_exe_parms(run->exe_parms, type, init_val, i, (void *) &current_val, inc);
-
+      
       TP_solver_init(run);
       TP_vector_copy(rhs, sol);
       TP_solver_factorize(run);
@@ -538,8 +545,10 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
 
   TP_matrix_destroy(A);
   
+  free(output_runs_file);
+
   /* TODO: understand why this fails */
-  /* TP_solver_dealloc(solver); */
+  TP_solver_dealloc(solver);
   
   return 0;
 }
@@ -606,6 +615,8 @@ TP_solver_init(TP_solver self)
   
   if ( ! (self->debug & TP_CHECK_DENSE_W_TP_PERM) )
     TP_solver_alloc_internal(self);
+
+  TP_verbose_create_dirs(self->verbose->parms->output_dir);
 }
 
 void
@@ -961,7 +972,6 @@ TP_solver_finalize(TP_solver self)
     is_plasma_init = 0;
   }
   TP_verbose_print(self->verbose);
-  TP_verbose_create_dirs(self->verbose->parms->output_dir);
   TP_verbose_draw_graph(self->verbose);
 }
 

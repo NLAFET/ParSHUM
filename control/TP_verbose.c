@@ -277,8 +277,8 @@ TP_verbose_print_V0(TP_verbose self)
     fprintf(file,"[%s] matrix: %s\n", prog_name, exe_parms->matrix_file);
   fprintf(file,"[%s] matrix: n = (%d)\tm = (%d)\t\tinput_nnz = (%ld)\tnnz_final=(%ld)\n", 
 	  prog_name, self->n, self->m, self->nnz_input, self->nnz_final);
-  fprintf(file,"[%s] value tolerance (%f)\t\tmarkowitz  tolerance (%f)\n",
-	  prog_name, exe_parms->value_tol, exe_parms->marko_tol);
+  fprintf(file,"[%s] value tolerance (%f)\t\tmarkowitz  tolerance (%f)\tdensity tolerance(%f)\n",
+	  prog_name, exe_parms->value_tol, exe_parms->marko_tol, exe_parms->density_tolerance);
   fprintf(file,"[%s] initial extra space (%f)\tinitial inbetween extra space (%f)\n",
 	  prog_name, exe_parms->extra_space, exe_parms->extra_space_inbetween);
   fprintf(file,"[%s] #previous pivots (%d)\t\t#min pivots per steps (%d)\n",
