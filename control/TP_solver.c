@@ -515,7 +515,7 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
       free(run->exe_parms);
       run->A = matrix;
       run->exe_parms = run->verbose->exe_parms = run_exe_parms;
-      run->verbose->parms->ouput_dir = solver->verbose->parms->ouput_dir;
+      run->verbose->parms->output_dir = solver->verbose->parms->output_dir;
       update_exe_parms(run->exe_parms, type, init_val, i, (void *) &current_val, inc);
 
       TP_solver_init(run);
@@ -537,8 +537,9 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
   TP_vector_destroy(sol);
 
   TP_matrix_destroy(A);
-
-  TP_solver_dealloc(solver);
+  
+  /* TODO: understand why this fails */
+  /* TP_solver_dealloc(solver); */
   
   return 0;
 }
