@@ -1,0 +1,459 @@
+==15722== 4 bytes in 1 blocks are still reachable in loss record 1 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x408C0D: TP_solver_alloc_internal (TP_solver.c:599)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 16 bytes in 1 blocks are still reachable in loss record 6 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x40D610: TP_vector_create (TP_dense.c:14)
+==15722==    by 0x40848B: TP_solver_run_group (TP_solver.c:499)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 16 bytes in 1 blocks are still reachable in loss record 7 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x40D610: TP_vector_create (TP_dense.c:14)
+==15722==    by 0x40849D: TP_solver_run_group (TP_solver.c:500)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+
+==15722== 16 bytes in 1 blocks are still reachable in loss record 8 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x40D610: TP_vector_create (TP_dense.c:14)
+==15722==    by 0x4084AF: TP_solver_run_group (TP_solver.c:501)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 20 bytes in 1 blocks are still reachable in loss record 9 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x408B45: TP_solver_alloc_internal (TP_solver.c:593)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 24 bytes in 1 blocks are still reachable in loss record 13 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x408B97: TP_solver_alloc_internal (TP_solver.c:596)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 32 bytes in 1 blocks are still reachable in loss record 14 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x410308: TP_schur_matrix_allocate (TP_schur_matrix.c:49)
+==15722==    by 0x40890D: TP_solver_alloc_internal (TP_solver.c:571)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 64 bytes in 2 blocks are still reachable in loss record 20 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x41038B: add_unused_CSC (TP_schur_matrix.c:64)
+==15722==    by 0x410514: TP_schur_matrix_realloc_CSC (TP_schur_matrix.c:102)
+==15722==    by 0x41065D: CSC_find_free_memory (TP_schur_matrix.c:144)
+==15722==    by 0x411980: TP_schur_matrix_insert_entry (TP_schur_matrix.c:529)
+==15722==    by 0x411F00: TP_schur_matrix_update_S (TP_schur_matrix.c:604)
+==15722==    by 0x40927F: TP_solver_update_matrix (TP_solver.c:720)
+==15722==    by 0x4095DE: TP_solver_factorize (TP_solver.c:813)
+==15722==    by 0x4086F8: TP_solver_run_group (TP_solver.c:530)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 72 bytes in 1 blocks are still reachable in loss record 21 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x4062CD: TP_solver_create (TP_solver.c:39)
+==15722==    by 0x406050: main (test.c:22)
+
+==15722== 72 bytes in 1 blocks are still reachable in loss record 22 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x4085A3: TP_solver_run_group (TP_solver.c:516)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 80 bytes in 1 blocks are still reachable in loss record 23 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40E566: TP_matrix_create (TP_matrix.c:21)
+==15722==    by 0x408339: TP_solver_run_group (TP_solver.c:478)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 80 bytes in 1 blocks are still reachable in loss record 24 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40E566: TP_matrix_create (TP_matrix.c:21)
+==15722==    by 0x408853: TP_solver_alloc_internal (TP_solver.c:565)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 80 bytes in 1 blocks are still reachable in loss record 25 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40E566: TP_matrix_create (TP_matrix.c:21)
+==15722==    by 0x408868: TP_solver_alloc_internal (TP_solver.c:566)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 80 bytes in 1 blocks are still reachable in loss record 26 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40E566: TP_matrix_create (TP_matrix.c:21)
+==15722==    by 0x40887D: TP_solver_alloc_internal (TP_solver.c:567)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 80 bytes in 1 blocks are still reachable in loss record 27 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40E566: TP_matrix_create (TP_matrix.c:21)
+==15722==    by 0x408595: TP_solver_run_group (TP_solver.c:515)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 112 bytes in 1 blocks are still reachable in loss record 31 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x4101B6: TP_schur_matrix_create (TP_schur_matrix.c:19)
+==15722==    by 0x40883E: TP_solver_alloc_internal (TP_solver.c:564)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 144 bytes in 1 blocks are still reachable in loss record 32 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x4062BA: TP_solver_create (TP_solver.c:38)
+==15722==    by 0x406050: main (test.c:22)
+
+==15722== 144 bytes in 1 blocks are still reachable in loss record 33 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x4062BA: TP_solver_create (TP_solver.c:38)
+==15722==    by 0x408587: TP_solver_run_group (TP_solver.c:514)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 192 bytes in 1 blocks are still reachable in loss record 35 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x414581: spral_rb_read (rutherford_boeing.f90:231)
+==15722==    by 0x40E5F2: read_rutherford_boeing (TP_matrix.c:36)
+==15722==    by 0x408426: TP_solver_run_group (TP_solver.c:492)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 240 bytes in 1 blocks are still reachable in loss record 36 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40A2B1: TP_verbose_create_V0 (TP_verbose.c:36)
+==15722==    by 0x4063B8: TP_solver_create (TP_solver.c:53)
+==15722==    by 0x406050: main (test.c:22)
+
+==15722== 240 bytes in 1 blocks are still reachable in loss record 37 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40A2B1: TP_verbose_create_V0 (TP_verbose.c:36)
+==15722==    by 0x4063B8: TP_solver_create (TP_solver.c:53)
+==15722==    by 0x408587: TP_solver_run_group (TP_solver.c:514)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 568 bytes in 1 blocks are still reachable in loss record 41 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x857EE8A: __fopen_internal (in /lib64/libc-2.12.so)
+==15722==    by 0x4083F6: TP_solver_run_group (TP_solver.c:489)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+==15722== 
+
+==15722== 960 bytes in 10 blocks are still reachable in loss record 45 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40A30B: TP_verbose_step_start_V0 (TP_verbose.c:48)
+==15722==    by 0x409552: TP_solver_factorize (TP_solver.c:805)
+==15722==    by 0x4086F8: TP_solver_run_group (TP_solver.c:530)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 2,048 bytes in 1 blocks are still reachable in loss record 46 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x407F62: get_outfile_prefix (TP_solver.c:424)
+==15722==    by 0x40837C: TP_solver_run_group (TP_solver.c:482)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 2,048 bytes in 1 blocks are still reachable in loss record 47 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x407F62: get_outfile_prefix (TP_solver.c:424)
+==15722==    by 0x408CBC: TP_solver_init (TP_solver.c:609)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 2,049 bytes in 1 blocks are still reachable in loss record 48 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x40A224: TP_verbose_default_parms (TP_verbose.c:17)
+==15722==    by 0x40A2BF: TP_verbose_create_V0 (TP_verbose.c:38)
+==15722==    by 0x4063B8: TP_solver_create (TP_solver.c:53)
+==15722==    by 0x406050: main (test.c:22)
+
+==15722== 2,049 bytes in 1 blocks are definitely lost in loss record 49 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x40A224: TP_verbose_default_parms (TP_verbose.c:17)
+==15722==    by 0x40A2BF: TP_verbose_create_V0 (TP_verbose.c:38)
+==15722==    by 0x4063B8: TP_solver_create (TP_solver.c:53)
+==15722==    by 0x408587: TP_solver_run_group (TP_solver.c:514)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 7,424 bytes in 1 blocks are still reachable in loss record 50 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x408A4E: TP_solver_alloc_internal (TP_solver.c:581)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 7,424 bytes in 1 blocks are still reachable in loss record 51 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x408A6A: TP_solver_alloc_internal (TP_solver.c:582)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 7,424 bytes in 1 blocks are still reachable in loss record 52 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x408A86: TP_solver_alloc_internal (TP_solver.c:583)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 7,424 bytes in 1 blocks are still reachable in loss record 53 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x408AA2: TP_solver_alloc_internal (TP_solver.c:584)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 7,424 bytes in 1 blocks are still reachable in loss record 54 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x413F01: create_randomize (TP_auxiliary.c:96)
+==15722==    by 0x408B1E: TP_solver_alloc_internal (TP_solver.c:591)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 7,424 bytes in 1 blocks are still reachable in loss record 55 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x408BC2: TP_solver_alloc_internal (TP_solver.c:597)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 7,424 bytes in 1 blocks are still reachable in loss record 56 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x408BE5: TP_solver_alloc_internal (TP_solver.c:598)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 14,848 bytes in 1 blocks are still reachable in loss record 58 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EBCC: TP_matrix_allocate (TP_matrix.c:160)
+==15722==    by 0x408A3D: TP_solver_alloc_internal (TP_solver.c:579)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 14,848 bytes in 1 blocks are still reachable in loss record 59 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x40D625: TP_vector_create (TP_dense.c:15)
+==15722==    by 0x40848B: TP_solver_run_group (TP_solver.c:499)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 14,848 bytes in 1 blocks are still reachable in loss record 60 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x40D625: TP_vector_create (TP_dense.c:15)
+==15722==    by 0x40849D: TP_solver_run_group (TP_solver.c:500)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 14,848 bytes in 1 blocks are still reachable in loss record 61 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x40D625: TP_vector_create (TP_dense.c:15)
+==15722==    by 0x4084AF: TP_solver_run_group (TP_solver.c:501)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 14,856 bytes in 1 blocks are still reachable in loss record 62 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EC1D: TP_matrix_allocate (TP_matrix.c:171)
+==15722==    by 0x4089A9: TP_solver_alloc_internal (TP_solver.c:577)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 14,856 bytes in 1 blocks are still reachable in loss record 63 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EC1D: TP_matrix_allocate (TP_matrix.c:171)
+==15722==    by 0x408A0B: TP_solver_alloc_internal (TP_solver.c:578)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 14,856 bytes in 1 blocks are still reachable in loss record 64 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x41746A: __spral_rutherford_boeing_MOD_rb_read_double_int64 (rutherford_boeing.f90:362)
+==15722==    by 0x41485D: spral_rb_read (rutherford_boeing.f90:237)
+==15722==    by 0x40E5F2: read_rutherford_boeing (TP_matrix.c:36)
+==15722==    by 0x408426: TP_solver_run_group (TP_solver.c:492)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 14,856 bytes in 1 blocks are still reachable in loss record 65 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EC1D: TP_matrix_allocate (TP_matrix.c:171)
+==15722==    by 0x40E8FF: TP_matrix_copy (TP_matrix.c:101)
+==15722==    by 0x4085BA: TP_solver_run_group (TP_solver.c:518)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+==15722== 
+
+==15722== 29,696 bytes in 1 blocks are still reachable in loss record 67 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x410226: TP_schur_matrix_allocate (TP_schur_matrix.c:34)
+==15722==    by 0x40890D: TP_solver_alloc_internal (TP_solver.c:571)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 44,544 bytes in 1 blocks are still reachable in loss record 68 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x41020A: TP_schur_matrix_allocate (TP_schur_matrix.c:33)
+==15722==    by 0x40890D: TP_solver_alloc_internal (TP_solver.c:571)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+==15722== 
+
+==15722== 45,440 bytes in 1 blocks are still reachable in loss record 69 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x4175AD: __spral_rutherford_boeing_MOD_rb_read_double_int64 (rutherford_boeing.f90:389)
+==15722==    by 0x41485D: spral_rb_read (rutherford_boeing.f90:237)
+==15722==    by 0x40E5F2: read_rutherford_boeing (TP_matrix.c:36)
+==15722==    by 0x408426: TP_solver_run_group (TP_solver.c:492)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+==15722== 
+
+==15722== 45,440 bytes in 1 blocks are still reachable in loss record 70 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EC39: TP_matrix_allocate (TP_matrix.c:172)
+==15722==    by 0x40E8FF: TP_matrix_copy (TP_matrix.c:101)
+==15722==    by 0x4085BA: TP_solver_run_group (TP_solver.c:518)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 57,024 bytes in 1 blocks are still reachable in loss record 71 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EC39: TP_matrix_allocate (TP_matrix.c:172)
+==15722==    by 0x4089A9: TP_solver_alloc_internal (TP_solver.c:577)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 57,024 bytes in 1 blocks are still reachable in loss record 72 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EC39: TP_matrix_allocate (TP_matrix.c:172)
+==15722==    by 0x408A0B: TP_solver_alloc_internal (TP_solver.c:578)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 90,880 bytes in 1 blocks are still reachable in loss record 73 of 79
+==15722==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==15722==    by 0x4176AE: __spral_rutherford_boeing_MOD_rb_read_double_int64 (rutherford_boeing.f90:405)
+==15722==    by 0x41485D: spral_rb_read (rutherford_boeing.f90:237)
+==15722==    by 0x40E5F2: read_rutherford_boeing (TP_matrix.c:36)
+==15722==    by 0x408426: TP_solver_run_group (TP_solver.c:492)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 90,880 bytes in 1 blocks are still reachable in loss record 74 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EC55: TP_matrix_allocate (TP_matrix.c:173)
+==15722==    by 0x40E8FF: TP_matrix_copy (TP_matrix.c:101)
+==15722==    by 0x4085BA: TP_solver_run_group (TP_solver.c:518)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 114,048 bytes in 1 blocks are still reachable in loss record 75 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EC55: TP_matrix_allocate (TP_matrix.c:173)
+==15722==    by 0x4089A9: TP_solver_alloc_internal (TP_solver.c:577)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 545,280 bytes in 1 blocks are still reachable in loss record 77 of 79
+==15722==    at 0x4C28C20: realloc (vg_replace_malloc.c:662)
+==15722==    by 0x4104ED: TP_schur_matrix_realloc_CSC (TP_schur_matrix.c:100)
+==15722==    by 0x41065D: CSC_find_free_memory (TP_schur_matrix.c:144)
+==15722==    by 0x411980: TP_schur_matrix_insert_entry (TP_schur_matrix.c:529)
+==15722==    by 0x411F00: TP_schur_matrix_update_S (TP_schur_matrix.c:604)
+==15722==    by 0x40927F: TP_solver_update_matrix (TP_solver.c:720)
+==15722==    by 0x4095DE: TP_solver_factorize (TP_solver.c:813)
+==15722==    by 0x4086F8: TP_solver_run_group (TP_solver.c:530)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 114,048 bytes in 1 blocks are still reachable in loss record 76 of 79
+==15722==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==15722==    by 0x40EC55: TP_matrix_allocate (TP_matrix.c:173)
+==15722==    by 0x408A0B: TP_solver_alloc_internal (TP_solver.c:578)
+==15722==    by 0x408D0A: TP_solver_init (TP_solver.c:617)
+==15722==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 545,280 bytes in 1 blocks are still reachable in loss record 78 of 79
+==15722==    at 0x4C28C20: realloc (vg_replace_malloc.c:662)
+==15722==    by 0x410569: TP_schur_matrix_realloc_CSR (TP_schur_matrix.c:115)
+==15722==    by 0x410904: CSR_find_free_memory (TP_schur_matrix.c:214)
+==15722==    by 0x411A21: TP_schur_matrix_insert_entry (TP_schur_matrix.c:540)
+==15722==    by 0x411F00: TP_schur_matrix_update_S (TP_schur_matrix.c:604)
+==15722==    by 0x40927F: TP_solver_update_matrix (TP_solver.c:720)
+==15722==    by 0x4095DE: TP_solver_factorize (TP_solver.c:813)
+==15722==    by 0x4086F8: TP_solver_run_group (TP_solver.c:530)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+
+==15722== 1,090,560 bytes in 1 blocks are still reachable in loss record 79 of 79
+==15722==    at 0x4C28C20: realloc (vg_replace_malloc.c:662)
+==15722==    by 0x4104C5: TP_schur_matrix_realloc_CSC (TP_schur_matrix.c:99)
+==15722==    by 0x41065D: CSC_find_free_memory (TP_schur_matrix.c:144)
+==15722==    by 0x411980: TP_schur_matrix_insert_entry (TP_schur_matrix.c:529)
+==15722==    by 0x411F00: TP_schur_matrix_update_S (TP_schur_matrix.c:604)
+==15722==    by 0x40927F: TP_solver_update_matrix (TP_solver.c:720)
+==15722==    by 0x4095DE: TP_solver_factorize (TP_solver.c:813)
+==15722==    by 0x4086F8: TP_solver_run_group (TP_solver.c:530)
+==15722==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==15722==    by 0x406069: main (test.c:23)
+

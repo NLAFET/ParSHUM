@@ -1,0 +1,16 @@
+==16717== 16,384 bytes in 1 blocks are still reachable in loss record 11 of 18
+==16717==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==16717==    by 0x4218A0: plasma_init (in /home/cseg/numanlys/scarf523/soft_src/clean_git_TP/build/bin/tp_test)
+==16717==    by 0x408CE4: TP_solver_init (TP_solver.c:612)
+==16717==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
+==16717==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==16717==    by 0x406069: main (test.c:23)
+
+==16717== 40,980 bytes in 20 blocks are definitely lost in loss record 15 of 18
+==16717==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==16717==    by 0x40A224: TP_verbose_default_parms (TP_verbose.c:17)
+==16717==    by 0x40A2BF: TP_verbose_create_V0 (TP_verbose.c:38)
+==16717==    by 0x4063B8: TP_solver_create (TP_solver.c:53)
+==16717==    by 0x408587: TP_solver_run_group (TP_solver.c:514)
+==16717==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
+==16717==    by 0x406069: main (test.c:23)
