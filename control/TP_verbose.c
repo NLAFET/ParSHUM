@@ -114,6 +114,29 @@ void
 TP_verbose_print_group_run(TP_verbose verbose, TP_parm_type type,
 			   void *val, int current_run, FILE *file)
 {
+  switch (type) {
+  case (TP_value_tol) :
+    fprintf(file, "\"Value tolerance\"\t");
+    break;
+  case (TP_marko_tol) :
+    fprintf(file, "\"Markowitz factor\"\t");
+    break;
+  case (TP_schur_density) :
+    fprintf(file, "\"Schur density\"\t");
+    break;
+  case (TP_nb_candidates) :
+    fprintf(file, "\"#candidates\"\t");
+    break;
+  case (TP_min_pivots) :
+    fprintf(file, "\" #min pivots\"\t");
+    break;
+  case (TP_nb_threads) :
+    fprintf(file, "\" #threads\"\t");
+    break;
+  default :
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "unrecognized type of exe_parms");
+  }
+
   if( !current_run ) {
     fprintf(file, " \"timing total\" \"timing sparse\"  \"timing dense\" \"timing convert\"");
     fprintf(file, " \"timing pivot search\" \"timing creating init sets\"  \"timing merging pivots\"");
@@ -138,7 +161,7 @@ TP_verbose_print_group_run(TP_verbose verbose, TP_parm_type type,
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "unrecognized type of exe_parms");
   }
   
-  fprintf(file, "%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%d\t%d\t%ld\t%ld\t%ld\t%d\t\n",
+  fprintf(file, "%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%e\t%e\t%f\t%d\t%d\t%ld\t%ld\t%ld\t%d\n",
 	  verbose->timing_facto,
 	  verbose->timing_facto_sparse,
 	  verbose->timing_facto_dense,

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <omp.h>
 #include "TP_auxiliary.h"
 #include "TP_schur_matrix.h"
 
@@ -23,10 +24,12 @@ TP_schur_matrix_create()
 
 void
 TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug, 
-			 double extra_space, double extra_space_inbetween)
+			 int nb_threads, double extra_space, double extra_space_inbetween)
 {
   long allocating;
+  int i;
 
+  self->nb_threads = nb_threads;
   self->n = n;
   self->m = m;
 
@@ -52,6 +55,13 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
   self->unused_CSR = calloc(1, sizeof(*self->unused_CSR));
   self->unused_CSR->nb_elem = allocating;
 
+  self->row_locks = malloc(m * sizeof(*self->row_locks));
+  for( i = 0; i < m; i++)
+    pthread_mutex_init(&self->row_locks[i], NULL);
+  self->col_locks = malloc(n * sizeof(*self->col_locks));
+  for( i = 0; i < n; i++)
+    pthread_mutex_init(&self->col_locks[i], NULL);
+  
   if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR))
     TP_print_GB(self, "GB: after allocating");
 }
@@ -370,57 +380,83 @@ void
 TP_schur_matrix_update_LD(TP_schur_matrix self, TP_matrix L, TP_matrix D,
 			  int *row_perm, int *col_perm, int nb_pivots)
 {
-  int pivot; 
-  for(pivot = 0; pivot < nb_pivots; pivot++) 
-    {
-      struct CSC_struct *CSC;
-      int i, nb_elem, L_current_col, row, col;
-      int *rows, *L_rows;
-      double *vals, *L_vals, pivot_val;
-      
-      col     = col_perm[pivot];
-      row     = row_perm[pivot];
-      CSC     = &self->CSC[col];
-      nb_elem = CSC->nb_elem;
-      vals    = self->val + CSC->offset;
-      rows    = self->row + CSC->offset;
-      L_current_col = L->col_ptr[L->n];
-      L_rows        = L->row;
-      L_vals        = L->val;
+  int pivot, nb_threads = self->nb_threads;
+  int nb_steps = (nb_pivots +  nb_threads - 1 ) / nb_threads, step; 
 
-      if ( D->n + 1 > D->allocated ) 
-	TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
-      if ( L->nnz + nb_elem > L->allocated ) {
-	TP_matrix_realloc(L);
+  int L_input_size = L->n;
+  int D_input_size = D->n;
+  
+  if ( D->n + nb_pivots > D->allocated ) 
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
+
+  for(pivot = 0; pivot < nb_pivots; pivot++)  {
+    int nb_elem = self->CSC[col_perm[pivot]].nb_elem - 1;
+    int new_col_ptr = L->col_ptr[L->n] + nb_elem;
+    if ( new_col_ptr > L->allocated)
+      TP_matrix_realloc(L);
+
+    L->n++;
+    L->col_ptr[L->n] = new_col_ptr;
+    L->nnz += nb_elem;
+  }
+  D->n += nb_pivots;
+
+
+#pragma omp parallel num_threads(nb_threads) private(step)
+  for(step = 0; step < nb_steps; step++) 
+    {
+      int me =  omp_get_thread_num();
+      int current_pivot = step * nb_threads + me;
+      if ( current_pivot < nb_pivots)  {
+	
+	struct CSC_struct *CSC;
+	int i, nb_elem, L_current_col, row, col;
+	int *rows, *L_rows;
+	double *vals, *L_vals, pivot_val;
+	
+	col     = col_perm[current_pivot];
+	row     = row_perm[current_pivot];
+	CSC     = &self->CSC[col];
+	nb_elem = CSC->nb_elem;
+	vals    = self->val + CSC->offset;
+	rows    = self->row + CSC->offset;
+	L_current_col = L->col_ptr[L_input_size + current_pivot];
 	L_rows        = L->row;
 	L_vals        = L->val;
-      }
-      
-      for(i = 0; i < nb_elem; i++)
-	{
-	  if ( rows[i] != row) {
-	    L_rows[L_current_col  ] = rows[i];
-	    L_vals[L_current_col++] = vals[i];
-	  } else {
-	    D->val[D->n++] = pivot_val = vals[i];
-	  }
-	  delete_entry_from_CSR(self, col, rows[i]);
+	
+	if ( L->nnz + nb_elem > L->allocated ) {
+	  TP_matrix_realloc(L);
+	  L_rows        = L->row;
+	  L_vals        = L->val;
 	}
-      
-      L->n++;
-      L->col_ptr[L->n] = L_current_col;
-      L->nnz += nb_elem;
-      
-      for( i = L->col_ptr[L->n-1]; i < L->col_ptr[L->n]; i++)
-	L_vals[i] /= pivot_val;
-      
-      /* TODO: recycle the col's memory */
-      CSC->nb_elem = 0;
-      CSC->nb_free = 0;
-      self->nnz   -= nb_elem;
+	
+	for(i = 0; i < nb_elem; i++)
+	  {
+	    if ( rows[i] != row) {
+	      L_rows[L_current_col] = rows[i];
+	      L_vals[L_current_col] = vals[i];
+	      L_current_col++;
+	    } else {
+	      D->val[D_input_size + current_pivot] = pivot_val = vals[i];
+	    }
+	    pthread_mutex_lock(&self->row_locks[rows[i]]);
+	    delete_entry_from_CSR(self, col, rows[i]);
+	    pthread_mutex_unlock(&self->row_locks[rows[i]]);
+	  }
+	
+	/* TODO: we could split the previopud for in two fors: one before we found the pivot, update the begining, and then do the rest */
+	/* TODO do teh delete_entru_from_CSR  in a seperate loop maybe better???  try that option */
+	for( i = L->col_ptr[L_input_size + current_pivot]; i < L->col_ptr[L_input_size + current_pivot + 1]; i++)
+	  L_vals[i] /= pivot_val;
+	
+	/* TODO: recycle the col's memory */
+	CSC->nb_elem = 0;
+	CSC->nb_free = 0;
+	self->nnz   -= nb_elem;
+      }
     }
 }
- 
+
 
 
 double
@@ -458,43 +494,59 @@ void
 TP_schur_matrix_update_U(TP_schur_matrix self, TP_matrix U,
 			 int *row_perm, int *col_perm, int nb_pivots)
 {
-  int pivot; 
-  for(pivot = 0; pivot < nb_pivots; pivot++) 
+  int pivot, nb_threads = self->nb_threads;
+  int nb_steps = (nb_pivots + nb_threads - 1 ) / nb_threads, step; 
+  int U_input_size = U->m;
+
+  for(pivot = 0; pivot < nb_pivots; pivot++)  {
+    int nb_elem = self->CSR[row_perm[pivot]].nb_elem;
+    int new_row_ptr = U->row_ptr[U->m] + nb_elem;
+    if ( new_row_ptr > U->allocated)
+      TP_matrix_realloc(U);
+
+    U->m++;
+    U->row_ptr[U->m] = new_row_ptr;
+    U->nnz += nb_elem;
+  }
+
+
+#pragma omp parallel num_threads(nb_threads) private(step)
+  for(step = 0; step < nb_steps; step++) 
     {
+      int me =  omp_get_thread_num();
       struct CSR_struct *CSR;
       int i, nb_elem, U_current_row, row, col;
-      int *cols;
-      
-      col     = col_perm[pivot];
-      row     = row_perm[pivot];
-      CSR     = &self->CSR[row];
-      nb_elem = CSR->nb_elem;
-      cols    = self->col + CSR->offset;
-      U_current_row = U->row_ptr[U->m];
-      
-      if ( U->nnz + nb_elem > U->allocated ) 
-	TP_matrix_realloc(U);
+      int *cols, current_pivot = step * nb_threads + me ;
+
+      if (current_pivot < nb_pivots ) { 
+	col     = col_perm[current_pivot];
+	row     = row_perm[current_pivot];
+	CSR     = &self->CSR[row];
+	nb_elem = CSR->nb_elem;
+	cols    = self->col + CSR->offset;
+	U_current_row = U->row_ptr[U_input_size + current_pivot];
   
-      for(i = 0; i < nb_elem; i++)
-	{
-	  int current_col = cols[i];
-	  double val;
-	  if (current_col == col )
-	    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "this entry should of been already copied to the D");
-	  
-	  val = delete_entry_from_CSC(self, current_col, row);
-	  U->col[U_current_row  ] = current_col;
-          U->val[U_current_row++] = val;
-	}
+	for(i = 0; i < nb_elem; i++)
+	  {
+	    int current_col = cols[i];
+	    double val;
+	    /* PROTEC THIS TEST WITH SOME KIND OF DEBUG */
+	    if (current_col == col )
+	      TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "this entry should of been already copied to the D");
 
-      U->m++;
-      U->row_ptr[U->m] = U_current_row;
-      U->nnz += nb_elem;
+	    pthread_mutex_lock(&self->col_locks[current_col]);
+	    val = delete_entry_from_CSC(self, current_col, row);
+	    pthread_mutex_unlock(&self->col_locks[current_col]);
 
-    /* TODO: recycle the row's memory */
-      CSR->nb_elem = 0;
-      CSR->nb_free = 0;
-      self->nnz   -= nb_elem;
+	    U->col[U_current_row  ] = current_col;
+	    U->val[U_current_row++] = val;
+	  }
+	
+	/* TODO: recycle the row's memory */
+	CSR->nb_elem = 0;
+	CSR->nb_free = 0;
+	self->nnz   -= nb_elem;
+      }
     }
 }
 
@@ -509,6 +561,7 @@ TP_schur_matrix_add_to_entry(TP_schur_matrix self, int row, int col, double val)
 
   for( i = 0; i < nb_elem; i++)
     if ( rows[i] == row) { 
+#pragma omp atomic
       vals[i] += val;
       return;
     }
@@ -560,10 +613,18 @@ TP_schur_matrix_insert_entry(TP_schur_matrix self, int row, int col, double val)
 void
 TP_schur_matrix_update_colmax(TP_schur_matrix self)
 {
-  int n = self->n;
-  
-  for( int i = 0; i < n; i++) 
-    self->CSC[i].col_max = get_max_double(self->val + self->CSC[i].offset, self->CSC[i].nb_elem);
+  int n = self->n, nb_threads = self->nb_threads;
+  int nb_steps = ( n + nb_threads - 1 ) / nb_threads, step;
+
+#pragma omp parallel num_threads(nb_threads) private(step)
+  {
+    int me =  omp_get_thread_num();
+    for( step = 0; step < nb_steps; step++) { 
+      int my_col = step * nb_threads + me; 
+      if (my_col < n)
+	self->CSC[my_col].col_max = get_max_double(self->val + self->CSC[my_col].offset, self->CSC[my_col].nb_elem);
+    }
+  }
 }
 
 
@@ -582,29 +643,41 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_matrix U, int start,
   
   for ( i = 0; i < n; i++)
     schur_row_struct[i] = -1;
-  
-  for( count = 0, i = start; i < end; i++, count++) 
-    {
-      for(j = U_row_ptr[i]; j < U_row_ptr[i+1]; j++)
-	{
-	  int col        = U_cols[j];
-	  double col_val = U_vals[j];
 
-	  struct CSC_struct *CSC = &S->CSC[col];
-	  int *S_rows            = S->row + CSC->offset;
-	  int S_col_nb_elem      = CSC->nb_elem;
-	  
-	  for ( k = 0; k < S_col_nb_elem; k++)
-	    schur_row_struct[S_rows[k]] = count*n + col;
-	  
-	  for ( k = L_col_ptr[i]; k < L_col_ptr[i+1]; k++) { 
-	    if (schur_row_struct[L_rows[k]] == count*n + col)
-	      TP_schur_matrix_add_to_entry(S, L_rows[k], col, -col_val * L_vals[k]);
-	    else
-	      TP_schur_matrix_insert_entry(S, L_rows[k], col, -col_val * L_vals[k]);
-	  }
+/* THIS IS A BAD IMPLEMENTATION OF UPDATE S */
+/* #pragma omp parallel num_threads(nb_threads) */
+/*   { */
+/* #pragma omp single */
+/*     { */
+      for( count = 0, i = start; i < end; i++, count++) 
+	{
+	  for(j = U_row_ptr[i]; j < U_row_ptr[i+1]; j++)
+	    {
+	      int col        = U_cols[j];
+	      double col_val = U_vals[j];
+	      
+	      struct CSC_struct *CSC = &S->CSC[col];
+	      int *S_rows            = S->row + CSC->offset;
+	      int S_col_nb_elem      = CSC->nb_elem;
+	      
+	      for ( k = 0; k < S_col_nb_elem; k++)
+		schur_row_struct[S_rows[k]] = count*n + col;	  
+	      for ( k = L_col_ptr[i]; k < L_col_ptr[i+1]; k++) { 
+		if (schur_row_struct[L_rows[k]] == count*n + col) {
+/* #pragma omp task */
+/* 		  { */
+		    int task_row = L_rows[k], task_col = col; 
+		    double val = -col_val * L_vals[k];
+		    TP_schur_matrix_add_to_entry(S, task_row, task_col, val);
+		  /* } */
+		} else {
+		  TP_schur_matrix_insert_entry(S, L_rows[k], col, -col_val * L_vals[k]);
+		}
+	      }
+	    } // for j 
 	}
-    }
+  /*   } // single */
+  /* } // parallel */
   
   TP_schur_matrix_update_colmax(S);
 }
@@ -691,6 +764,7 @@ TP_schur_matrix_print(TP_schur_matrix self, char *mess)
 void
 TP_schur_matrix_destroy(TP_schur_matrix self)
 {
+  int i;
   free_space unused_CSC = self->unused_CSC;
   free_space unused_CSR = self->unused_CSR;
   
@@ -708,6 +782,13 @@ TP_schur_matrix_destroy(TP_schur_matrix self)
     unused_CSR = tmp;
   }
   
+  for( i = 0; i < self->m; i++)
+    pthread_mutex_destroy(&self->row_locks[i]);
+  for( i = 0; i <  self->n; i++)
+    pthread_mutex_destroy(&self->col_locks[i]);
+  free(self->row_locks);
+  free(self->col_locks);
+
   free(self->val);
   free(self->row);
   free(self->col);

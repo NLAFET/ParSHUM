@@ -20,9 +20,10 @@ const char *usageStrign[] = {
   "usage test: [--help] [--matrix matrix] [--RHS_file file] [--debug_mode] [--verbosity level] [--marko_tol tol] [--value_tol tol]",
   "            [--extra_space factor] [--extra_space_inbetween factor] [--nb_threads #threads] [--nb_candidates_per_block #blocks] ", 
   "            [--output_dir dir] [--output_file file] [--nb_previous_pivots #pivtos] [--schur_density_tolerance tol]",
-  "            [--min_pivot_per_steps #steps] [--output_dir dir] [--prog_name name ] [--check_schur_symetry]   ",
-  "            [--check_TP_with_plasma_perm] [--check_dense_with_TP_perm] [--print_each_step] [--check_GC]",
+  "            [--min_pivot_per_steps #steps] [--output_dir dir] [--prog_name name ] [--check_schur_symetry] [--check_pivots]",
+  "            [--check_TP_with_plasma_perm] [--check_dense_with_TP_perm] [--print_each_step]1;5B [--check_GC]",
   "            [--group_run value_tol|marko_tol|schur_density|nb_candidates|min_pivots|nb_threads init inc nb_steps]",
+  "            [--counters_size #double_counters]",
   NULL,
 };
 
@@ -38,7 +39,8 @@ TP_solver_create()
   TP_solver self = calloc(1, sizeof(*self));
   self->exe_parms = calloc(1, sizeof(*self->exe_parms));
 
-  self->verbosity               = 1;
+  self->verbosity      = 1;
+  self->size_counters = 100;
 
   self->exe_parms->nb_threads              = 1;
   self->exe_parms->value_tol               = 0.1;
@@ -317,6 +319,9 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       run_args_start = ++i;
       i += 3;
       continue;
+    } else if (!strcmp(argv[i], "--counters_size")) {
+      self->size_counters = atoi(argv[++i]);
+      continue;
     } else if (!strcmp(argv[i], "--help")) {
       int j = 0;
       while( usageStrign[j] !=  NULL)
@@ -521,6 +526,7 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
       free(run->exe_parms);
       run->A = matrix;
       run->exe_parms = run->verbose->exe_parms = run_exe_parms;
+      free(run->verbose->parms->output_dir);
       run->verbose->parms->output_dir = solver->verbose->parms->output_dir;
       run->verbose->parms->user_out_dir = 1;
       update_exe_parms(run->exe_parms, type, init_val, i, (void *) &current_val, inc);
@@ -547,13 +553,75 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
   
   free(output_runs_file);
 
-  /* TODO: understand why this fails */
   TP_solver_dealloc(solver);
   
   return 0;
 }
 
+/* TODO: FOR NOW WE ASUME THAT N == M */
+void
+TP_solver_alloc_counters(TP_solver solver, int **col_count, int **row_count)
+{
+  int i, total;
+  TP_counters counter = NULL;
+  pthread_mutex_lock(&solver->counters_lock);
 
+  for( i = 0; i < solver->nb_counters; i++)
+    if ( solver->counters[i]->nb_used_counters  < solver->size_counters) {
+      counter = solver->counters[i];
+      break;
+    }
+
+  if (!counter) {
+    solver->nb_counters++;
+    int new = solver->nb_counters - 1;
+    
+    solver->counters  = realloc(solver->counters, solver->nb_counters * sizeof(*solver->counters));
+    solver->counters[new] = calloc(1, sizeof(**solver->counters));
+    solver->counters[new]->array = calloc((size_t) solver->size_counters * 2 * solver->A->n,  sizeof(*solver->counters[new]->array));
+    solver->counters[new]->used_counters = calloc((size_t) solver->size_counters, sizeof(*solver->counters[new]->used_counters));
+    counter = solver->counters[new];
+  }
+  
+  total = solver->size_counters;
+
+  for(i = 0; i < total; i++)
+    if(!counter->used_counters[i])  {
+      *col_count = &counter->array[i * solver->A->n * 2 ];
+      *row_count = &counter->array[i * solver->A->n * 2 + solver->A->n];
+      counter->nb_used_counters++;
+      counter->used_counters[i] = 1;
+      memset(&counter->array[i * solver->A->n * 2], 0, solver->A->n * 2 * sizeof(*counter->array));
+      pthread_mutex_unlock(&solver->counters_lock);
+      return;
+    }
+
+  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"this should not happened!");
+}
+
+void
+TP_solver_dealloc_counters(TP_solver solver, int *col_count, int *row_count)
+{
+  pthread_mutex_lock(&solver->counters_lock);
+  int i;
+  TP_counters counter = NULL;
+  long diff;
+  for( i = 0; i < solver->nb_counters; i++) {
+    diff = col_count - solver->counters[i]->array;
+    if ( diff >= 0  && diff < solver->A->n * 2 * solver->size_counters){
+      counter = solver->counters[i];
+      break;
+    }
+  }
+  if (!counter) 
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"puffff");
+
+  
+  counter->used_counters[ diff / ( solver->A->n * 2) ] = 0;
+
+  counter->nb_used_counters--;
+  pthread_mutex_unlock(&solver->counters_lock);
+}
 
 void
 TP_solver_alloc_internal(TP_solver self) 
@@ -569,7 +637,7 @@ TP_solver_alloc_internal(TP_solver self)
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
       TP_matrix_print(self->A, "A on input");
   TP_schur_matrix_allocate(self->S, self->A->n, self->A->m, self->A->nnz, self->debug,
-			   self->exe_parms->extra_space, self->exe_parms->extra_space_inbetween);
+			   self->exe_parms->nb_threads, self->exe_parms->extra_space, self->exe_parms->extra_space_inbetween);
   TP_schur_matrix_copy(self->A, self->S);
 
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
@@ -594,9 +662,17 @@ TP_solver_alloc_internal(TP_solver self)
   int_array_memset(self->previous_pivots, INT_MAX / self->exe_parms->nb_previous_pivots, self->exe_parms->nb_previous_pivots);
 
   self->candidates = calloc(1, sizeof(*self->candidates));
-  self->candidates->row        = malloc(self->A->n * sizeof(*self->candidates->row));
-  self->candidates->marko      = malloc(self->A->n * sizeof(*self->candidates->marko));
-  self->candidates->best_marko = malloc(self->exe_parms->nb_threads * sizeof(*self->candidates->best_marko));
+  self->candidates->row             = malloc(self->A->n * sizeof(*self->candidates->row));
+  self->candidates->marko           = malloc(self->A->n * sizeof(*self->candidates->marko));
+  self->candidates->best_marko      = malloc(self->exe_parms->nb_threads * sizeof(*self->candidates->best_marko));
+
+  self->counters              = calloc( 1, sizeof(*self->counters));
+  *self->counters             = calloc( 1, sizeof(**self->counters));
+
+  (*self->counters)->array    = calloc((size_t) self->size_counters * 2 * self->A->n,  sizeof(*self->counters[0]->array));
+  (*self->counters)->used_counters = calloc((size_t) self->size_counters, sizeof(*self->counters[0]->used_counters));
+  self->nb_counters = 1;
+  pthread_mutex_init(&self->counters_lock, NULL);
 }
 
 void
@@ -609,7 +685,7 @@ TP_solver_init(TP_solver self)
   self->verbose->parms->outfiles_prefix = get_outfile_prefix(self->exe_parms, TP_parm_none);
   
   if (!is_plasma_init) {
-    plasma_init(self->exe_parms->nb_threads);
+    plasma_init(1);
     is_plasma_init = 1;
   }
   
@@ -670,19 +746,23 @@ TP_solver_find_pivot_set(TP_solver self)
   int nb_threads = self->exe_parms->nb_threads;
 
   TP_verbose_start_timing(&step->timing_extracting_candidates);
-  list = get_possible_pivots(self->S, self->random_col, self->candidates, nb_threads,
+  list = get_possible_pivots(self, self->S, self->random_col, self->candidates, nb_threads,
   			     exe_parms->value_tol, exe_parms->marko_tol,
   			     exe_parms->nb_candidates_per_block);
   TP_verbose_stop_timing(&step->timing_extracting_candidates);
   
   if( !list->nb_elem )
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "no possible pivot were found");
-
+  
   TP_verbose_start_timing(&step->timing_merging_pivots);
-  list = merge_pivot_sets(list, self->S);
+  list = merge_pivot_sets(list, self->S, self);
 
   TP_solver_get_pivots(self, list->sets);
+  if (list->nb_elem != 1 )
+    TP_warning(__FUNCTION__, __FILE__, __LINE__, "not unique set");
 
+  TP_pivot_set_destroy(list->sets, self);
+  list->nb_elem = 0 ;
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
     print_pivot_list(list, "found pivots");
   TP_pivot_list_destroy(list);
@@ -707,7 +787,7 @@ TP_solver_update_matrix(TP_solver self)
     TP_schur_matrix_memory_check(self->S);
   if (self->debug & TP_CHECK_SCHUR_SYMETRY )
     TP_schur_matrix_check_symetry(self->S);
-  
+    
   TP_verbose_start_timing(&step->timing_update_U);
   TP_schur_matrix_update_U (S, U,    &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], nb_pivots);
   TP_verbose_stop_timing(&step->timing_update_U);
@@ -723,7 +803,6 @@ TP_solver_update_matrix(TP_solver self)
     TP_schur_matrix_memory_check(self->S);
   if (self->debug & TP_CHECK_SCHUR_SYMETRY )
     TP_schur_matrix_check_symetry(self->S);
-
 
   self->done_pivots = self->found_pivots;
 
@@ -803,16 +882,18 @@ TP_solver_factorize(TP_solver self)
 				   self->debug, verbose) )
     { 
        TP_verbose_per_step  step = TP_verbose_step_start(verbose);
+       int diff;
        TP_verbose_start_timing(&step->timing_step);
        TP_verbose_start_timing(&step->timing_pivot_search);
        TP_solver_find_pivot_set(self);
-       previous_pivots[nb_pivot_blocks++ % nb_previous_pivots] = self->found_pivots - self->done_pivots;
+       previous_pivots[nb_pivot_blocks++ % nb_previous_pivots] = diff = self->found_pivots - self->done_pivots;
        TP_verbose_stop_timing(&step->timing_pivot_search);
        
        TP_verbose_start_timing(&step->timing_apply_perms);
        TP_solver_update_matrix(self);
        TP_verbose_stop_timing(&step->timing_apply_perms);
        TP_verbose_stop_timing(&step->timing_step);
+
     }
   TP_verbose_stop_timing(&verbose->timing_facto_sparse);
   
@@ -963,7 +1044,6 @@ TP_solver_iterative_refinement(TP_solver self,
   TP_vector_destroy(tmp);
 }
 
-
 void 
 TP_solver_finalize(TP_solver self)
 {
@@ -978,6 +1058,8 @@ TP_solver_finalize(TP_solver self)
 void
 TP_solver_destroy(TP_solver self)
 {
+  int i;
+
   if (self->debug & TP_CHECK_DENSE_W_TP_PERM) {
     TP_dense_2D_destroy(self->A_debug);
   } else   {
@@ -994,6 +1076,16 @@ TP_solver_destroy(TP_solver self)
     free(self->candidates->marko);
     free(self->candidates->best_marko);
     free(self->candidates);
+    
+    for(i = 0; i <  self->nb_counters; i++) {
+      free(self->counters[i]->array);
+      free(self->counters[i]->used_counters);
+      free(self->counters[i]);
+    }
+    free(self->counters);
+    
+    free(self->counters);
+    pthread_mutex_destroy(&self->counters_lock);
     
     free(self->row_perm);
     free(self->col_perm);

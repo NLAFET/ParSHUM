@@ -52,20 +52,21 @@ get_candidates(TP_schur_matrix matrix,
 
 
 void
-create_init_set(TP_schur_matrix matrix,
+create_init_set(TP_solver solver, 
+		TP_schur_matrix matrix,
 		TP_pivot_list list,
 		int *random_col, 
 		TP_pivot_candidates candidates,
 		int max_marko, int start, int end)
 {
   int i;
-  TP_pivot_set set = TP_pivot_set_create(matrix->n, matrix->m);
+  TP_pivot_set set = TP_pivot_set_create(solver, matrix->n, matrix->m);
   
   for( i = start; i < end; i++) 
     {
       /* int col = random_col[i]; */
       int col = i;
-      //double marko_count = (double) ( (matrix->CSC[col].nb_elem - 1) * (matrix->CSR[candidates->row[col]].nb_elem - 1));
+
       if ( candidates->marko[col]  <=  max_marko) {
 	TP_pivot_cell cell = TP_pivot_cell_create(candidates->row[col], col, candidates->marko[col]);
 	if ( (add_cell_to_sorted_set(set, cell, matrix)) ) 
@@ -79,11 +80,11 @@ create_init_set(TP_schur_matrix matrix,
       TP_pivot_list_insert_set(list, set);
     }
   else 
-    TP_pivot_set_destroy(set);
+    TP_pivot_set_destroy(set, solver);
 }
 
 TP_pivot_list
-get_possible_pivots(TP_schur_matrix matrix, int *random_col, 
+get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col, 
                     TP_pivot_candidates candidates, int nb_threads,
 		    double value_tol, double marko_tol,
 		    int nb_candidates_per_block)
@@ -127,10 +128,10 @@ get_possible_pivots(TP_schur_matrix matrix, int *random_col,
 	  candidates_per_set = 0;
 #pragma omp task shared (self, random_col, candidates) 
 	  {
-	  int start = last_step, end = i;
-	  int markov_tolerance = (int) (best_marko * marko_tol);
-				/* best_marko * marko_tol could overbuff, if marko tol is too large  */
-	  create_init_set(matrix, self, random_col, candidates, markov_tolerance, start, end);
+	    int start = last_step, end = i;
+	    int markov_tolerance = (int) (best_marko * marko_tol);
+	    /* best_marko * marko_tol could overbuff, if marko tol is too large  */
+	    create_init_set(solver, matrix, self, random_col, candidates, markov_tolerance, start, end);
 	  }
 	  last_step = i;
 	}
@@ -138,7 +139,7 @@ get_possible_pivots(TP_schur_matrix matrix, int *random_col,
       if (candidates_per_set)
 #pragma omp task shared (self, random_col, candidates)
 	{
-	  create_init_set(matrix, self, random_col, candidates, (int) (best_marko * marko_tol), last_step, i);
+	  create_init_set(solver, matrix, self, random_col, candidates, (int) (best_marko * marko_tol), last_step, i);
 	}
 #pragma omp taskwait
     } //single
@@ -151,7 +152,7 @@ get_possible_pivots(TP_schur_matrix matrix, int *random_col,
 
 
 TP_pivot_list 
-merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix)
+merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix, TP_solver solver)
 {
   TP_pivot_list merged_list;
 #pragma omp parallel shared(self, merged_list)
@@ -174,7 +175,7 @@ merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix)
 		{
 		  merged_set = get_next_merging_set(self);
 		}
-		merged_set = merge_to_larger_set(merged_set, matrix);
+		merged_set = merge_to_larger_set(merged_set, matrix, solver);
 		
 #pragma omp critical
 		{
@@ -228,7 +229,7 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
 
 
 TP_pivot_set
-merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix)
+merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix, TP_solver solver)
 {
   TP_pivot_set large, small;
   TP_pivot_cell cells_to_merge;
@@ -260,7 +261,7 @@ merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix)
 	TP_pivot_cell_destroy(cell);
     }
 
-  TP_pivot_set_destroy(small);
+  TP_pivot_set_destroy(small, solver);
   self = large;
   large->next = NULL;
   return large;

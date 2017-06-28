@@ -1,16 +1,114 @@
-==16717== 16,384 bytes in 1 blocks are still reachable in loss record 11 of 18
-==16717==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
-==16717==    by 0x4218A0: plasma_init (in /home/cseg/numanlys/scarf523/soft_src/clean_git_TP/build/bin/tp_test)
-==16717==    by 0x408CE4: TP_solver_init (TP_solver.c:612)
-==16717==    by 0x4086D9: TP_solver_run_group (TP_solver.c:528)
-==16717==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
-==16717==    by 0x406069: main (test.c:23)
+valgrind --track-origins=yes --leak-check=full  --tool=memcheck --show-reachable=yes ./bin/tp_test  --matrix /home/cseg/numanlys/scarf523/matrices/watt_1.rb  --group_run  marko_tol 2 2 10
 
-==16717== 40,980 bytes in 20 blocks are definitely lost in loss record 15 of 18
-==16717==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
-==16717==    by 0x40A224: TP_verbose_default_parms (TP_verbose.c:17)
-==16717==    by 0x40A2BF: TP_verbose_create_V0 (TP_verbose.c:38)
-==16717==    by 0x4063B8: TP_solver_create (TP_solver.c:53)
-==16717==    by 0x408587: TP_solver_run_group (TP_solver.c:514)
-==16717==    by 0x407CBB: TP_solver_parse_args (TP_solver.c:366)
-==16717==    by 0x406069: main (test.c:23)
+ALL warning are  GOMP  /  PLASMA / MKL 
+
+==14474== 8 bytes in 1 blocks are still reachable in loss record 1 of 14
+==14474==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==14474==    by 0x82F23D8: gomp_malloc (alloc.c:37)
+==14474==    by 0x83039B7: gomp_init_num_threads (proc.c:91)
+==14474==    by 0x82F35C5: initialize_env (env.c:1208)
+==14474==    by 0x830F065: ??? (in /apps/gcc/6.2.0/lib64/libgomp.so.1.0.0)
+==14474==    by 0x82F1CCA: ??? (in /apps/gcc/6.2.0/lib64/libgomp.so.1.0.0)
+==14474==    by 0x7FEFFFD6C: ???
+==14474==    by 0x2D2D00747365745E: ???
+==14474==    by 0x2F0078697274616C: ???
+==14474==    by 0x6573632F656D6F67: ???
+==14474==    by 0x6C6E616D756E2F66: ???
+==14474==    by 0x66726163732F7378: ???
+==14474== 
+==14474== 32 bytes in 1 blocks are still reachable in loss record 2 of 14
+==14474==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==14474==    by 0x8D0230F: _dlerror_run (in /lib64/libdl-2.12.so)
+==14474==    by 0x8D01EE0: dlopen@@GLIBC_2.2.5 (in /lib64/libdl-2.12.so)
+==14474==    by 0x6014A10: mkl_serv_load_dll (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_core.so)
+==14474==    by 0x604C0B1: mkl_blas_xdswap (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_core.so)
+==14474==    by 0x5714F1E: DSWAP (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_intel_lp64.so)
+==14474==    by 0x5732DE0: cblas_dswap (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_intel_lp64.so)
+==14474==    by 0x42F10D: core_dgetrf (in /home/cseg/numanlys/scarf523/soft_src/clean_git_TP/build/bin/tp_test)
+==14474==    by 0x424386: plasma_pdgetrf._omp_fn.2 (in /home/cseg/numanlys/scarf523/soft_src/clean_git_TP/build/bin/tp_test)
+==14474==    by 0x82FC0B7: GOMP_taskwait (task.c:1421)
+==14474==    by 0x4241F7: plasma_pdgetrf._omp_fn.0 (in /home/cseg/numanlys/scarf523/soft_src/clean_git_TP/build/bin/tp_test)
+==14474==    by 0x82FB5DE: gomp_barrier_handle_tasks (task.c:1271)
+==14474== 
+==14474== 79 bytes in 1 blocks are still reachable in loss record 3 of 14
+==14474==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==14474==    by 0x4006250: expand_dynamic_string_token (in /lib64/ld-2.12.so)
+==14474==    by 0x400832A: _dl_map_object (in /lib64/ld-2.12.so)
+==14474==    by 0x4012C74: dl_open_worker (in /lib64/ld-2.12.so)
+==14474==    by 0x400E365: _dl_catch_error (in /lib64/ld-2.12.so)
+==14474==    by 0x4012719: _dl_open (in /lib64/ld-2.12.so)
+==14474==    by 0x8D01F65: dlopen_doit (in /lib64/libdl-2.12.so)
+==14474==    by 0x400E365: _dl_catch_error (in /lib64/ld-2.12.so)
+==14474==    by 0x8D0229B: _dlerror_run (in /lib64/libdl-2.12.so)
+==14474==    by 0x8D01EE0: dlopen@@GLIBC_2.2.5 (in /lib64/libdl-2.12.so)
+==14474==    by 0x6014A10: mkl_serv_load_dll (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_core.so)
+==14474==    by 0x604C0B1: mkl_blas_xdswap (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_core.so)
+==14474== 
+==14474== 79 bytes in 1 blocks are still reachable in loss record 4 of 14
+==14474==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==14474==    by 0x400B173: _dl_new_object (in /lib64/ld-2.12.so)
+==14474==    by 0x40071DD: _dl_map_object_from_fd (in /lib64/ld-2.12.so)
+==14474==    by 0x40083E1: _dl_map_object (in /lib64/ld-2.12.so)
+==14474==    by 0x4012C74: dl_open_worker (in /lib64/ld-2.12.so)
+==14474==    by 0x400E365: _dl_catch_error (in /lib64/ld-2.12.so)
+==14474==    by 0x4012719: _dl_open (in /lib64/ld-2.12.so)
+==14474==    by 0x8D01F65: dlopen_doit (in /lib64/libdl-2.12.so)
+==14474==    by 0x400E365: _dl_catch_error (in /lib64/ld-2.12.so)
+==14474==    by 0x8D0229B: _dlerror_run (in /lib64/libdl-2.12.so)
+==14474==    by 0x8D01EE0: dlopen@@GLIBC_2.2.5 (in /lib64/libdl-2.12.so)
+==14474==    by 0x6014A10: mkl_serv_load_dll (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_core.so)
+==14474== 
+==14474== 192 bytes in 1 blocks are still reachable in loss record 5 of 14
+==14474==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==14474==    by 0x82F23D8: gomp_malloc (alloc.c:37)
+==14474==    by 0x8301995: gomp_new_team (pool.h:42)
+==14474==    by 0x82F8E25: GOMP_parallel (parallel.c:167)
+==14474==    by 0x40CBEF: get_possible_pivots (TP_pivot_ops.c:95)
+==14474==    by 0x408FFF: TP_solver_find_pivot_set (TP_solver.c:674)
+==14474==    by 0x40959C: TP_solver_factorize (TP_solver.c:809)
+==14474==    by 0x408716: TP_solver_run_group (TP_solver.c:531)
+==14474==    by 0x407913: TP_solver_parse_args (TP_solver.c:346)
+==14474==    by 0x406069: main (test.c:23)
+==14474== 
+==14474== 200 bytes in 1 blocks are still reachable in loss record 6 of 14
+==14474==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==14474==    by 0x4012A5B: add_to_global (in /lib64/ld-2.12.so)
+==14474==    by 0x4013020: dl_open_worker (in /lib64/ld-2.12.so)
+==14474==    by 0x400E365: _dl_catch_error (in /lib64/ld-2.12.so)
+==14474==    by 0x4012719: _dl_open (in /lib64/ld-2.12.so)
+==14474==    by 0x8D01F65: dlopen_doit (in /lib64/libdl-2.12.so)
+==14474==    by 0x400E365: _dl_catch_error (in /lib64/ld-2.12.so)
+==14474==    by 0x8D0229B: _dlerror_run (in /lib64/libdl-2.12.so)
+==14474==    by 0x8D01EE0: dlopen@@GLIBC_2.2.5 (in /lib64/libdl-2.12.so)
+==14474==    by 0x6014A10: mkl_serv_load_dll (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_core.so)
+==14474==    by 0x604C0B1: mkl_blas_xdswap (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_core.so)
+==14474==    by 0x5714F1E: DSWAP (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_intel_lp64.so)
+==14474== 
+==14474== 256 bytes in 1 blocks are possibly lost in loss record 7 of 14
+==14474==    at 0x4C28A2E: malloc (vg_replace_malloc.c:270)
+==14474==    by 0x601A7C9: mm_account_ptr_by_tid..0 (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_core.so)
+==14474==    by 0x6018704: mkl_serv_allocate (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_core.so)
+==14474==    by 0xC3A83CA: mkl_blas_mc3_dgemm_get_bufs (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_mc3.so)
+==14474==    by 0xC380F33: mkl_blas_mc3_xdtrsm (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_mc3.so)
+==14474==    by 0x570E862: DTRSM (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_intel_lp64.so)
+==14474==    by 0x5734E46: cblas_dtrsm (in /apps/intel/2016.1/compilers_and_libraries_2016.1.150/linux/mkl/lib/intel64_lin/libmkl_intel_lp64.so)
+==14474==    by 0x42EB9E: core_dgetrf (in /home/cseg/numanlys/scarf523/soft_src/clean_git_TP/build/bin/tp_test)
+==14474==    by 0x424386: plasma_pdgetrf._omp_fn.2 (in /home/cseg/numanlys/scarf523/soft_src/clean_git_TP/build/bin/tp_test)
+==14474==    by 0x82FC0B7: GOMP_taskwait (task.c:1421)
+==14474==    by 0x4241F7: plasma_pdgetrf._omp_fn.0 (in /home/cseg/numanlys/scarf523/soft_src/clean_git_TP/build/bin/tp_test)
+==14474==    by 0x82FB5DE: gomp_barrier_handle_tasks (task.c:1271)
+==14474== 
+==14474== 1,239 bytes in 1 blocks are still reachable in loss record 8 of 14
+==14474==    at 0x4C277BB: calloc (vg_replace_malloc.c:593)
+==14474==    by 0x400AEBE: _dl_new_object (in /lib64/ld-2.12.so)
+==14474==    by 0x40071DD: _dl_map_object_from_fd (in /lib64/ld-2.12.so)
+==14474==    by 0x40083E1: _dl_map_object (in /lib64/ld-2.12.so)
+==14474==    by 0x4012C74: dl_open_worker (in /lib64/ld-2.12.so)
+==14474==    by 0x400E365: _dl_catch_error (in /lib64/ld-2.12.so)
+==14474==    by 0x4012719: _dl_open (in /lib64/ld-2.12.so)
+==14474==    by 0x8D01F65: dlopen_doit (in /lib64/libdl-2.12.so)
+==14474==    by 0x400E365: _dl_catch_error (in /lib64/ld-2.12.so)
+==14474==    by 0x8D0229B: _dlerror_run (in /lib64/libdl-2.12.so)
+==14474==    by 0x8D01EE0: dlopen@@GLIBC_2.2.5 (in /lib64/li
+
+........................................

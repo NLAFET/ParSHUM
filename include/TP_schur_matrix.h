@@ -1,9 +1,10 @@
 #ifndef   _TP_SCHUR_MATRIX_H 
 #define   _TP_SCHUR_MATRIX_H 
 
+#include <pthread.h>
+
 #include "TP_matrix.h"
 #include "TP_dense.h"
-
 
 typedef struct _TP_schur_matrix *TP_schur_matrix;
 typedef struct _free_space  *free_space;
@@ -30,6 +31,10 @@ struct _TP_schur_matrix {
   free_space unused_CSC;
   free_space unused_CSR;
 
+  pthread_mutex_t *row_locks;
+  pthread_mutex_t *col_locks;
+  int nb_threads;
+  
   int n;
   int m;
   long nnz;
@@ -51,7 +56,7 @@ struct _TP_schur_matrix {
 TP_schur_matrix TP_schur_matrix_create();
 
 void TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug,
-			      double extra_space, double extra_space_inbetween);
+			      int nb_threads, double extra_space, double extra_space_inbetween);
 
 void TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self);
 
