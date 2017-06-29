@@ -64,8 +64,7 @@ create_init_set(TP_solver solver,
   
   for( i = start; i < end; i++) 
     {
-      /* int col = random_col[i]; */
-      int col = i;
+      int col = random_col[i];
 
       if ( candidates->marko[col]  <=  max_marko) {
 	TP_pivot_cell cell = TP_pivot_cell_create(candidates->row[col], col, candidates->marko[col]);
@@ -126,7 +125,7 @@ get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col,
 	
 	if (candidates_per_set > nb_candidates_per_block) {
 	  candidates_per_set = 0;
-#pragma omp task shared (self, random_col, candidates) 
+#pragma omp task shared (self, random_col, candidates, solver) 
 	  {
 	    int start = last_step, end = i;
 	    int markov_tolerance = (int) (best_marko * marko_tol);
@@ -184,7 +183,7 @@ merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix, TP_solver solver)
 	      }// task
 	    }// for 
 #pragma omp taskwait
-	  TP_pivot_list_destroy(self);
+	  TP_pivot_list_destroy(self, solver);
 	  self = merged_list;
 	}// while
     } // single
@@ -198,9 +197,9 @@ TP_pivot_cell
 add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix matrix)
 {
   TP_pivot_cell merged = set->cells;
-
-  if( set->cols_count[cell->col] ||
-      set->rows_count[cell->row] )
+  int base = set->base;
+  if( set->cols_count[cell->col] >= base ||
+      set->rows_count[cell->row] >= base )
     return cell;
   
   if (set->nb_elem == 0) 
@@ -221,8 +220,9 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
     cell->next   = tmp;
   }
   set->nb_elem++;
-  update_counter(set->cols_count, matrix->col + matrix->CSR[cell->row].offset, matrix->CSR[cell->row].nb_elem);
-  update_counter(set->rows_count, matrix->row + matrix->CSC[cell->col].offset, matrix->CSC[cell->col].nb_elem);
+  /* TUKA */
+  update_counter(set->cols_count, matrix->col + matrix->CSR[cell->row].offset, matrix->CSR[cell->row].nb_elem, set->base);
+  update_counter(set->rows_count, matrix->row + matrix->CSC[cell->col].offset, matrix->CSC[cell->col].nb_elem, set->base);
 
   return NULL;
 }

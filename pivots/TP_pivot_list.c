@@ -19,8 +19,7 @@ TP_pivot_set_create(TP_solver solver, int n, int m)
 {
   TP_pivot_set self = calloc( (size_t) 1, (size_t) sizeof(*self));
   TP_solver_alloc_counters(solver, &self->cols_count, &self->rows_count);
-  /* self->rows_count  = calloc((size_t) m, (size_t) sizeof(*self->rows_count)); */
-  /* self->cols_count  = calloc((size_t) n, (size_t) sizeof(*self->cols_count)); */
+  self->base = solver->done_pivots;
 
    return self;
 }
@@ -36,34 +35,6 @@ TP_pivot_cell_create(int row, int col, int marko)
 
   return self;
 }
-
-/* TODO: clean up */
-/* TP_pivot_list */
-/* TP_pivot_list_insert_new_set(TP_pivot_list self, TP_schur_matrix matrix,  */
-/* 			     int row, int col, int marko) */
-/* { */
-/*   int m = matrix->m, n = matrix->n; */
-/*   TP_pivot_set  set  = TP_pivot_set_create(n, m), tmp; */
-/*   TP_pivot_cell cell = malloc( (size_t) sizeof(*cell)); */
-
-/*   set->cells   = cell; */
-/*   set->next    = NULL; */
-/*   set->nb_elem = 1; */
-/*   update_counter(set->cols_count, matrix->col + matrix->CSR[row].offset, matrix->CSR[row].nb_elem); */
-/*   update_counter(set->rows_count, matrix->row + matrix->CSC[col].offset, matrix->CSC[col].nb_elem); */
-
-/*   cell->row   = row; */
-/*   cell->col   = col; */
-/*   cell->marko = marko; */
-/*   cell->next  = NULL; */
-
-/*   tmp = self->sets; */
-/*   self->sets = set; */
-/*   set->next = tmp; */
-/*   self->nb_elem++; */
-
-/*   return self; */
-/* } */
 
 
 TP_pivot_list 
@@ -100,7 +71,11 @@ get_next_merging_set(TP_pivot_list self)
   return set;
 }
 
-
+/* TODO: clean up */
+/* it seams that this fucntion merge the two first 
+   sets in the list of sets, but does not check if they are 
+   indpenedent or no. After this the funtion the  
+   get_independent_pivots should be called */
 TP_pivot_set 
 merge_sorted_sets(TP_pivot_set self)
 {
@@ -265,8 +240,6 @@ TP_pivot_cell_destroy(TP_pivot_cell self)
 void
 TP_pivot_set_destroy(TP_pivot_set self, TP_solver solver)
 {
-  /* free(self->rows_count); */
-  /* free(self->cols_count); */
   TP_solver_dealloc_counters(solver, self->cols_count, self->rows_count);
 
   while(self->cells) {
@@ -278,19 +251,18 @@ TP_pivot_set_destroy(TP_pivot_set self, TP_solver solver)
 }
 
 void
-TP_pivot_list_destroy(TP_pivot_list self)
+TP_pivot_list_destroy(TP_pivot_list self, TP_solver solver)
 {
-  /* TP_pivot_set set = self->sets; */
+  TP_pivot_set set = self->sets;
 
-  // while the set is not empty
-  /* while(set)  */
-  /*   { */
-  /*     TP_pivot_set  tmp = set->next;  */
+  /* while the set is not empty */
+  while(set)
+    {
+      TP_pivot_set  tmp = set->next;
 
-  /*     // destroy set */
-  /*     /\* TP_pivot_set_destroy(set); *\/ */
-  /*     set = tmp; */
-  /*   } */
+      TP_pivot_set_destroy(set, solver);
+      set = tmp;
+    }
 
   //destroy list
   free(self);

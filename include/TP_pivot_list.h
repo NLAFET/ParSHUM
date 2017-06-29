@@ -21,6 +21,7 @@ struct _TP_pivot_set
   int nb_elem;
   int *rows_count;
   int *cols_count;
+  int base;
 };
 
 struct _TP_pivot_cell
@@ -44,7 +45,7 @@ TP_pivot_set   merge_sorted_sets(TP_pivot_set self);
 /* TP_pivot_set   get_independent_pivots(TP_pivot_set candidates, TP_schur_matrix matrix); */
 TP_pivot_set   merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix, TP_solver solver);
 TP_pivot_cell  add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix matrix);
-void           TP_pivot_list_destroy(TP_pivot_list self);
+void           TP_pivot_list_destroy(TP_pivot_list self, TP_solver solver);
 void           TP_pivot_set_destroy(TP_pivot_set self, TP_solver solver);
 void           print_pivot_list(TP_pivot_list self, char *mess);
 void           TP_pivot_cell_destroy(TP_pivot_cell self);

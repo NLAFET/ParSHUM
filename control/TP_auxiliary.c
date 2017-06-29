@@ -45,11 +45,17 @@ print_int_array(int *array, int n, char *mess)
 }
 
 void
-update_counter(int *counter, int *index, int n)
+update_counter(int *counter, int *index, int n, int base)
 {
   int i; 
-  for(i = 0; i < n; i++)
-    counter[index[i]]++;
+  for(i = 0; i < n; i++) {
+    int tmp = index[i];
+    if ( counter[tmp] < base )
+      counter[tmp] = base;
+    else
+      counter[tmp]++;
+    /* counter[tmp] =  ? base : counter[tmp]++; */
+  }
 }
 
 void 

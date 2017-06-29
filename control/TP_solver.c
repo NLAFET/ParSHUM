@@ -591,7 +591,7 @@ TP_solver_alloc_counters(TP_solver solver, int **col_count, int **row_count)
       *row_count = &counter->array[i * solver->A->n * 2 + solver->A->n];
       counter->nb_used_counters++;
       counter->used_counters[i] = 1;
-      memset(&counter->array[i * solver->A->n * 2], 0, solver->A->n * 2 * sizeof(*counter->array));
+      /* memset(&counter->array[i * solver->A->n * 2], 0, solver->A->n * 2 * sizeof(*counter->array)); */
       pthread_mutex_unlock(&solver->counters_lock);
       return;
     }
@@ -761,11 +761,9 @@ TP_solver_find_pivot_set(TP_solver self)
   if (list->nb_elem != 1 )
     TP_warning(__FUNCTION__, __FILE__, __LINE__, "not unique set");
 
-  TP_pivot_set_destroy(list->sets, self);
-  list->nb_elem = 0 ;
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
     print_pivot_list(list, "found pivots");
-  TP_pivot_list_destroy(list);
+  TP_pivot_list_destroy(list, self);
 
   TP_verbose_stop_timing(&step->timing_merging_pivots);
 }
@@ -873,6 +871,8 @@ TP_solver_factorize(TP_solver self)
   int nb_previous_pivots = exe_parms->nb_previous_pivots;
   int nb_pivot_blocks = 0;
   
+  int n = 1;
+
   TP_verbose_start_timing(&verbose->timing_facto);
   TP_verbose_start_timing(&verbose->timing_facto_sparse);
   while ( TP_continue_pivot_search(self->S, self->done_pivots, needed_pivots, 
@@ -882,18 +882,24 @@ TP_solver_factorize(TP_solver self)
 				   self->debug, verbose) )
     { 
        TP_verbose_per_step  step = TP_verbose_step_start(verbose);
-       int diff;
+       if ( !self->done_pivots) { 
+	 self->done_pivots = 1;
+	 n = 0;
+       }
        TP_verbose_start_timing(&step->timing_step);
        TP_verbose_start_timing(&step->timing_pivot_search);
        TP_solver_find_pivot_set(self);
-       previous_pivots[nb_pivot_blocks++ % nb_previous_pivots] = diff = self->found_pivots - self->done_pivots;
+       if (!n) {
+	 self->done_pivots = 0;
+	 n = 1;
+       }
+       previous_pivots[nb_pivot_blocks++ % nb_previous_pivots] = self->found_pivots - self->done_pivots;
        TP_verbose_stop_timing(&step->timing_pivot_search);
        
        TP_verbose_start_timing(&step->timing_apply_perms);
        TP_solver_update_matrix(self);
        TP_verbose_stop_timing(&step->timing_apply_perms);
        TP_verbose_stop_timing(&step->timing_step);
-
     }
   TP_verbose_stop_timing(&verbose->timing_facto_sparse);
   
@@ -1084,7 +1090,6 @@ TP_solver_destroy(TP_solver self)
     }
     free(self->counters);
     
-    free(self->counters);
     pthread_mutex_destroy(&self->counters_lock);
     
     free(self->row_perm);
