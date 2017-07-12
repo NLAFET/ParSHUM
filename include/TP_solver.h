@@ -36,7 +36,7 @@ struct _TP_solver {
   TP_matrix U;
   TP_schur_matrix S;
   TP_dense_matrix S_dense;
-
+  
   TP_pivot_candidates candidates;
   TP_counters *counters;
 
@@ -46,6 +46,8 @@ struct _TP_solver {
   int *col_perm;
   int *invr_row_perm;
   int *invr_col_perm;
+  int *rows_count;
+  int *cols_count;
   int *random_col;
   int *previous_pivots;
 

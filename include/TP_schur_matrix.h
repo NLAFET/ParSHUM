@@ -85,6 +85,10 @@ void  TP_schur_matrix_memory_check(TP_schur_matrix self);
 void  TP_schur_matrix_check_symetry(TP_schur_matrix self);
 void  TP_print_GB(TP_schur_matrix self, char *mess);
 void  TP_print_single_GB(free_space self, char *mess);
+void  TP_check_current_counters(TP_schur_matrix self,
+				int *col_perm, int *row_perm, int nb_perms, 
+				int *col_count, int *row_count, int base);
+
 
 #endif //  _TP_SCHUR_MATRIX_H 
 

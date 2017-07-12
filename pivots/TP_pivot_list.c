@@ -19,7 +19,7 @@ TP_pivot_set_create(TP_solver solver, int n, int m)
 {
   TP_pivot_set self = calloc( (size_t) 1, (size_t) sizeof(*self));
   TP_solver_alloc_counters(solver, &self->cols_count, &self->rows_count);
-  self->base = solver->done_pivots;
+  self->base = solver->done_pivots + 1;
 
    return self;
 }
@@ -76,60 +76,60 @@ get_next_merging_set(TP_pivot_list self)
    sets in the list of sets, but does not check if they are 
    indpenedent or no. After this the funtion the  
    get_independent_pivots should be called */
-TP_pivot_set 
-merge_sorted_sets(TP_pivot_set self)
-{
-  TP_pivot_cell cell1, cell2, merged;
+/* TP_pivot_set  */
+/* merge_sorted_sets(TP_pivot_set self) */
+/* { */
+/*   TP_pivot_cell cell1, cell2, merged; */
 
-  if (!self ) 
-    return NULL;
-  if (!self->next  ) 
-    return self;
+/*   if (!self )  */
+/*     return NULL; */
+/*   if (!self->next  )  */
+/*     return self; */
 
   
-  cell1 = self->cells;
-  cell2 = self->next->cells;
+/*   cell1 = self->cells; */
+/*   cell2 = self->next->cells; */
   
-  // init self->cells to the start of the new merged set
-  // and merged is used to add new elements
-  if (cell1->marko <= cell2->marko) 
-    {
-      self->cells = merged = cell1;
-      cell1 = cell1->next;
-    }
-  else 
-    {
-      self->cells = merged = cell2;
-      cell2 = cell2->next;
-    }
+/*   // init self->cells to the start of the new merged set */
+/*   // and merged is used to add new elements */
+/*   if (cell1->marko <= cell2->marko)  */
+/*     { */
+/*       self->cells = merged = cell1; */
+/*       cell1 = cell1->next; */
+/*     } */
+/*   else  */
+/*     { */
+/*       self->cells = merged = cell2; */
+/*       cell2 = cell2->next; */
+/*     } */
   
-  while ( cell1 && cell2) 
-    {
-      TP_pivot_cell  new_cell;
-      if (cell1->marko < cell2->marko) 
-	{
-	  new_cell = cell1;
-	  cell1 = cell1->next;
-	}
-      else 
-	{
-	  new_cell = cell2;
-	  cell2 = cell2->next;
-	}
-      merged->next = new_cell; 
-      merged = new_cell; 
-    }
+/*   while ( cell1 && cell2)  */
+/*     { */
+/*       TP_pivot_cell  new_cell; */
+/*       if (cell1->marko < cell2->marko)  */
+/* 	{ */
+/* 	  new_cell = cell1; */
+/* 	  cell1 = cell1->next; */
+/* 	} */
+/*       else  */
+/* 	{ */
+/* 	  new_cell = cell2; */
+/* 	  cell2 = cell2->next; */
+/* 	} */
+/*       merged->next = new_cell;  */
+/*       merged = new_cell;  */
+/*     } */
   
-  if (!cell1) 
-    merged->next = cell2; 
-  if (!cell2) 
-    merged->next = cell1;
+/*   if (!cell1)  */
+/*     merged->next = cell2;  */
+/*   if (!cell2)  */
+/*     merged->next = cell1; */
 
-  free(self->next);
-  self->next = NULL;
+/*   free(self->next); */
+/*   self->next = NULL; */
 
-  return self;
-}
+/*   return self; */
+/* } */
 
 
 /* TODO: clean up */
@@ -141,8 +141,8 @@ merge_sorted_sets(TP_pivot_set self)
 /*   struct CSC_struct *CSC = matrix->CSC; */
 /*   struct CSR_struct *CSR = matrix->CSR; */
 
-/*   // if candidate is empty, return  */
-/*   if (!candidates)  */
+/*   // if candidate is empty, return */
+/*   if (!candidates) */
 /*     return NULL; */
 /*   candidates_cell = candidates->cells; */
 
@@ -150,7 +150,7 @@ merge_sorted_sets(TP_pivot_set self)
 /*   candidates_cell = candidates_cell->next; */
 /*   independent_cell->next = NULL; */
 
-/*   while (candidates_cell)  */
+/*   while (candidates_cell) */
 /*     { */
 /*       int i, j, independent = 1; */
 /*       int row = candidates_cell->row; */
@@ -163,7 +163,7 @@ merge_sorted_sets(TP_pivot_set self)
 /*       for(i = 0; i < nb_rows; i++) */
 /* 	{ */
 /* 	  TP_pivot_cell tmp = independent_cell; */
-/* 	  while(tmp)  */
+/* 	  while(tmp) */
 /* 	    { */
 /* 	      if(tmp->row == rows[i]) { */
 /* 		independent = 0; */
@@ -171,14 +171,14 @@ merge_sorted_sets(TP_pivot_set self)
 /* 	      } */
 /* 	      tmp = tmp->next; */
 /* 	    } */
-/* 	  if (!independent)  */
+/* 	  if (!independent) */
 /* 	    break; */
 /* 	} */
 
 /*       for(j = 0; j < nb_cols; j++) */
 /* 	{ */
 /* 	  TP_pivot_cell tmp = independent_cell; */
-/* 	  while(tmp)  */
+/* 	  while(tmp) */
 /* 	    { */
 /* 	      if(tmp->col == cols[j]) { */
 /* 		independent = 0; */
@@ -186,23 +186,23 @@ merge_sorted_sets(TP_pivot_set self)
 /* 	      } */
 /* 	      tmp = tmp->next; */
 /* 	    } */
-/* 	  if (!independent)  */
+/* 	  if (!independent) */
 /* 	    break; */
 /* 	} */
       
 /*       // if the candidate is independet, put it on the end of the cells */
 /*       if(independent) { */
-/* 	TP_pivot_cell tmp = independent_cell;  */
+/* 	TP_pivot_cell tmp = independent_cell; */
 /* 	while(tmp->next) */
 /* 	  tmp = tmp->next; */
 /* 	tmp->next = candidates_cell; */
 /* 	candidates_cell = candidates_cell->next; */
 /* 	tmp->next->next = NULL; */
-/*       } else {  */
+/*       } else { */
 /* 	TP_pivot_cell tmp = candidates_cell; */
 /* 	candidates_cell = candidates_cell->next; */
 /* 	free(tmp); */
-/*       }	 */
+/*       } */
 /*     } */
 
 /*   candidates->cells = independent_cell; */

@@ -114,8 +114,7 @@ get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col,
     {
       int last_step;
       for(i = 0, last_step = 0; i < n; i++) {
-	/* int col = random_col[i]; */
-	int col = i;
+	int col = random_col[i];
 	
 	if (candidates->row[col] == -1 ) 
 	  continue;
@@ -223,6 +222,18 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
   /* TUKA */
   update_counter(set->cols_count, matrix->col + matrix->CSR[cell->row].offset, matrix->CSR[cell->row].nb_elem, set->base);
   update_counter(set->rows_count, matrix->row + matrix->CSC[cell->col].offset, matrix->CSC[cell->col].nb_elem, set->base);
+
+  /* int  i, n = matrix->n; */
+  /* printf("cols_count for pivot %d :  ", cell->row); */
+  /* for (i = 0; i < n; i++)  */
+  /*   printf("%d: %d    ", i, set->cols_count[i]); */
+  /* printf("\n"); */
+
+  /* printf("rows_count for pivot %d :  ", cell->col); */
+  /* for (i = 0; i < n; i++)  */
+  /*   printf("%d: %d    ", i, set->rows_count[i]); */
+  /* printf("\n"); */
+  /* printf("\n"); */
 
   return NULL;
 }

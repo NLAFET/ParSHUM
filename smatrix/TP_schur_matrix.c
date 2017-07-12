@@ -66,8 +66,6 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
     TP_print_GB(self, "GB: after allocating");
 }
 
-
-
 free_space
 add_unused_CSC(free_space unused_space, long nb_elem, long offset)
 {
@@ -1014,58 +1012,58 @@ void
 TP_schur_matrix_check_symetry(TP_schur_matrix self)
 {
   long CSC_nnz = 0, CSR_nnz = 0;
-   int i, j, n = self->n, m = self->m, row, col;
-   char mess[2048];
-   
-   for(i = 0; i < n; i++)
-     CSC_nnz += self->CSC[i].nb_elem;
-   
-   for(i = 0; i < m; i++)
-     CSR_nnz += self->CSR[i].nb_elem;
-   
-   if (CSC_nnz != CSR_nnz) {
-     snprintf(mess, 2048, "CSR and CSC nnz are not the same, CSC = %ld and CSR = %ld", CSC_nnz, CSR_nnz);
-     TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-   }
-
-   if (CSC_nnz != self->nnz) {
-     snprintf(mess, 2048, "CSC and S nnz are not the same, CSC = %ld and S_nnz = %ld", CSC_nnz, self->nnz);
-     TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-   }
-   
-   if (CSR_nnz != self->nnz) {
-     snprintf(mess, 2048, "CSR and S nnz are not the same, CSR = %ld and S_nnz = %ld", CSR_nnz, self->nnz);
-     TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-   }
-   
-   for(col = 0; col < n; col++)
-     {
-       struct CSC_struct *CSC = &self->CSC[col];
-       int *rows   = self->row + CSC->offset;
-       int col_nb_elem = CSC->nb_elem;
-       
-       for(i = 0; i < col_nb_elem; i++)
-	 {
-	   row = rows[i];
-	   struct CSR_struct *CSR = &self->CSR[row];
-	   int row_nb_elem = CSR->nb_elem;
-	   int *cols = self->col + CSR->offset;
-	   int found = 0;
-	   for(j = 0; j < row_nb_elem; j++) {
-	     if(cols[j] == col) {
-	       found = 1;
-	       break;
-	     }
-	   }
-	   
-	   if (!found) {
-	     snprintf(mess, 2048, "In CSC in col %d row %d exists, but in CSR in row %d,  col %d does not exist",
-		      col, row, row, col);
-	     TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-	     TP_schur_matrix_print(self, "before exiting");
-	   }
-	 } /* FOR I */
-     }
+  int i, j, n = self->n, m = self->m, row, col;
+  char mess[2048];
+  
+  for(i = 0; i < n; i++)
+    CSC_nnz += self->CSC[i].nb_elem;
+  
+  for(i = 0; i < m; i++)
+    CSR_nnz += self->CSR[i].nb_elem;
+  
+  if (CSC_nnz != CSR_nnz) {
+    snprintf(mess, 2048, "CSR and CSC nnz are not the same, CSC = %ld and CSR = %ld", CSC_nnz, CSR_nnz);
+    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+  }
+  
+  if (CSC_nnz != self->nnz) {
+    snprintf(mess, 2048, "CSC and S nnz are not the same, CSC = %ld and S_nnz = %ld", CSC_nnz, self->nnz);
+    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+  }
+  
+  if (CSR_nnz != self->nnz) {
+    snprintf(mess, 2048, "CSR and S nnz are not the same, CSR = %ld and S_nnz = %ld", CSR_nnz, self->nnz);
+    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+  }
+  
+  for(col = 0; col < n; col++)
+    {
+      struct CSC_struct *CSC = &self->CSC[col];
+      int *rows   = self->row + CSC->offset;
+      int col_nb_elem = CSC->nb_elem;
+      
+      for(i = 0; i < col_nb_elem; i++)
+	{
+	  row = rows[i];
+	  struct CSR_struct *CSR = &self->CSR[row];
+	  int row_nb_elem = CSR->nb_elem;
+	  int *cols = self->col + CSR->offset;
+	  int found = 0;
+	  for(j = 0; j < row_nb_elem; j++) {
+	    if(cols[j] == col) {
+	      found = 1;
+	      break;
+	    }
+	  }
+	  
+	  if (!found) {
+	    snprintf(mess, 2048, "In CSC in col %d row %d exists, but in CSR in row %d,  col %d does not exist",
+		     col, row, row, col);
+	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	    /* TP_schur_matrix_print(self, "before exiting"); */
+	  }
+	} /* for I */
+    }
 }
 
 void
@@ -1170,3 +1168,51 @@ TP_print_single_GB(free_space self, char *mess)
     }
 }
 
+
+void
+TP_check_current_counters(TP_schur_matrix self,
+			  int *col_perm, int *row_perm, int nb_perms, 
+			  int *col_count, int *row_count, int base)
+{
+  int pivot, i, n = self->n, m = self->m; 
+  int *_col_count = calloc( n, sizeof(*_col_count));
+  int *_row_count = calloc( m, sizeof(*_row_count));
+  char mess[2048];
+
+  for( pivot = 0; pivot < nb_perms; pivot++) 
+    {
+      int col = col_perm[pivot];
+      struct CSC_struct *CSC = &self->CSC[col];
+      int *rows              = self->row + CSC->offset;
+      int nb_elem            = CSC->nb_elem;
+      for( i = 0; i < nb_elem; i++) 
+	_row_count[rows[i]]++;
+
+      int row = row_perm[pivot];
+      struct CSR_struct *CSR = &self->CSR[row];
+      int *cols              = self->col + CSR->offset;
+      nb_elem                = CSR->nb_elem;
+      for( i = 0; i < nb_elem; i++) 
+	_col_count[cols[i]]++;
+    }
+  
+  for( i = 0; i < n; i++) 
+    {
+      if (col_count[i] >=  base) 
+	if ( ( col_count[i] - base + 1 ) !=  _col_count[i]) {
+	  snprintf(mess, 2048, "error on col counter %d : col_count(%d) base(%d) and calculated col_count(%d)",
+		   i, col_count[i], base, _col_count[i]);
+	  TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	}
+      
+      if (row_count[i] >=  base) 
+	if ( ( row_count[i] - base + 1 ) !=  _row_count[i]) {
+	  snprintf(mess, 2048, "error on row counter %d : row_count(%d) base(%d) and calculated row_count(%d)",
+		   i, row_count[i], base, _row_count[i]);
+	  TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	}
+    }	 
+  
+  free(_col_count);
+  free(_row_count);
+}

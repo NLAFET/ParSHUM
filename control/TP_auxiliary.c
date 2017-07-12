@@ -138,3 +138,25 @@ check_overalping_regions(long r1_start, long r1_end,
 
   return TP_overlap_none;
 }
+
+
+void
+TP_check_counters(int counter, int *array, int *used,
+		  int base, int size, int n)
+{
+  int i, nb_elem = n * 2 * size;
+  char mess[2048];
+  
+  for( i = 0; i < size; i++) 
+    if (used[i])  {
+      snprintf(mess, 2048, "in counter %d : used %d is still active", counter, i);
+      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+    }
+  
+  for( i = 0; i < nb_elem; i++) 
+    if ( array[i] >= base) {
+      snprintf(mess, 2048, "in counter %d : array[%d] = (%d) larger then base (%d)",
+	       counter, i, array[i], base);
+      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+    }  
+}
