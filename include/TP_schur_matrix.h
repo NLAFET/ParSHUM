@@ -4,6 +4,7 @@
 #include <pthread.h>
 
 #include "TP_matrix.h"
+#include "TP_U_matrix.h"
 #include "TP_dense.h"
 
 typedef struct _TP_schur_matrix *TP_schur_matrix;
@@ -67,6 +68,11 @@ void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_matrix L, TP_matrix D,
 
 void TP_schur_matrix_update_U(TP_schur_matrix S, TP_matrix U,
 			      int *row_perm, int *col_perm, int nb_pivots);
+
+void TP_schur_matrix_update_U_V2(TP_schur_matrix S, TP_U_matrix U,
+				 int nb_pivots, int base_value,
+				 int *row_perm, int *col_perm,
+				 int *rows_struct);
 
 void TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_matrix U,
 			      int start, int end);

@@ -489,6 +489,78 @@ delete_entry_from_CSC(TP_schur_matrix self, int col, int row)
 }
 
 void
+TP_schur_matrix_update_U_V2(TP_schur_matrix S, TP_U_matrix U,
+			    int nb_pivots, int base_value,
+			    int *row_perm, int *col_perm,
+			    int *rows_struct)
+{
+  int pivot, i, n = S->n;
+  int *expected_new = calloc(n,  sizeof(*expected_new));
+  int pivots_in_U = 0;
+
+  for( i = 0; i < n; i++) {
+    int row_new_elems = (rows_struct[i] - base_value + 1) * 2;
+    if (row_new_elems > 0)
+      expected_new[i] = row_new_elems / 2;
+
+    while(U->col[i].nb_free < row_new_elems)
+      TP_U_col_realloc(&U->col[i]);
+  }
+
+  for( pivot = 0; pivot < nb_pivots; pivot++)
+    {
+      int row = row_perm[pivot];
+
+      struct CSR_struct *CSR = &S->CSR[row];
+      int row_nb_elem = CSR->nb_elem;
+      int *cols = S->col + CSR->offset;
+
+      for( i = 0; i < row_nb_elem; i++) {
+        int current_col = cols[i];
+        U_col  *u_col = &U->col[current_col];
+
+        /* u_col->val[u_col->nb_elem + u_col->nb_new] = delete_entry_from_CSC(S, current_col, row); */
+        u_col->row[u_col->nb_elem + u_col->nb_new++] = row;
+
+        u_col->row[u_col->nb_elem + u_col->nb_free - u_col->nb_new] = base_value + pivot - 1;
+      }
+
+      /* TODO: recycle the row's memory */
+      /* CSR->nb_elem = 0; */
+      /* CSR->nb_free = 0; */
+      /* S->nnz      -= row_nb_elem; */
+    }
+
+  /* print_int_array(expected_new, n, "expected"); */
+  /* print_int_array(rows_struct , n, "rows struct"); */
+  /* printf("U new:\n"); */
+  /* for( i = 0; i < n; i++) */
+  /*   printf("%d  ", U->col[i].nb_new); */
+  /* printf("\n"); */
+
+  for( i = 0; i < n; i++)
+    if (expected_new[i] >= 0) {
+      if (expected_new[i] != U->col[i].nb_new)
+        if (expected_new[i] == 1 && U->col[i].nb_new ==0)
+          pivots_in_U++;
+        else
+          printf("expected = %d  and new = %d with basevaue of %d \n", expected_new[i], U->col[i].nb_new, base_value);
+    } else {
+      if ( U->col[i].nb_new > 0)
+        printf("non are expected  and there is %d new\n", U->col[i].nb_new);
+    }
+  if ( pivots_in_U != nb_pivots) 
+    printf("expected %d pivots but we have found %d\n", nb_pivots, pivots_in_U);
+    
+  free(expected_new);
+
+  for( i = 0; i < n; i++) {
+    U->col[i].nb_new = 0;
+  }
+
+}
+
+void
 TP_schur_matrix_update_U(TP_schur_matrix self, TP_matrix U,
 			 int *row_perm, int *col_perm, int nb_pivots)
 {
@@ -1195,7 +1267,37 @@ TP_check_current_counters(TP_schur_matrix self,
       for( i = 0; i < nb_elem; i++) 
 	_col_count[cols[i]]++;
     }
-  
+
+  for( pivot = 0; pivot < nb_perms; pivot++) 
+    {
+      int col = col_perm[pivot];
+      int row = row_perm[pivot];
+      
+      if ( _row_count[row] != 1) {
+	snprintf(mess, 2048, "calculated row_count[%d] = %d, but %d is a pivot",
+		 row, _row_count[i], row);
+	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      }
+
+      if ( row_count[row] != base) {
+	snprintf(mess, 2048, "row_count[%d] = %d, base = %d, but %d is a pivot",
+		 row, row_count[i], base, row);
+	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      }
+
+      if ( _col_count[col] != 1) {
+	snprintf(mess, 2048, "calculated col_count[%d] = %d, but %d is a pivot",
+		 col, _col_count[i], row);
+	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      }
+
+      if ( row_count[row] != base) {
+	snprintf(mess, 2048, "col_count[%d] = %d, base = %d, but %d is a pivot",
+		 col, col_count[i], base, col);
+	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      }
+    }  
+
   for( i = 0; i < n; i++) 
     {
       if (col_count[i] >=  base) 

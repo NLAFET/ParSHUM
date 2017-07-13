@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include "TP_enum.h"
 #include "TP_matrix.h" 
+#include "TP_U_matrix.h" 
 #include "TP_schur_matrix.h" 
 #include "TP_dense.h"
 #include "TP_verbose.h"
@@ -34,6 +35,7 @@ struct _TP_solver {
   TP_matrix L;
   TP_matrix D;
   TP_matrix U;
+  TP_U_matrix U_new;
   TP_schur_matrix S;
   TP_dense_matrix S_dense;
   

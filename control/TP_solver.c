@@ -643,6 +643,8 @@ TP_solver_alloc_internal(TP_solver self)
   TP_matrix_allocate(self->L, self->A->n, 0, (self->A->nnz - self->A->n) / 2, total_extra_space, TP_CSC_matrix);
   TP_matrix_allocate(self->U, 0, self->A->m, (self->A->nnz - self->A->m) / 2, total_extra_space, TP_CSR_matrix);
   TP_matrix_allocate(self->D, self->A->n, 0, 0, 1.0, TP_Diag_matrix);
+  /* UUU */
+  self->U_new = TP_U_matrix_create(self->A, total_extra_space);
   
   self->row_perm      = malloc((size_t) needed_pivots * sizeof(*self->invr_row_perm));
   self->col_perm      = malloc((size_t) needed_pivots * sizeof(*self->invr_col_perm));
@@ -809,13 +811,15 @@ TP_solver_update_matrix(TP_solver self)
   if (self->debug & TP_CHECK_SCHUR_SYMETRY )
     TP_schur_matrix_check_symetry(self->S);
     
+  TP_schur_matrix_update_U_V2(S, self->U_new, nb_pivots, self->done_pivots + 1, &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], self->cols_count);
   TP_verbose_start_timing(&step->timing_update_U);
-  TP_schur_matrix_update_U (S, U,    &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], nb_pivots);
+  TP_schur_matrix_update_U (S, U, &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], nb_pivots);
   TP_verbose_stop_timing(&step->timing_update_U);
   if (self->debug & TP_CHECK_SCHUR_MEMORY )
     TP_schur_matrix_memory_check(self->S);
   if (self->debug & TP_CHECK_SCHUR_SYMETRY )
     TP_schur_matrix_check_symetry(self->S);
+
   
   TP_verbose_start_timing(&step->timing_update_S);
   TP_schur_matrix_update_S (S, L, U, self->done_pivots, self->found_pivots);
@@ -1087,7 +1091,7 @@ TP_solver_destroy(TP_solver self)
     TP_matrix_destroy(self->L);
     TP_matrix_destroy(self->U);
     TP_matrix_destroy(self->D);
-    
+    TP_U_matrix_destroy(self->U_new);
     if(self->S_dense)
       TP_dense_matrix_destroy(self->S_dense);
 
