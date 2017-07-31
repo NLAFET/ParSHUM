@@ -3,6 +3,9 @@
 #include <math.h>
 #include <libgen.h>
 #include <string.h>
+#include <signal.h>
+
+#define GDB_BREAK raise(SIGINT)
 
 #include "TP_auxiliary.h"
 
@@ -17,6 +20,7 @@ void
 TP_warning(const char *func, char *filename, const int line, const char *msg)
 {
   printf("TP_warning in %s(%s:%d) \n%s\n", func, basename(filename), line, msg);
+  GDB_BREAK;
 }
 
 double 

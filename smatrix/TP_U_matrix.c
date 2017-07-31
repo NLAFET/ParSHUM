@@ -16,19 +16,32 @@ TP_U_matrix_create(TP_matrix A, double extra_space)
       int col_size = A->col_ptr[i+1] - A->col_ptr[i]; 
       self->col[i].val = malloc(col_size * sizeof(*self->col[i].val));
       self->col[i].row = malloc(col_size * sizeof(*self->col[i].row));
-      self->col[i].nb_free = col_size;
+      self->col[i].allocated = col_size;
     }
 
   return self;
 }
 
 void 
-TP_U_matrix_solve(TP_U_matrix U, TP_matrix D, TP_vector rhs, int *col_perms, int *row_perms)
+TP_U_matrix_solve(TP_U_matrix U, TP_matrix D, TP_vector rhs,
+		  int *col_perms, int *row_perms, int nb_dense_pivots)
 {
   int col, n = U->n, i;
   double *rhs_val = rhs->vect;
- 
-  for( col = n-1; col >= 0; col--)
+  
+  for( col = n-1; col >= n - nb_dense_pivots; col--)
+    {
+      int permuted_col = col_perms[col];
+      U_col *u_col = &U->col[permuted_col];
+      int nb_elem = u_col->nb_elem;
+      double *u_val = u_col->val;
+      int *u_rows = u_col->row;
+
+      for( i = 0; i < nb_elem; i++)
+  	rhs_val[row_perms[u_rows[i]]] -= u_val[i] * rhs_val[col];
+    } 
+
+  for( ; col >= 0; col--)
     {
       int permuted_col = col_perms[col];
       U_col *u_col = &U->col[permuted_col];
@@ -43,14 +56,13 @@ TP_U_matrix_solve(TP_U_matrix U, TP_matrix D, TP_vector rhs, int *col_perms, int
     }
 }
 
-
+/* TODO: take an argument, and doulbe allocated as long as it is smaller */
 void
 TP_U_col_realloc(U_col *self)
 {
-  int new_size   = (self->nb_free + self->nb_elem) * 2;
-  self->val      = realloc(self->val, new_size * sizeof(*self->val));
-  self->row      = realloc(self->row, new_size * sizeof(*self->row));
-  self->nb_free += self->nb_free + self->nb_elem;
+  self->allocated *=  2;
+  self->val        = realloc(self->val, self->allocated * sizeof(*self->val));
+  self->row        = realloc(self->row, self->allocated * sizeof(*self->row));
 }
 
 void

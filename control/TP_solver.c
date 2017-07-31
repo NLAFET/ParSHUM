@@ -23,7 +23,7 @@ const char *usageStrign[] = {
   "            [--min_pivot_per_steps #steps] [--prog_name name ] [--check_schur_symetry] [--check_schur_memory] [--check_pivots]",
   "            [--check_TP_with_plasma_perm] [--check_dense_with_TP_perm] [--print_each_step] [--check_GC]",
   "            [--group_run value_tol|marko_tol|schur_density|nb_candidates|min_pivots|nb_threads init inc nb_steps]",
-  "            [--counters_size #double_counters] [--check_counters]",
+  "            [--counters_size #double_counters] [--check_counters] [--check_schur_doubles]",
   NULL,
 };
 
@@ -309,6 +309,9 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       continue;
     } else if (!strcmp(argv[i], "--verbose_gossip_girl")) {
       self->debug |= TP_DEBUG_GOSSIP_GIRL;
+      continue;
+    } else if (!strcmp(argv[i], "--check_schur_doubles")) {
+      self->debug |= TP_CHECK_SCHUR_DOUBLES;
       continue;
     }  else if (!strcmp(argv[i], "--check_TP_with_plasma_perm")) {
       TP_solver_dealloc(self);
@@ -629,7 +632,6 @@ TP_solver_alloc_internal(TP_solver self)
 
   self->S    = TP_schur_matrix_create();
   self->L    = TP_matrix_create();
-  self->U    = TP_matrix_create();
   self->D    = TP_matrix_create();
 
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
@@ -641,10 +643,8 @@ TP_solver_alloc_internal(TP_solver self)
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
       TP_schur_matrix_print(self->S, "S on input");
   TP_matrix_allocate(self->L, self->A->n, 0, (self->A->nnz - self->A->n) / 2, total_extra_space, TP_CSC_matrix);
-  TP_matrix_allocate(self->U, 0, self->A->m, (self->A->nnz - self->A->m) / 2, total_extra_space, TP_CSR_matrix);
   TP_matrix_allocate(self->D, self->A->n, 0, 0, 1.0, TP_Diag_matrix);
-  /* UUU */
-  self->U_new = TP_U_matrix_create(self->A, total_extra_space);
+  self->U = TP_U_matrix_create(self->A, total_extra_space);
   
   self->row_perm      = malloc((size_t) needed_pivots * sizeof(*self->invr_row_perm));
   self->col_perm      = malloc((size_t) needed_pivots * sizeof(*self->invr_col_perm));
@@ -672,6 +672,11 @@ TP_solver_alloc_internal(TP_solver self)
   (*self->counters)->array    = calloc((size_t) self->size_counters * 2 * self->A->n,  sizeof(*self->counters[0]->array));
   (*self->counters)->used_counters = calloc((size_t) self->size_counters, sizeof(*self->counters[0]->used_counters));
   self->nb_counters = 1;
+
+  self->allocated_U_struct = self->A->n / 100;  
+  self->allocated_U_struct = self->allocated_U_struct ? self->allocated_U_struct : 1;
+  self->U_struct = calloc(self->allocated_U_struct, sizeof(*self->U_struct));
+
   pthread_mutex_init(&self->counters_lock, NULL);
 }
 
@@ -713,6 +718,8 @@ void
 TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
 {
   TP_pivot_cell cells = set->cells;
+  int n = self->A->n, i, k, nnz ;
+
   int new_pivots = 0, old_pivots = self->found_pivots;
   int *row_perms = self->row_perm;
   int *col_perms = self->col_perm;
@@ -733,6 +740,30 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
       cells = cells->next;
     }
 
+  for ( i = 0, k=0, nnz = 0; i < n; i++) {
+    if (set->cols_count[i] < set->base)
+      continue;
+    if (self->invr_col_perm[i] != TP_UNUSED_PIVOT)  {
+      if (set->cols_count[i] > set->base) {
+	TP_warning(__FUNCTION__, __FILE__, __LINE__, "col is supposed to be a pivot bit is larger then base ");
+      } else {
+	continue;
+      }
+    }
+    self->U_struct[k].col = i;
+    self->U_struct[k].nb_elem = set->cols_count[i] - set->base + 1;
+    nnz += self->U_struct[k].nb_elem;
+
+    if( ++k >= self->allocated_U_struct)
+      {
+	self->allocated_U_struct *= 2;
+	self->U_struct = realloc(self->U_struct, self->allocated_U_struct * sizeof(*self->U_struct));
+      }
+  }
+
+  self->n_U_structs = k;
+  self->nnz_U_structs = nnz;
+
   self->rows_count = set->rows_count;
   self->cols_count = set->cols_count;
 
@@ -745,11 +776,9 @@ TP_solver_check_counters(TP_solver self)
 {
   int i; 
 
-  for (i = 0; i < self->nb_counters; i++) {
+  for (i = 0; i < self->nb_counters; i++) 
     TP_check_counters(i, self->counters[i]->array, self->counters[i]->used_counters,
 		      self->done_pivots + 1, self->size_counters, self->A->n);
-  }
-
 }
 
 void
@@ -759,6 +788,7 @@ TP_solver_find_pivot_set(TP_solver self)
   TP_exe_parms exe_parms = self->exe_parms;
   TP_verbose_per_step step = TP_verbose_get_step(self->verbose);
   int nb_threads = self->exe_parms->nb_threads;
+
 
   if (self->debug & TP_CHECK_COUNTERS )
     TP_solver_check_counters(self);
@@ -784,7 +814,6 @@ TP_solver_find_pivot_set(TP_solver self)
     TP_check_current_counters(self->S, &self->col_perm[self->done_pivots], &self->row_perm[self->done_pivots],
 			      self->found_pivots - self->done_pivots, 
 			      self->cols_count, self->rows_count, self->done_pivots + 1);
-  
 
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
     print_pivot_list(list, "found pivots");
@@ -798,7 +827,7 @@ TP_solver_update_matrix(TP_solver self)
 {
   TP_matrix L = self->L;
   TP_matrix D = self->D;
-  TP_matrix U = self->U;
+  TP_U_matrix U = self->U;
   TP_schur_matrix S = self->S;
   int nb_pivots = self->found_pivots - self->done_pivots;
   TP_verbose_per_step step = TP_verbose_get_step(self->verbose);
@@ -810,19 +839,18 @@ TP_solver_update_matrix(TP_solver self)
     TP_schur_matrix_memory_check(self->S);
   if (self->debug & TP_CHECK_SCHUR_SYMETRY )
     TP_schur_matrix_check_symetry(self->S);
-    
-  TP_schur_matrix_update_U_V2(S, self->U_new, nb_pivots, self->done_pivots + 1, &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], self->cols_count);
-  TP_verbose_start_timing(&step->timing_update_U);
-  TP_schur_matrix_update_U (S, U, &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], nb_pivots);
-  TP_verbose_stop_timing(&step->timing_update_U);
-  if (self->debug & TP_CHECK_SCHUR_MEMORY )
-    TP_schur_matrix_memory_check(self->S);
-  if (self->debug & TP_CHECK_SCHUR_SYMETRY )
-    TP_schur_matrix_check_symetry(self->S);
 
-  
+  TP_verbose_start_timing(&step->timing_update_U);
+  TP_schur_matrix_update_U(S, U, nb_pivots,  &self->row_perm[self->done_pivots],
+			   self->U_struct, self->n_U_structs, self->nnz_U_structs);
+  TP_verbose_stop_timing(&step->timing_update_U);
+  /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
+  /*   TP_schur_matrix_memory_check(self->S); */
+  /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
+  /*   TP_schur_matrix_check_symetry(self->S); */
+
   TP_verbose_start_timing(&step->timing_update_S);
-  TP_schur_matrix_update_S (S, L, U, self->done_pivots, self->found_pivots);
+  TP_schur_matrix_update_S(S, L, U, self->U_struct, self->n_U_structs, self->invr_row_perm);
   TP_verbose_stop_timing(&step->timing_update_S);
   if (self->debug & TP_CHECK_SCHUR_MEMORY )
     TP_schur_matrix_memory_check(self->S);
@@ -843,8 +871,11 @@ TP_solver_update_matrix(TP_solver self)
     TP_schur_matrix_print(S, "S after update");
     TP_matrix_print(L, "L after update");
     TP_matrix_print(D, "D after update");
-    TP_matrix_print(U, "U after update");
+    TP_U_matrix_print(U, "U after update");
   }
+
+  if (self->debug & TP_CHECK_SCHUR_DOUBLES)
+    TP_schur_check_doubles(S);
 }
 
 int
@@ -897,7 +928,10 @@ TP_solver_factorize(TP_solver self)
   int *previous_pivots   = self->previous_pivots;
   int nb_previous_pivots = exe_parms->nb_previous_pivots;
   int nb_pivot_blocks = 0;
-  
+
+  if (self->debug &  TP_CHECK_SCHUR_DOUBLES)
+    TP_schur_check_doubles(self->S);  
+
   TP_verbose_start_timing(&verbose->timing_facto);
   TP_verbose_start_timing(&verbose->timing_facto_sparse);
   while ( TP_continue_pivot_search(self->S, self->done_pivots, needed_pivots, 
@@ -951,13 +985,18 @@ TP_solver_factorize(TP_solver self)
       self->invr_row_perm[self->row_perm[i]] = i;
       self->invr_col_perm[self->col_perm[i]] = i;
     }
-
-    TP_verbose_update_dense_pivots(verbose, needed_pivots - self->done_pivots);
-    verbose->nnz_final   = self->L->nnz + self->U->nnz + self->D->n + self->S_dense->n * self->S_dense->m;
-    verbose->nnz_L       = self->L->nnz  + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2 )  ;
-    verbose->nnz_U       = self->U->nnz + self->D->n + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2    + self->S_dense->m ) ;
-    verbose->nnz_S_dense = self->S_dense->n * self->S_dense->m;
+    self->dense_pivots = needed_pivots - self->done_pivots;
+    TP_verbose_update_dense_pivots(verbose, self->dense_pivots);
+    /* verbose->nnz_final   = self->L->nnz + self->U->nnz + self->D->n + self->S_dense->n * self->S_dense->m; */
+    /* verbose->nnz_L       = self->L->nnz  + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2 )  ; */
+    /* verbose->nnz_U       = self->U->nnz + self->D->n + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2    + self->S_dense->m ) ; */
+    /* verbose->nnz_S_dense = self->S_dense->n * self->S_dense->m; */
+    verbose->nnz_final   = -1;
+    verbose->nnz_L       = -1;
+    verbose->nnz_U       = -1;
+    verbose->nnz_S_dense = -1;
   }
+
   TP_verbose_stop_timing(&verbose->timing_facto_dense);
   TP_verbose_stop_timing(&verbose->timing_facto);
 }
@@ -995,7 +1034,8 @@ TP_solver_solve(TP_solver self, TP_vector RHS)
     TP_verbose_stop_timing(&verbose->timing_solve_dense);
     
     TP_verbose_start_timing(&verbose->timing_solve_U);
-    TP_matrix_solve_UD(self->U, self->D, RHS, self->invr_col_perm);
+    TP_U_matrix_solve(self->U, self->D, RHS, self->col_perm, self->invr_row_perm, self->dense_pivots);
+    /* TP_matrix_solve_UD(self->U, self->D, RHS, self->invr_col_perm); */
     if (self->debug & TP_DEBUG_GOSSIP_GIRL) 
       TP_vector_print(RHS, "after backward solve");
     TP_vector_permute(RHS, self->invr_col_perm);
@@ -1089,9 +1129,8 @@ TP_solver_destroy(TP_solver self)
     TP_matrix_destroy(self->A);
     TP_schur_matrix_destroy(self->S);
     TP_matrix_destroy(self->L);
-    TP_matrix_destroy(self->U);
     TP_matrix_destroy(self->D);
-    TP_U_matrix_destroy(self->U_new);
+    TP_U_matrix_destroy(self->U);
     if(self->S_dense)
       TP_dense_matrix_destroy(self->S_dense);
 
@@ -1106,6 +1145,8 @@ TP_solver_destroy(TP_solver self)
       free(self->counters[i]);
     }
     free(self->counters);
+    
+    free(self->U_struct);
     
     pthread_mutex_destroy(&self->counters_lock);
     

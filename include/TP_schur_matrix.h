@@ -34,6 +34,12 @@ struct _TP_schur_matrix {
 
   pthread_mutex_t *row_locks;
   pthread_mutex_t *col_locks;
+
+  double *val;
+  int    *row;
+  int    *col;
+  long **row_struct;
+
   int nb_threads;
   
   int n;
@@ -45,9 +51,6 @@ struct _TP_schur_matrix {
   long allocated_CSC;
   long allocated_CSR;
   
-  double *val;
-  int    *row;
-  int    *col;
   
   double extra_space;
   double extra_space_inbetween;
@@ -66,20 +69,18 @@ void TP_schur_matrix_print(TP_schur_matrix self, char *mess);
 void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_matrix L, TP_matrix D,
 			       int *row_perm, int *col_perm, int nb_pivots);
 
-void TP_schur_matrix_update_U(TP_schur_matrix S, TP_matrix U,
-			      int *row_perm, int *col_perm, int nb_pivots);
+void TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U,
+			      int nb_pivots, int *row_perm,
+			      TP_U_struct *U_struct, int U_new_n, int U_new_nnz);
 
-void TP_schur_matrix_update_U_V2(TP_schur_matrix S, TP_U_matrix U,
-				 int nb_pivots, int base_value,
-				 int *row_perm, int *col_perm,
-				 int *rows_struct);
-
-void TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_matrix U,
-			      int start, int end);
+void TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
+			      TP_U_struct *U_struct, int U_new_n, int *invr_row_perm);
 
 void TP_schur_matrix_destroy(TP_schur_matrix self);
 
 TP_dense_matrix  TP_schur_matrix_convert(TP_schur_matrix self, int done_pivots);
+
+void TP_schur_check_doubles(TP_schur_matrix sefl);
 
 void  TP_schur_matrix_check_pivots(TP_schur_matrix self,
 				   int *row_perms, int *col_perms,

@@ -29,18 +29,19 @@ struct _TP_counters
 };
 
 struct _TP_solver {
-  TP_matrix A;
+  TP_matrix   A;
   TP_dense_2D A_debug;
 
-  TP_matrix L;
-  TP_matrix D;
-  TP_matrix U;
-  TP_U_matrix U_new;
+  TP_matrix   L;
+  TP_matrix   D;
+  TP_U_matrix U;
   TP_schur_matrix S;
   TP_dense_matrix S_dense;
   
   TP_pivot_candidates candidates;
   TP_counters *counters;
+  
+  TP_U_struct *U_struct;
 
   pthread_mutex_t counters_lock;
 
@@ -55,12 +56,15 @@ struct _TP_solver {
 
   int found_pivots;
   int done_pivots;
+  int dense_pivots;
   int verbosity;
   int nb_counters;
   int size_counters;
-  
+  int allocated_U_struct;  
+  int n_U_structs;  
+  int nnz_U_structs;  
+
   int debug;
-  
 
   TP_exe_parms exe_parms;
   TP_verbose verbose;

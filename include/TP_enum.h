@@ -58,6 +58,7 @@ typedef enum _TP_parm_type
 #define  TP_DEBUG_VERBOSE_EACH_STEP (1<<4)
 #define  TP_DEBUG_GOSSIP_GIRL       (1<<5)
 #define  TP_DEBUG_GARBAGE_COLLECTOR (1<<6)
+#define  TP_CHECK_SCHUR_DOUBLES     (1<<7)
 #define  TP_CHECK_TP_W_PLASMA_PERM  (1<<10)
 #define  TP_CHECK_DENSE_W_TP_PERM   (1<<11)
 

@@ -218,10 +218,10 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
     merged->next = cell;
     cell->next   = tmp;
   }
-  set->nb_elem++;
-  /* TUKA */
+
   update_counter(set->cols_count, matrix->col + matrix->CSR[cell->row].offset, matrix->CSR[cell->row].nb_elem, set->base);
   update_counter(set->rows_count, matrix->row + matrix->CSC[cell->col].offset, matrix->CSC[cell->col].nb_elem, set->base);
+  set->nb_elem++;
 
   /* int  i, n = matrix->n; */
   /* printf("cols_count for pivot %d :  ", cell->row); */
