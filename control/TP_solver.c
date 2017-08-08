@@ -135,7 +135,6 @@ check_TP_with_plasma_perm(int argc, char **argv)
   return 0;
 }
 
-
 int
 check_dense_with_TP_perm(int argc, char **argv)
 {
@@ -841,7 +840,7 @@ TP_solver_update_matrix(TP_solver self)
     TP_schur_matrix_check_symetry(self->S);
 
   TP_verbose_start_timing(&step->timing_update_U);
-  TP_schur_matrix_update_U(S, U, nb_pivots,  &self->row_perm[self->done_pivots],
+  TP_schur_matrix_update_U(S, U, L, nb_pivots,  &self->row_perm[self->done_pivots],
 			   self->U_struct, self->n_U_structs, self->nnz_U_structs);
   TP_verbose_stop_timing(&step->timing_update_U);
   /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */

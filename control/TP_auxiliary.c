@@ -5,7 +5,7 @@
 #include <string.h>
 #include <signal.h>
 
-#define GDB_BREAK raise(SIGINT)
+#define GDB_BREAK  raise(SIGINT)
 
 #include "TP_auxiliary.h"
 

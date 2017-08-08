@@ -9,35 +9,35 @@
 
 typedef struct _TP_schur_matrix *TP_schur_matrix;
 typedef struct _free_space  *free_space;
+typedef struct _schur_mem *schur_mem;
+typedef struct _CSC_struct CSC_struct;
+typedef struct _CSR_struct CSR_struct;
 
 
-struct CSR_struct {
+struct _CSR_struct {
   int nb_elem;
   int nb_free;
-  long offset;
+  int *col;
 };
 
-
-struct CSC_struct {
+struct _CSC_struct {
   double col_max;
   int    nb_elem;
   int    nb_free;
-  long offset;
+
+  double *val;
+  int    *row;
 };
 
-
 struct _TP_schur_matrix {
-  struct CSC_struct *CSC;
-  struct CSR_struct *CSR;
-  free_space unused_CSC;
-  free_space unused_CSR;
+  CSC_struct *CSC;
+  CSR_struct *CSR;
 
   pthread_mutex_t *row_locks;
   pthread_mutex_t *col_locks;
 
-  double *val;
-  int    *row;
-  int    *col;
+  schur_mem internal_mem;
+
   long **row_struct;
 
   int nb_threads;
@@ -47,10 +47,6 @@ struct _TP_schur_matrix {
   long nnz;
   
   int debug;
-
-  long allocated_CSC;
-  long allocated_CSR;
-  
   
   double extra_space;
   double extra_space_inbetween;
@@ -69,7 +65,7 @@ void TP_schur_matrix_print(TP_schur_matrix self, char *mess);
 void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_matrix L, TP_matrix D,
 			       int *row_perm, int *col_perm, int nb_pivots);
 
-void TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U,
+void TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L, 
 			      int nb_pivots, int *row_perm,
 			      TP_U_struct *U_struct, int U_new_n, int U_new_nnz);
 

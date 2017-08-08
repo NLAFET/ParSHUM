@@ -13,6 +13,21 @@ struct _free_space {
   free_space previous;
 };
 
+struct _schur_mem {
+  double **val;
+  int    **row;
+  int    **col;
+  
+  free_space *unused_CSC;
+  free_space *unused_CSR;
+  pthread_mutex_t *CSC_lock;
+  pthread_mutex_t *CSR_lock;
+
+  int nb_CSC;
+  int nb_CSR;
+  long init_size;
+};
+
 TP_schur_matrix
 TP_schur_matrix_create()
 {
@@ -21,11 +36,210 @@ TP_schur_matrix_create()
   return self;
 }
 
+schur_mem
+TP_schur_mem_create(long nnz)
+{
+  schur_mem self = calloc(1, sizeof(*self));
+
+  self->init_size   = nnz;
+  self->nb_CSC      = 1;
+  self->nb_CSR      = 1;
+
+  self->val  = malloc((size_t) sizeof(*self->val));
+  self->row  = malloc((size_t) sizeof(*self->row));
+  self->col  = malloc((size_t) sizeof(*self->col));
+  *self->val = malloc((size_t) nnz * sizeof(**self->val));
+  *self->row = malloc((size_t) nnz * sizeof(**self->row));
+  *self->col = malloc((size_t) nnz * sizeof(**self->col));
+ 
+  self->unused_CSC  = malloc(sizeof(*self->unused_CSC));
+  *self->unused_CSC = calloc(1, sizeof(**self->unused_CSC));
+  self->unused_CSC[0]->nb_elem = nnz;
+  
+  self->unused_CSR  = malloc(sizeof(*self->unused_CSR));
+  *self->unused_CSR = calloc(1, sizeof(**self->unused_CSR));
+  self->unused_CSR[0]->nb_elem = nnz;
+
+  self->CSC_lock = malloc(sizeof(*self->CSC_lock));
+  self->CSR_lock = malloc(sizeof(*self->CSR_lock));
+  pthread_mutex_init(self->CSC_lock, NULL);
+  pthread_mutex_init(self->CSR_lock, NULL);
+  
+  return self;
+}
+
+void
+TP_schur_mem_destroy(schur_mem self)
+{
+  int i, nb_CSC = self->nb_CSC, nb_CSR = self->nb_CSR;
+
+  for( i = 0; i < nb_CSC; i++)
+    {
+      free_space current_unused = self->unused_CSC[i];
+      while( current_unused ) { 
+	free_space tmp = current_unused->next;
+	free(current_unused);
+	current_unused = tmp;
+      }
+      free(self->val[i]);
+      free(self->row[i]);
+    }
+  free(self->val);
+  free(self->row);
+  free(self->unused_CSC);
+
+  for( i = 0; i < nb_CSR; i++)
+    {
+      free_space current_unused = self->unused_CSR[i];
+      while( current_unused ) { 
+	free_space tmp = current_unused->next;
+	free(current_unused);
+	current_unused = tmp;
+      }
+      free(self->col[i]);
+    }
+  free(self->col);
+  free(self->unused_CSR);
+
+  free(self->CSC_lock);
+  free(self->CSR_lock);
+  
+  free(self);
+}
+
+/* TODO: nutex  and concurent execution */
+void
+TP_schur_mem_realloc_CSC(schur_mem self)
+{
+  int i;
+  long size = self->init_size;
+  for( i = 1; i < self->nb_CSC; i++)
+    size *= 2;
+
+  self->nb_CSC++;
+  
+  self->unused_CSC  = realloc((void *) self->unused_CSC, (size_t) self->nb_CSC * sizeof(*self->unused_CSC));
+  self->unused_CSC[self->nb_CSC - 1]  = calloc(1, sizeof(**self->unused_CSC));
+  self->unused_CSC[self->nb_CSC - 1]->nb_elem = size;
+
+  self->val = realloc((void *) self->val, (size_t) self->nb_CSC * sizeof(*self->val));
+  self->row = realloc((void *) self->row, (size_t) self->nb_CSC * sizeof(*self->row));
+  self->val[self->nb_CSC - 1] = malloc((size_t) size * sizeof(**self->val));
+  self->row[self->nb_CSC - 1] = malloc((size_t) size * sizeof(**self->row));
+}
+
+/* TODO: nutex  and concurent execution */
+void
+TP_schur_mem_realloc_CSR(schur_mem self)
+{
+  int i;
+  long size = self->init_size;
+  for( i = 1; i < self->nb_CSR; i++)
+    size *= 2;
+
+  self->nb_CSR++;
+  
+  self->unused_CSR  = realloc((void *) self->unused_CSR, (size_t) self->nb_CSR * sizeof(*self->unused_CSR));
+  self->unused_CSR[self->nb_CSR - 1]  = calloc(1, sizeof(**self->unused_CSR));
+  self->unused_CSR[self->nb_CSR - 1]->nb_elem = size;
+
+  self->col = realloc((void *) self->col, (size_t) self->nb_CSR * sizeof(*self->col));
+  self->col[self->nb_CSR - 1] = malloc((size_t) size * sizeof(**self->col));
+}
+
+void
+TP_schur_mem_CSC_alloc(schur_mem self, CSC_struct *CSC, long size)
+{
+  int i, nb = self->nb_CSC; 
+
+  /* first try to find memory in the current space  */
+  for( i = 0; i < nb; i++)
+    {
+      free_space current_unused = self->unused_CSC[i];
+      while(current_unused) {
+	if (current_unused->nb_elem >=size ) {
+	  if (CSC->nb_elem)  {
+	    memcpy(&self->val[i][current_unused->offset],CSC->val,  CSC->nb_elem * sizeof(*CSC->val));
+	    memcpy(&self->row[i][current_unused->offset],CSC->row,  CSC->nb_elem * sizeof(*CSC->row));
+	  }
+	  CSC->nb_free = size - CSC->nb_elem;
+	  CSC->val = &self->val[i][current_unused->offset];
+	  CSC->row = &self->row[i][current_unused->offset];
+	  current_unused->offset  += size;
+	  current_unused->nb_elem -= size;
+	  return;
+	}
+	current_unused = current_unused->next;
+      }
+    }
+
+  /* if there is no spaace then we reallocate */
+  while (1) {
+    TP_schur_mem_realloc_CSC(self);
+    free_space current_unused = self->unused_CSC[i];
+    if (current_unused->nb_elem >=size ) {
+      if (CSC->nb_elem)  {
+	memcpy(&self->val[i][current_unused->offset], CSC->val,  CSC->nb_elem * sizeof(*CSC->val));
+	memcpy(&self->row[i][current_unused->offset], CSC->row,  CSC->nb_elem * sizeof(*CSC->row));
+      }
+      CSC->nb_free = size - CSC->nb_elem;
+      CSC->val = &self->val[i][current_unused->offset];
+      CSC->row = &self->row[i][current_unused->offset];
+      current_unused->offset  += size;
+      current_unused->nb_elem -= size;
+      return;
+    }
+    i++;
+  }
+
+}
+#define TP_schur_mem_CSC_realloc(self, CSC) TP_schur_mem_CSC_alloc(self, CSC, 2*CSC->nb_elem)
+
+
+void
+TP_schur_mem_CSR_alloc(schur_mem self, CSR_struct *CSR, long size)
+{
+  int i, nb = self->nb_CSR; 
+
+  /* first try to find memory in the current space  */
+  for( i = 0; i < nb; i++)
+    {
+      free_space current_unused = self->unused_CSR[i];
+      while(current_unused) {
+	if (current_unused->nb_elem >=size ) {
+	  if (CSR->nb_elem)  
+	    memcpy(&self->col[i][current_unused->offset], CSR->col, CSR->nb_elem * sizeof(*CSR->col));
+	  CSR->nb_free = size - CSR->nb_elem;
+	  CSR->col = &self->col[i][current_unused->offset];
+	  current_unused->offset  += size;
+	  current_unused->nb_elem -= size;
+	  return;
+	}
+	current_unused = current_unused->next;
+      }
+    }
+
+  /* if there is no spaace then we reallocate */
+  while (1) {
+    TP_schur_mem_realloc_CSR(self);
+    free_space current_unused = self->unused_CSR[self->nb_CSR - 1];
+    if (current_unused->nb_elem >=size ) {
+      if (CSR->nb_elem)  
+	memcpy(&self->col[self->nb_CSR - 1][current_unused->offset], CSR->col, CSR->nb_elem * sizeof(*CSR->col));
+      CSR->nb_free = size - CSR->nb_elem;
+      CSR->col = &self->col[self->nb_CSR - 1][current_unused->offset];
+      current_unused->offset  += size;
+      current_unused->nb_elem -= size;
+      return;
+    }
+  }
+}
+#define TP_schur_mem_CSR_realloc(self, CSR) TP_schur_mem_CSR_alloc(self, CSR, 2*CSR->nb_elem)
+
 void
 TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug, 
 			 int nb_threads, double extra_space, double extra_space_inbetween)
 {
-  long allocating;
   int i;
 
   self->nb_threads = nb_threads;
@@ -35,28 +249,16 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
   self->CSC = calloc( (size_t) n, sizeof(*self->CSC));
   self->CSR = calloc( (size_t) m, sizeof(*self->CSR));
 
-  self->extra_space           = extra_space;
-  self->extra_space_inbetween = extra_space_inbetween;
-  allocating = nnz * (1 + extra_space + extra_space_inbetween);
-  
+  self->extra_space = extra_space_inbetween;
+
+  self->internal_mem = TP_schur_mem_create((long) nnz * (1 + extra_space + extra_space_inbetween));
+
   self->nnz   = 0;
   self->debug = debug;
-  self->allocated_CSC = allocating;
-  self->allocated_CSR = allocating;
-
-  self->val = malloc((size_t) allocating * sizeof(*self->val));
-  self->row = malloc((size_t) allocating * sizeof(*self->row));
-  self->col = malloc((size_t) allocating * sizeof(*self->col));
 
   self->row_struct = malloc((size_t) nb_threads * sizeof(*self->row_struct));
   for( i = 0; i < nb_threads; i++)
     self->row_struct[i] = malloc((size_t) n * sizeof(**self->row_struct));
-
-  self->unused_CSC = calloc(1, sizeof(*self->unused_CSC));
-  self->unused_CSC->nb_elem = allocating;
-
-  self->unused_CSR = calloc(1, sizeof(*self->unused_CSR));
-  self->unused_CSR->nb_elem = allocating;
 
   self->row_locks = malloc(m * sizeof(*self->row_locks));
   for( i = 0; i < m; i++)
@@ -64,214 +266,212 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
   self->col_locks = malloc(n * sizeof(*self->col_locks));
   for( i = 0; i < n; i++)
     pthread_mutex_init(&self->col_locks[i], NULL);
-  
+
   if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR))
     TP_print_GB(self, "GB: after allocating");
 }
 
-free_space
-add_unused_CSC(free_space unused_space, long nb_elem, long offset)
-{
-  free_space self = malloc(sizeof(*self));
-  assert(nb_elem > 0);
+/* free_space */
+/* add_unused_CSC(free_space unused_space, long nb_elem, long offset) */
+/* { */
+/*   free_space self = malloc(sizeof(*self)); */
+/*   assert(nb_elem > 0); */
 
-  self->nb_elem  = nb_elem;
-  self->offset   = offset;
-  self->next     = unused_space;
-  if(unused_space)
-    unused_space->previous = self;
-  self->previous = NULL;
+/*   self->nb_elem  = nb_elem; */
+/*   self->offset   = offset; */
+/*   self->next     = unused_space; */
+/*   if(unused_space) */
+/*     unused_space->previous = self; */
+/*   self->previous = NULL; */
 
-  return self;
-}
+/*   return self; */
+/* } */
 
-free_space
-add_unused_CSR(free_space unused_space, long nb_elem, long offset)
-{
-  free_space self = malloc(sizeof(*self));
-  assert(nb_elem > 0);
+/* free_space */
+/* add_unused_CSR(free_space unused_space, long nb_elem, long offset) */
+/* { */
+/*   free_space self = malloc(sizeof(*self)); */
+/*   assert(nb_elem > 0); */
 
-  self->nb_elem  = nb_elem;
-  self->offset   = offset;
-  self->next     = unused_space;
-  if(unused_space)
-    unused_space->previous = self;
-  self->previous = NULL;
+/*   self->nb_elem  = nb_elem; */
+/*   self->offset   = offset; */
+/*   self->next     = unused_space; */
+/*   if(unused_space) */
+/*     unused_space->previous = self; */
+/*   self->previous = NULL; */
 
-  return self;
-}
+/*   return self; */
+/* } */
 
-free_space
-TP_schur_matrix_realloc_CSC(free_space unused, double **val,
-			    int **row, long *allocated)
-{
-  long allocating = *allocated * 2;
+/* free_space */
+/* TP_schur_matrix_realloc_CSC(free_space unused, double **val, */
+/* 			    int **row, long *allocated) */
+/* { */
+/*   long allocating = *allocated * 2; */
 
-  *val = realloc((void *) *val, allocating * sizeof(**val));
-  *row = realloc((void *) *row, allocating * sizeof(**row));
+/*   *val = realloc((void *) *val, allocating * sizeof(**val)); */
+/*   *row = realloc((void *) *row, allocating * sizeof(**row)); */
 
-  unused = add_unused_CSC (unused, *allocated, *allocated);
+/*   unused = add_unused_CSC (unused, *allocated, *allocated); */
 
-  *allocated  = allocating;
+/*   *allocated  = allocating; */
 
-  return unused;
-}
+/*   return unused; */
+/* } */
 
-free_space
-TP_schur_matrix_realloc_CSR(free_space unused, int **col,
-			    long *allocated)
-{
-  long allocating = *allocated * 2;
+/* free_space */
+/* TP_schur_matrix_realloc_CSR(free_space unused, int **col, */
+/* 			    long *allocated) */
+/* { */
+/*   long allocating = *allocated * 2; */
 
-  *col = realloc((void *) *col, allocating * sizeof(**col));
+/*   *col = realloc((void *) *col, allocating * sizeof(**col)); */
 
-  unused = add_unused_CSR(unused, *allocated, *allocated);
-  *allocated  = allocating;
+/*   unused = add_unused_CSR(unused, *allocated, *allocated); */
+/*   *allocated  = allocating; */
 
-  return unused;
-}
+/*   return unused; */
+/* } */
 
 
-free_space
-CSC_find_free_memory(free_space unused_CSC,  struct CSC_struct *CSC,
-		     long nb_elem, double **vals, int **rows, long *allocated_CSC)
-{
-  free_space tmp = unused_CSC;
+/* free_space */
+/* CSC_find_free_memory(free_space unused_CSC,  struct CSC_struct *CSC, */
+/* 		     long nb_elem, double **vals, int **rows, long *allocated_CSC) */
+/* { */
+/*   free_space tmp = unused_CSC; */
 
-  if (CSC->nb_free > 0 )
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"acquiring new CSR memory to non-full memory ");
+/*   if (CSC->nb_free > 0 ) */
+/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"acquiring new CSR memory to non-full memory "); */
 
-  if (CSC->nb_elem >= nb_elem )
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the acquired CSR memory is smaller or equal then the current one");
+/*   if (CSC->nb_elem >= nb_elem ) */
+/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the acquired CSR memory is smaller or equal then the current one"); */
 
-  while(tmp) {
-    if (tmp->nb_elem  < nb_elem) 
-      tmp = tmp->next;
-    else 
-      break;
-  }
+/*   while(tmp) { */
+/*     if (tmp->nb_elem  < nb_elem)  */
+/*       tmp = tmp->next; */
+/*     else  */
+/*       break; */
+/*   } */
 
-  if (!tmp) { 
-    tmp = 
-    /* UNUSED_CSC IS THE RETURN VLUE (THE START OF THE FREE_SPACE CHAIN) */
-      unused_CSC = 
-      TP_schur_matrix_realloc_CSC(unused_CSC, vals, rows, allocated_CSC);
-  }
+/*   if (!tmp) {  */
+/*     tmp =  */
+/*     /\* UNUSED_CSC IS THE RETURN VLUE (THE START OF THE FREE_SPACE CHAIN) *\/ */
+/*       unused_CSC =  */
+/*       TP_schur_matrix_realloc_CSC(unused_CSC, vals, rows, allocated_CSC); */
+/*   } */
 
-  if (CSC->nb_elem) {
-    double *CSC_vals  = *vals + CSC->offset;
-    double *free_vals = *vals + tmp->offset;
-    int *CSC_rows     = *rows + CSC->offset;
-    int *free_rows    = *rows + tmp->offset;
+/*   if (CSC->nb_elem) { */
+/*     double *CSC_vals  = *vals + CSC->offset; */
+/*     double *free_vals = *vals + tmp->offset; */
+/*     int *CSC_rows     = *rows + CSC->offset; */
+/*     int *free_rows    = *rows + tmp->offset; */
     
-    memcpy(free_vals, CSC_vals, (size_t) CSC->nb_elem * sizeof(**vals));
-    memcpy(free_rows, CSC_rows, (size_t) CSC->nb_elem * sizeof(**rows));
-  }
+/*     memcpy(free_vals, CSC_vals, (size_t) CSC->nb_elem * sizeof(**vals)); */
+/*     memcpy(free_rows, CSC_rows, (size_t) CSC->nb_elem * sizeof(**rows)); */
+/*   } */
 
-  CSC->offset   = tmp->offset;
-  CSC->nb_free  = nb_elem - CSC->nb_elem;
-  tmp->offset  += nb_elem;
-  tmp->nb_elem -= nb_elem;
+/*   CSC->offset   = tmp->offset; */
+/*   CSC->nb_free  = nb_elem - CSC->nb_elem; */
+/*   tmp->offset  += nb_elem; */
+/*   tmp->nb_elem -= nb_elem; */
 
-  /* is we need to destroy the tmp */
-  if (!tmp->nb_elem) 
-    {
-      /* tmp == unused_CSC -> need to update  unused CSC */
-      if (tmp == unused_CSC) 
-	{
-	  if (tmp->next) {
-	    /* if it is not the only one, easy */
-	    unused_CSC = tmp->next;
-	    unused_CSC->previous = NULL;
-	  } else  {
-	    /* if not, there is no more memory, so realocate , allocate more memory  */
-	    unused_CSC = TP_schur_matrix_realloc_CSC(NULL, vals, rows, allocated_CSC);
-	  }
-	} else 
-	{
-	  if ( tmp->previous ) 
-	    tmp->previous->next = tmp->next;
-	  if ( tmp->next ) 
-	    tmp->next->previous = tmp->previous;
-	}      
-      free(tmp);
-    } 
+/*   /\* is we need to destroy the tmp *\/ */
+/*   if (!tmp->nb_elem)  */
+/*     { */
+/*       /\* tmp == unused_CSC -> need to update  unused CSC *\/ */
+/*       if (tmp == unused_CSC)  */
+/* 	{ */
+/* 	  if (tmp->next) { */
+/* 	    /\* if it is not the only one, easy *\/ */
+/* 	    unused_CSC = tmp->next; */
+/* 	    unused_CSC->previous = NULL; */
+/* 	  } else  { */
+/* 	    /\* if not, there is no more memory, so realocate , allocate more memory  *\/ */
+/* 	    unused_CSC = TP_schur_matrix_realloc_CSC(NULL, vals, rows, allocated_CSC); */
+/* 	  } */
+/* 	} else  */
+/* 	{ */
+/* 	  if ( tmp->previous )  */
+/* 	    tmp->previous->next = tmp->next; */
+/* 	  if ( tmp->next )  */
+/* 	    tmp->next->previous = tmp->previous; */
+/* 	}       */
+/*       free(tmp); */
+/*     }  */
 
-  if (!unused_CSC) 
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"something strange is happening in S (no more memory  apperently)");
+/*   if (!unused_CSC)  */
+/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"something strange is happening in S (no more memory  apperently)"); */
 
-  return unused_CSC;
-}
+/*   return unused_CSC; */
+/* } */
 
-free_space
-CSR_find_free_memory(free_space unused_CSR,  struct CSR_struct *CSR,
-		     long nb_elem, int **cols, long *allocated_CSR)
-{
-  free_space tmp = unused_CSR;
+/* free_space */
+/* CSR_find_free_memory(free_space unused_CSR,  struct CSR_struct *CSR, */
+/* 		     long nb_elem, int **cols, long *allocated_CSR) */
+/* { */
+/*   free_space tmp = unused_CSR; */
 
-  if (CSR->nb_free > 0 )
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"acquiring new CSR memory to non-full memory ");
+/*   if (CSR->nb_free > 0 ) */
+/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"acquiring new CSR memory to non-full memory "); */
 
-  if (CSR->nb_elem > nb_elem )
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the acquired CSR memory is smaller than the current one");
+/*   if (CSR->nb_elem > nb_elem ) */
+/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the acquired CSR memory is smaller than the current one"); */
 
-  while(tmp) 
-    if (tmp->nb_elem  < nb_elem) 
-      tmp = tmp->next;
-    else 
-      break;
+/*   while(tmp)  */
+/*     if (tmp->nb_elem  < nb_elem)  */
+/*       tmp = tmp->next; */
+/*     else  */
+/*       break; */
 
-  if (!tmp)
-    tmp = 
-    /* UNUSED_CSR IS THE RETURN VLUE (THE START OF THE FREE_SPACE CHAIN)  */
-      unused_CSR = 
-      TP_schur_matrix_realloc_CSR(unused_CSR, cols, allocated_CSR);
+/*   if (!tmp) */
+/*     tmp =  */
+/*     /\* UNUSED_CSR IS THE RETURN VLUE (THE START OF THE FREE_SPACE CHAIN)  *\/ */
+/*       unused_CSR =  */
+/*       TP_schur_matrix_realloc_CSR(unused_CSR, cols, allocated_CSR); */
 
-  if (nb_elem) {
-    int *CSR_cols = *cols + CSR->offset;
-    int *tmp_cols = *cols + tmp->offset;
+/*   if (nb_elem) { */
+/*     int *CSR_cols = *cols + CSR->offset; */
+/*     int *tmp_cols = *cols + tmp->offset; */
 
-    memcpy(tmp_cols, CSR_cols, (size_t) CSR->nb_elem * sizeof(**cols));
-  }
+/*     memcpy(tmp_cols, CSR_cols, (size_t) CSR->nb_elem * sizeof(**cols)); */
+/*   } */
 
-  CSR->offset   = tmp->offset;
-  CSR->nb_free  = nb_elem - CSR->nb_elem;
-  tmp->offset  += nb_elem;
-  tmp->nb_elem -= nb_elem;
+/*   CSR->offset   = tmp->offset; */
+/*   CSR->nb_free  = nb_elem - CSR->nb_elem; */
+/*   tmp->offset  += nb_elem; */
+/*   tmp->nb_elem -= nb_elem; */
   
-  /* is we need to destroy the tmp */
-  if (!tmp->nb_elem) 
-    {
-      /* tmp == unused_CSR -> need just an update  on unused CSR */
-      if (tmp == unused_CSR) 
-	{
-	  if (tmp->next) {
-	    /* if it is not the only one, easy */
-	    unused_CSR = tmp->next;
-	    unused_CSR->previous = NULL;
-	  } else {
-	    /* if not, there is no more memory, so realocate  */
-	    unused_CSR = TP_schur_matrix_realloc_CSR(NULL, cols, allocated_CSR);
-	  }
-	} else 
-	{
-	  /* just adapt around tmp */
-	  if ( tmp->previous ) 
-	    tmp->previous->next = tmp->next;
-	  if ( tmp->next ) 
-	    tmp->next->previous = tmp->previous;
-	}
+/*   /\* is we need to destroy the tmp *\/ */
+/*   if (!tmp->nb_elem)  */
+/*     { */
+/*       /\* tmp == unused_CSR -> need just an update  on unused CSR *\/ */
+/*       if (tmp == unused_CSR)  */
+/* 	{ */
+/* 	  if (tmp->next) { */
+/* 	    /\* if it is not the only one, easy *\/ */
+/* 	    unused_CSR = tmp->next; */
+/* 	    unused_CSR->previous = NULL; */
+/* 	  } else { */
+/* 	    /\* if not, there is no more memory, so realocate  *\/ */
+/* 	    unused_CSR = TP_schur_matrix_realloc_CSR(NULL, cols, allocated_CSR); */
+/* 	  } */
+/* 	} else  */
+/* 	{ */
+/* 	  /\* just adapt around tmp *\/ */
+/* 	  if ( tmp->previous )  */
+/* 	    tmp->previous->next = tmp->next; */
+/* 	  if ( tmp->next )  */
+/* 	    tmp->next->previous = tmp->previous; */
+/* 	} */
       
-      free(tmp);
-    } 
+/*       free(tmp); */
+/*     }  */
 
-  if (!unused_CSR) 
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"something strange is happening in S (no more memory  apperently)");
+/*   if (!unused_CSR)  */
+/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"something strange is happening in S (no more memory  apperently)"); */
 
-  return unused_CSR;
-}
-
-
+/*   return unused_CSR; */
+/* } */
 
 void 
 TP_schur_matrix_init_ptr(TP_schur_matrix self, long *col_ptr, int *row_sizes)
@@ -279,21 +479,19 @@ TP_schur_matrix_init_ptr(TP_schur_matrix self, long *col_ptr, int *row_sizes)
   int i;
   int n = self->n;
   int m = self->m;
-  
+  schur_mem memory = self->internal_mem;
+
   // handeling the CSC part
   for(i = 0; i < n; i++)
-    self->unused_CSC = CSC_find_free_memory(self->unused_CSC, &self->CSC[i], 
-					    (long) (1 + self->extra_space) * (col_ptr[i+1] - col_ptr[i]), 
-					    &self->val, &self->row, &self->allocated_CSC);
+    TP_schur_mem_CSC_alloc(memory, &self->CSC[i], (long) (1 + self->extra_space) * (col_ptr[i+1] - col_ptr[i])); 
   
   // handeling the CSR part
   for(i = 0; i < m; i++)
-    self->unused_CSR = CSR_find_free_memory(self->unused_CSR, &self->CSR[i],
-					    (long) (1 + self->extra_space) * row_sizes[i],
-					    &self->col, &self->allocated_CSR);
+    TP_schur_mem_CSR_alloc(memory, &self->CSR[i], (long) (1 + self->extra_space) * row_sizes[i]);
 
-  if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR))
-    TP_print_GB(self, "GB: after initializing pointers");
+  /* TODO: PRINT GB */
+  /* if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR)) */
+  /*   TP_print_GB(self, "GB: after initializing pointers"); */
 }
 
 void
@@ -313,8 +511,8 @@ TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self)
       long    A_col_start = A->col_ptr[i];
       long    A_col_end   = A->col_ptr[i+1];
       long    col_length  = A_col_end - A_col_start;
-      double *CSC_vals    = self->val + self->CSC[i].offset;
-      int    *CSC_rows    = self->row + self->CSC[i].offset;
+      double *CSC_vals    = self->CSC[i].val;
+      int    *CSC_rows    = self->CSC[i].row;
       
       // handle the copy  of the column into the CSC structure
       memcpy((void *) CSC_rows,
@@ -334,8 +532,8 @@ TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self)
       for(j = A_col_start; j < A_col_end; j++)
 	{       
 	  int row = A->row[j];
-	  struct CSR_struct *CSR = &self->CSR[row];
-	  int *CSR_cols = self->col + CSR->offset;
+	  CSR_struct *CSR = &self->CSR[row];
+	  int *CSR_cols = CSR->col;
 	  
 	  CSR_cols[CSR->nb_elem++] = i;
 	  CSR->nb_free--;
@@ -346,11 +544,11 @@ TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self)
 void
 delete_entry_from_CSR(TP_schur_matrix self, int col, int row)
 {
-  struct CSR_struct *CSR;
+  CSR_struct *CSR;
   int i, nb_elem, found, *cols;
 
   CSR     = &self->CSR[row];
-  cols    = self->col + CSR->offset;
+  cols    = CSR->col;
   nb_elem = CSR->nb_elem;
   found = 0;
 
@@ -379,13 +577,13 @@ delete_entry_from_CSR(TP_schur_matrix self, int col, int row)
 double
 delete_entry_from_CSC(TP_schur_matrix self, int col, int row)
 {
-  struct CSC_struct *CSC;
+  CSC_struct *CSC;
   int i, nb_elem, found, *rows;
   double *vals, return_val;
 
   CSC     = &self->CSC[col];
-  rows    = self->row + CSC->offset;
-  vals    = self->val + CSC->offset;
+  rows    = CSC->row;
+  vals    = CSC->val;
   nb_elem = CSC->nb_elem;
   found = 0;
 
@@ -474,7 +672,7 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_matrix L, TP_matrix D,
       int me =  omp_get_thread_num();
       int current_pivot = step * nb_threads + me;
       if ( current_pivot < nb_pivots)  {
- 	struct CSC_struct *CSC;
+ 	CSC_struct *CSC;
 	int i, nb_elem, L_current_col, row, col;
 	int *rows, *L_rows;
 	double *vals, *L_vals, pivot_val;
@@ -483,8 +681,8 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_matrix L, TP_matrix D,
 	row     = row_perm[current_pivot];
 	CSC     = &self->CSC[col];
 	nb_elem = CSC->nb_elem;
-	vals    = self->val + CSC->offset;
-	rows    = self->row + CSC->offset;
+	vals    = CSC->val;
+	rows    = CSC->row;
 	L_current_col = L->col_ptr[L_input_size + current_pivot];
 	L_rows        = L->row;
 	L_vals        = L->val;
@@ -526,7 +724,7 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_matrix L, TP_matrix D,
    construct the new part of U, save the coresponding colums of L 
    and the cost of each col for the spmm */
 void
-TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U,
+TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L, 
 			 int nb_pivots, int *row_perm,
 			 TP_U_struct *U_struct, int U_new_n, int U_new_nnz)
 {
@@ -561,35 +759,33 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U,
       TP_U_col_realloc(u_col);
   }
   
-#pragma omp parallel num_threads(nb_threads) private(pivot)
-  {
-    int me =  omp_get_thread_num();
-    for( pivot = indices[me]; pivot < indices[me + 1]; pivot++)
+/* #pragma omp parallel num_threads(nb_threads) private(pivot) */
+/*   { */
+/*     int me =  omp_get_thread_num(); */
+    long *L_col_ptr = L->col_ptr;
+    for( pivot = 0; pivot < nb_pivots; pivot++)
       {
 	int row = row_perm[pivot];
 	
-	struct CSR_struct *CSR = &S->CSR[row];
+	CSR_struct *CSR = &S->CSR[row];
 	int row_nb_elem = CSR->nb_elem;
-	int *cols = S->col + CSR->offset;
+	int *cols = CSR->col;
 	
 	for( i = 0; i < row_nb_elem; i++) {
 	  int current_col = cols[i];
 	  U_col  *u_col = &U->col[current_col];
-	  
-	  
+	  /* int indice = __atomic_fetch_add(&u_col->nb_elem, 1, __ATOMIC_SEQ_CST); */
 
-	  /* PETOK: stavi atomic_fetch_and add  za indiceot. 
-	     PETOK: posle mozis duri i od L da go najdis costot, tvoe e :D :D :D */
 	  u_col->row[u_col->nb_elem++] = row;
-	  u_col->cost += row;
+	  u_col->cost += L_col_ptr[row+1] - L_col_ptr[row];
 	}
 	
-	/* TODO: recycle the row's memory */
+	/* todo: recycle the row's memory */
 	CSR->nb_elem = 0;
 	CSR->nb_free = 0;
 	S->nnz      -= row_nb_elem;
       }
-  }
+  /* } */
 }
   
 /* NAREDNO: VIDI SO KE BIDE NAREDNATA STRUKTURA I NAPRAVI CHECK SO NEA.
@@ -620,11 +816,11 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U,
 void
 TP_schur_matrix_add_to_entry(TP_schur_matrix self, int row, int col, double val)
 {
-  struct CSC_struct *CSC = &self->CSC[col];
+  CSC_struct *CSC = &self->CSC[col];
   int i;
   int nb_elem  = CSC->nb_elem;
-  int *rows    = self->row + CSC->offset;
-  double *vals = self->val + CSC->offset;
+  int *rows    = CSC->row;
+  double *vals = CSC->val;
 
   for( i = 0; i < nb_elem; i++)
     if ( rows[i] == row) { 
@@ -639,31 +835,26 @@ TP_schur_matrix_add_to_entry(TP_schur_matrix self, int row, int col, double val)
 void
 TP_schur_matrix_insert_entry(TP_schur_matrix self, int row, int col, double val)
 {
-  struct CSC_struct *CSC = &self->CSC[col];
-  struct CSR_struct *CSR = &self->CSR[row];
-  double       *CSC_vals = self->val + CSC->offset;
-  int          *CSC_rows = self->row + CSC->offset;
-  int          *CSR_cols = self->col + CSR->offset;
+  CSC_struct *CSC = &self->CSC[col];
+  CSR_struct *CSR = &self->CSR[row];
+  double       *CSC_vals = CSC->val;
+  int          *CSC_rows = CSC->row;
+  int          *CSR_cols = CSR->col;
 
   if (CSC->nb_free <= 0) {
-    self->unused_CSC = CSC_find_free_memory(self->unused_CSC, CSC, 
-					    CSC->nb_elem * 2, 
-					    &self->val, &self->row, &self->allocated_CSC);
-    CSC_vals = self->val + CSC->offset;
-    CSC_rows = self->row + CSC->offset;
+    TP_schur_mem_CSC_realloc(self->internal_mem, CSC);
+    CSC_vals = CSC->val;
+    CSC_rows = CSC->row;
     
-    if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR))
-      TP_print_single_GB(self->unused_CSC, "CSC GB: after reallocing col");
+    /* if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR)) */
+    /*   TP_print_single_GB(self->unused_CSC, "CSC GB: after reallocing col"); */
   }
   
   if (CSR->nb_free <= 0) {
-    self->unused_CSR = CSR_find_free_memory(self->unused_CSR, CSR,
-					    CSR->nb_elem * 2, 
-					    &self->col, &self->allocated_CSR);
-    CSR_cols = self->col + CSR->offset;
-    
-    if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR))
-      TP_print_single_GB(self->unused_CSR, "CSR GB: after reallocing col");
+    TP_schur_mem_CSR_realloc(self->internal_mem, CSR);
+    CSR_cols = CSR->col;
+    /* if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR)) */
+    /*   TP_print_single_GB(self->unused_CSR, "CSR GB: after reallocing col"); */
   }
   
   CSC_vals[CSC->nb_elem  ] = val;
@@ -682,15 +873,15 @@ TP_schur_matrix_update_colmax(TP_schur_matrix self)
   int n = self->n, nb_threads = self->nb_threads;
   int nb_steps = ( n + nb_threads - 1 ) / nb_threads, step;
 
-#pragma omp parallel num_threads(nb_threads) private(step)
-  {
-    int me =  omp_get_thread_num();
-    for( step = 0; step < nb_steps; step++) { 
-      int my_col = step * nb_threads + me; 
-      if (my_col < n)
-	self->CSC[my_col].col_max = get_max_double(self->val + self->CSC[my_col].offset, self->CSC[my_col].nb_elem);
+/* /\* #pragma omp parallel num_threads(nb_threads) private(step) *\/ */
+/* /\*   { *\/ */
+/* /\*     int me =  omp_get_thread_num(); *\/ */
+    for( step = 0; step < n; step++) {
+      int my_col = step; // * nb_threads + me;
+      /* if (my_col < n) */
+      self->CSC[my_col].col_max = get_max_double(self->CSC[my_col].val, self->CSC[my_col].nb_elem);
     }
-  }
+/*   /\* } *\/ */
 }
 
 void
@@ -714,15 +905,15 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
       int U_col_new = U_col_struct.nb_elem;
       int U_col_new_unchanged = U_col_new ;
 
-      struct CSC_struct *CSC = &S->CSC[col];
+      CSC_struct *CSC = &S->CSC[col];
       double *U_vals  = U->col[col].val + U->col[col].nb_elem - U_col_new;
       int    *U_rows  = U->col[col].row + U->col[col].nb_elem - U_col_new;
 
       int S_col_nb_elem      = CSC->nb_elem;
-      int *S_rows            = S->row + CSC->offset;
-      double *S_vals         = S->val + CSC->offset;
+      int *S_rows            = CSC->row;
+      double *S_vals         = CSC->val;
       
-      /* updating schur_row_struct and updating the vals of U  */
+      /* constructing schur_row_struct and discovering the vals of U  */
       for ( k = 0; k < S_col_nb_elem; ) {
 	int S_row = S_rows[k];
 	int found = 0;
@@ -756,11 +947,10 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
  	if ( !found )
 	  schur_row_struct[S_row] = (long) col*n + k++;
       }
-      
 
       if (U_col_new) 
 	TP_warning(__FUNCTION__, __FILE__, __LINE__,"All vals for U were not found");
-
+      
       if (S_col_nb_elem + U_col_new_unchanged != CSC->nb_elem) 
 	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Somethign went wrong");
 
@@ -782,14 +972,13 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
               schur_row_struct[row] < (long) (col+1)*n)  {
             S_vals[schur_row_struct[row] % n] += val;
           } else {
-	    /* MAKE THIS FNCTION TELL U IF STHG NEEDS AN UPDATE */
+	    /* MAKE THIS FNCTION TELL U IF STHG HAS BEEN UPDATED */
             TP_schur_matrix_insert_entry(S, row, col, val);
-	    S_vals         = S->val + CSC->offset;
-	    S_rows         = S->row + CSC->offset;
+	    S_vals         = CSC->val;
+	    S_rows         = CSC->row;
 	    /* maybe do not use S_col_nb_elem, cause is just updates it. 
 	       it is maybe better just to use CSC->nb_elem*/
-	    S_col_nb_elem   = CSC->nb_elem;
-            schur_row_struct[row] = (long) col*n +  S_col_nb_elem - 1;
+            schur_row_struct[row] = (long) col*n + CSC->nb_elem - 1;
           }
         }
       }
@@ -815,7 +1004,7 @@ TP_schur_matrix_convert(TP_schur_matrix S, int done_pivots)
   
   for(i = 0, k=0; i < m; i++)
     {
-      struct CSR_struct *CSR = &S->CSR[i];
+      CSR_struct *CSR = &S->CSR[i];
       if ( !CSR->nb_elem )
 	continue;
       invr_row[i] = k;
@@ -824,13 +1013,13 @@ TP_schur_matrix_convert(TP_schur_matrix S, int done_pivots)
   
   for(col = 0, k=0;  col < n; col++)
     {
-      struct CSC_struct *CSC = &S->CSC[col];
+      CSC_struct *CSC = &S->CSC[col];
       int nb_elem = CSC->nb_elem;
       if ( !nb_elem ) 
 	continue;
       self->original_cols[k] =  col;
-      double *CSC_vals = S->val + CSC->offset;
-      int    *CSC_rows = S->row + CSC->offset;
+      double *CSC_vals = CSC->val;
+      int    *CSC_rows = CSC->row;
       for( i=0; i < nb_elem; i++) 
 	{ 
 	  int schur_row = invr_row[CSC_rows[i]];
@@ -853,9 +1042,9 @@ TP_schur_matrix_print(TP_schur_matrix self, char *mess)
   printf("PRINTING THE CSC PART\n");
   for(int i = 0; i < n; i++)
     {
-      struct CSC_struct *CSC = &self->CSC[i];
-      int *rows    = self->row + CSC->offset;
-      double *vals = self->val + CSC->offset;
+      CSC_struct *CSC = &self->CSC[i];
+      int *rows    = CSC->row;
+      double *vals = CSC->val;
       int nb_elem = CSC->nb_elem;
       printf("================%d======================\n", i);
       printf("Colum's max is %f\n", CSC->col_max);
@@ -867,8 +1056,8 @@ TP_schur_matrix_print(TP_schur_matrix self, char *mess)
   printf("\n\nPRINTING THE CSR PART\n");
   for(int i = 0; i < m; i++)
     {
-      struct CSR_struct *CSR = &self->CSR[i];
-      int *cols = self->col + CSR->offset;
+      CSR_struct *CSR = &self->CSR[i];
+      int *cols = CSR->col;
        int nb_elem = CSR->nb_elem;
        printf("================%d======================\n", i);
        for(int j = 0; j < nb_elem; j++)
@@ -882,23 +1071,12 @@ void
 TP_schur_matrix_destroy(TP_schur_matrix self)
 {
   int i;
-  free_space unused_CSC = self->unused_CSC;
-  free_space unused_CSR = self->unused_CSR;
   
   free(self->CSC);
   free(self->CSR);
 
-  while (unused_CSC) {
-    free_space tmp = unused_CSC->next;
-    free(unused_CSC);
-    unused_CSC = tmp;
-  }
-  while (unused_CSR) {
-    free_space tmp = unused_CSR->next;
-    free(unused_CSR);
-    unused_CSR = tmp;
-  }
-  
+  TP_schur_mem_destroy(self->internal_mem);
+
   for( i = 0; i < self->nb_threads; i++)
     free(self->row_struct[i]);
   free(self->row_struct);
@@ -910,13 +1088,17 @@ TP_schur_matrix_destroy(TP_schur_matrix self)
   free(self->row_locks);
   free(self->col_locks);
 
-  free(self->val);
-  free(self->row);
-  free(self->col);
-
   free(self);
 }
 
+
+/* ********************************************************************************************* */
+/* ********************************************************************************************* */
+/* DEBBUG */
+/* DEBBUG */
+/* ********************************************************************************************* */
+/* ********************************************************************************************* */
+/* ********************************************************************************************* */
 void
 TP_schur_check_doubles(TP_schur_matrix self)
 {
@@ -925,8 +1107,8 @@ TP_schur_check_doubles(TP_schur_matrix self)
 
   for(col = 0; col < n; col++)
     {
-      struct CSC_struct *CSC = &self->CSC[col];
-      int *rows = self->row + CSC->offset;
+      CSC_struct *CSC = &self->CSC[col];
+      int *rows = CSC->row;
       int nb_elem = CSC->nb_elem;
 
       for (i = 0; i < nb_elem; i++) {
@@ -942,8 +1124,8 @@ TP_schur_check_doubles(TP_schur_matrix self)
   
   for(row = 0; row < m; row++)
     {
-      struct CSR_struct *CSR = &self->CSR[row];
-      int *cols = self->col + CSR->offset;
+      CSR_struct *CSR = &self->CSR[row];
+      int *cols   = CSR->col;
       int nb_elem = CSR->nb_elem;
 
       for (i = 0; i < nb_elem; i++) {
@@ -1011,165 +1193,166 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
       snprintf(mess, 2048, "error on the row %d with nb_free %d\n", i, self->CSR[i].nb_free);
       TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
     }
+
+  /* TODO: rewrtie this */
+  /* for(i = 0; i < n; i++) */
+  /*   { */
+  /*     CSC_struct *CSC = &self->CSC[i]; */
+  /*     free_space unused_CSC  = self->unused_CSC; */
+  /*     long CSC_begin = CSC->offset, CSC_end = CSC->offset + CSC->nb_elem + CSC->nb_free; */
+  /*     int current_unused = 0, j; */
+  /*     if (CSC_begin == CSC_end) */
+  /* 	continue; */
+      
+  /*     while(unused_CSC) */
+  /* 	{ */
+  /* 	  long free_begin = unused_CSC->offset, free_end = unused_CSC->offset + unused_CSC->nb_elem; */
+  /* 	  int print = 0; */
+	  
+  /* 	  TP_overlaps overlaped = check_overalping_regions(free_begin, free_end, CSC_begin, CSC_end); */
+  /* 	  switch (overlaped) { */
+  /* 	  case (TP_overlap_none) : */
+  /* 	    break; */
+  /* 	  case (TP_overlap_begin) : */
+  /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlaping in the begining of the col (col start %ld end %ld, free starts on %ld ends on %ld).", */
+  /* 		     current_unused, i, CSC_begin, CSC_end, free_begin, free_end); */
+  /* 	    print = 1; */
+  /* 	    break; */
+  /* 	  case (TP_overlap_end) : */
+  /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlaping in the end of the col (col start %ld end %ld, free starts on %ld ends on %ld).", */
+  /* 		     current_unused, i, CSC_begin, CSC_end, free_begin, free_end); */
+  /* 	    print = 1; */
+  /* 	    break; */
+  /* 	  case (TP_overlap_total) : */
+  /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlapping (col starts at %ld and ends on %ld; free starts on %ld and ends on %ld).", */
+  /* 		     current_unused, i, CSC_begin, CSC_end, free_begin, free_end); */
+  /* 	    print = 1; */
+  /* 	    break; */
+  /* 	   default: */
+  /* 	     break; */
+  /* 	  } */
+  /* 	  if (print) */
+  /* 	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
+  /* 	  current_unused++; */
+  /* 	  unused_CSC = unused_CSC->next; */
+  /* 	} */
+      
+  /*     for(j = 0; j < n; j++) */
+  /* 	{ */
+  /* 	  if ( i == j) */
+  /* 	    continue; */
+  /* 	  CSC_struct *current_CSC = &self->CSC[j]; */
+  /* 	  long current_CSC_begin = current_CSC->offset, current_CSC_end = current_CSC->offset + current_CSC->nb_elem + current_CSC->nb_free; */
+  /* 	  int print = 0; */
+  /* 	  if( current_CSC_begin == current_CSC_end) */
+  /* 	    continue; */
+	  
+  /* 	  TP_overlaps overlaped = check_overalping_regions(current_CSC_begin, current_CSC_end, CSC_begin, CSC_end); */
+  /* 	  switch (overlaped) { */
+  /* 	  case (TP_overlap_none) : */
+  /* 	    break; */
+  /* 	  case (TP_overlap_begin) : */
+  /* 	    snprintf(mess, 2048, "The %d^th column and the %d^th column are overlaping in the begining of the col (col start %ld end %ld; col starts %ld ends on %ld).", */
+  /* 		     j, i, current_CSC_begin , current_CSC_end, CSC_begin, CSC_end); */
+  /* 	    print = 1; */
+  /* 	    break; */
+  /* 	  case (TP_overlap_end) : */
+  /* 	    snprintf(mess, 2048, "The %d^th column and the %d^th column are overlaping in the end of the col (col start %ld end %ld; col starts %ld ends on %ld).", */
+  /* 		     j, i, current_CSC_end, current_CSC_end, CSC_begin, CSC_end); */
+  /* 	    print = 1; */
+  /* 	    break; */
+  /* 	  case (TP_overlap_total) : */
+  /* 	    snprintf(mess, 2048, "The %d^th column and the %d^th column are overlapping (col starts at %ld and ends on %ld; col starts %ld ends on %ld).", */
+  /* 		     j, i, current_CSC_end, current_CSC_end, CSC_begin, CSC_end); */
+  /* 	    print = 1; */
+  /* 	    break; */
+  /* 	  default: */
+  /* 	    break; */
+  /* 	  } */
+  /* 	  if (print) */
+  /* 	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
+  /* 	} */
+  /*   } */
   
-  for(i = 0; i < n; i++)
-    {
-      struct CSC_struct *CSC = &self->CSC[i];
-      free_space unused_CSC  = self->unused_CSC;
-      long CSC_begin = CSC->offset, CSC_end = CSC->offset + CSC->nb_elem + CSC->nb_free;
-      int current_unused = 0, j;
-      if (CSC_begin == CSC_end)
-	continue;
+  /* for(i = 0; i < m; i++) */
+  /*   { */
+  /*     CSR_struct *CSR = &self->CSR[i]; */
+  /*     free_space unused_CSR  = self->unused_CSR; */
+  /*     long CSR_begin = CSR->offset, CSR_end = CSR->offset + CSR->nb_elem + CSR->nb_free; */
+  /*     int current_unused = 0, j; */
       
-      while(unused_CSC)
-	{
-	  long free_begin = unused_CSC->offset, free_end = unused_CSC->offset + unused_CSC->nb_elem;
-	  int print = 0;
+  /*     if (CSR_begin == CSR_end) */
+  /* 	continue; */
+      
+  /*     while(unused_CSR) */
+  /* 	{ */
+  /* 	  long free_begin = unused_CSR->offset, free_end = unused_CSR->offset + unused_CSR->nb_elem; */
+  /* 	  int print = 0; */
 	  
-	  TP_overlaps overlaped = check_overalping_regions(free_begin, free_end, CSC_begin, CSC_end);
-	  switch (overlaped) {
-	  case (TP_overlap_none) :
-	    break;
-	  case (TP_overlap_begin) :
-	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlaping in the begining of the col (col start %ld end %ld, free starts on %ld ends on %ld).",
-		     current_unused, i, CSC_begin, CSC_end, free_begin, free_end);
-	    print = 1;
-	    break;
-	  case (TP_overlap_end) :
-	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlaping in the end of the col (col start %ld end %ld, free starts on %ld ends on %ld).",
-		     current_unused, i, CSC_begin, CSC_end, free_begin, free_end);
-	    print = 1;
-	    break;
-	  case (TP_overlap_total) :
-	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlapping (col starts at %ld and ends on %ld; free starts on %ld and ends on %ld).",
-		     current_unused, i, CSC_begin, CSC_end, free_begin, free_end);
-	    print = 1;
-	    break;
-	   default:
-	     break;
-	  }
-	  if (print)
-	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-	  current_unused++;
-	  unused_CSC = unused_CSC->next;
-	}
+  /* 	  TP_overlaps overlaped = check_overalping_regions(free_begin, free_end, CSR_begin, CSR_end); */
+  /* 	  switch (overlaped) { */
+  /* 	  case (TP_overlap_none)  : */
+  /* 	    break; */
+  /* 	  case (TP_overlap_begin) : */
+  /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th row are overlaping in the begining of the col (row start %ld end %ld, free starts on  %ld ends on %ld).", */
+  /* 		     current_unused, i, CSR_begin, CSR_end, free_begin, free_end); */
+  /* 	    print = 1; */
+  /* 	    break; */
+  /* 	  case (TP_overlap_end)   : */
+  /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th row are overlaping in the end of the col (row start %ld end %ld, free starts on %ld ends on %ld).", */
+  /* 		      current_unused, i, CSR_begin, CSR_end, free_begin, free_end); */
+  /* 	    print = 1; */
+  /* 	    break; */
+  /* 	  case (TP_overlap_total) : */
+  /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlapping (col starts at %ld and ends on %ld; free starts on %ld and ends on %ld).", */
+  /* 		     current_unused, i, CSR_begin, CSR_end, free_begin, free_end); */
+  /* 	    print = 1; */
+  /* 	    break; */
+  /* 	  default: */
+  /* 	    break; */
+  /* 	  } */
+  /* 	  if (print) */
+  /* 	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
+  /* 	  current_unused++; */
+  /* 	  unused_CSR = unused_CSR->next; */
+  /* 	} */
       
-      for(j = 0; j < n; j++)
-	{
-	  if ( i == j)
-	    continue;
-	  struct CSC_struct *current_CSC = &self->CSC[j];
-	  long current_CSC_begin = current_CSC->offset, current_CSC_end = current_CSC->offset + current_CSC->nb_elem + current_CSC->nb_free;
-	  int print = 0;
-	  if( current_CSC_begin == current_CSC_end)
-	    continue;
-	  
-	  TP_overlaps overlaped = check_overalping_regions(current_CSC_begin, current_CSC_end, CSC_begin, CSC_end);
-	  switch (overlaped) {
-	  case (TP_overlap_none) :
-	    break;
-	  case (TP_overlap_begin) :
-	    snprintf(mess, 2048, "The %d^th column and the %d^th column are overlaping in the begining of the col (col start %ld end %ld; col starts %ld ends on %ld).",
-		     j, i, current_CSC_begin , current_CSC_end, CSC_begin, CSC_end);
-	    print = 1;
-	    break;
-	  case (TP_overlap_end) :
-	    snprintf(mess, 2048, "The %d^th column and the %d^th column are overlaping in the end of the col (col start %ld end %ld; col starts %ld ends on %ld).",
-		     j, i, current_CSC_end, current_CSC_end, CSC_begin, CSC_end);
-	    print = 1;
-	    break;
-	  case (TP_overlap_total) :
-	    snprintf(mess, 2048, "The %d^th column and the %d^th column are overlapping (col starts at %ld and ends on %ld; col starts %ld ends on %ld).",
-		     j, i, current_CSC_end, current_CSC_end, CSC_begin, CSC_end);
-	    print = 1;
-	    break;
-	  default:
-	    break;
-	  }
-	  if (print)
-	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-	}
-    }
-  
-  for(i = 0; i < m; i++)
-    {
-      struct CSR_struct *CSR = &self->CSR[i];
-      free_space unused_CSR  = self->unused_CSR;
-      long CSR_begin = CSR->offset, CSR_end = CSR->offset + CSR->nb_elem + CSR->nb_free;
-      int current_unused = 0, j;
-      
-      if (CSR_begin == CSR_end)
-	continue;
-      
-      while(unused_CSR)
-	{
-	  long free_begin = unused_CSR->offset, free_end = unused_CSR->offset + unused_CSR->nb_elem;
-	  int print = 0;
-	  
-	  TP_overlaps overlaped = check_overalping_regions(free_begin, free_end, CSR_begin, CSR_end);
-	  switch (overlaped) {
-	  case (TP_overlap_none)  :
-	    break;
-	  case (TP_overlap_begin) :
-	    snprintf(mess, 2048, "The %d^th free space and the %d^th row are overlaping in the begining of the col (row start %ld end %ld, free starts on  %ld ends on %ld).",
-		     current_unused, i, CSR_begin, CSR_end, free_begin, free_end);
-	    print = 1;
-	    break;
-	  case (TP_overlap_end)   :
-	    snprintf(mess, 2048, "The %d^th free space and the %d^th row are overlaping in the end of the col (row start %ld end %ld, free starts on %ld ends on %ld).",
-		      current_unused, i, CSR_begin, CSR_end, free_begin, free_end);
-	    print = 1;
-	    break;
-	  case (TP_overlap_total) :
-	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlapping (col starts at %ld and ends on %ld; free starts on %ld and ends on %ld).",
-		     current_unused, i, CSR_begin, CSR_end, free_begin, free_end);
-	    print = 1;
-	    break;
-	  default:
-	    break;
-	  }
-	  if (print)
-	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-	  current_unused++;
-	  unused_CSR = unused_CSR->next;
-	}
-      
-      for(j = 0; j < m; j++)
-	{
-	   if ( i == j)
-	     continue;
-	   struct CSR_struct *current_CSR = &self->CSR[j];
-	   long current_CSR_begin = current_CSR->offset, current_CSR_end = current_CSR->offset + current_CSR->nb_elem + current_CSR->nb_free;
-	   int print = 0;
-	   if( current_CSR_begin == current_CSR_end)
-	     continue;
+  /*     for(j = 0; j < m; j++) */
+  /* 	{ */
+  /* 	   if ( i == j) */
+  /* 	     continue; */
+  /* 	   CSR_struct *current_CSR = &self->CSR[j]; */
+  /* 	   long current_CSR_begin = current_CSR->offset, current_CSR_end = current_CSR->offset + current_CSR->nb_elem + current_CSR->nb_free; */
+  /* 	   int print = 0; */
+  /* 	   if( current_CSR_begin == current_CSR_end) */
+  /* 	     continue; */
 	   
-	   TP_overlaps overlaped = check_overalping_regions(current_CSR_begin, current_CSR_end, CSR_begin, CSR_end);
-	   switch (overlaped) {
-	   case (TP_overlap_none) :
-	     break;
-	   case (TP_overlap_begin) :
-	     snprintf(mess, 2048, "The %d^th row and the %d^th column are overlaping in the begining of the row (row start %ld end %ld; row starts %ld ends on %ld).",
-		      j, i, current_CSR_begin , current_CSR_end, CSR_begin, CSR_end);
-	     print = 1;
-	     break;
-	   case (TP_overlap_end) :
-	     snprintf(mess, 2048, "The %d^th row and the %d^th row are overlaping in the end of the row (row start %ld end %ld; row starts %ld ends on %ld).",
-		      j, i, current_CSR_end, current_CSR_end, CSR_begin, CSR_end);
-	     print = 1;
-	     break;
-	   case (TP_overlap_total) :
-	     snprintf(mess, 2048, "The %d^th column and the %d^th column are overlapping (col starts at %ld and ends on %ld; col starts %ld ends on %ld).",
-		      j, i, current_CSR_end, current_CSR_end, CSR_begin, CSR_end);
-	     print = 1;
-	     break;
-	   default:
-	     break;
-	   }
-	   if (print)
-	     TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-	}
-    }
+  /* 	   TP_overlaps overlaped = check_overalping_regions(current_CSR_begin, current_CSR_end, CSR_begin, CSR_end); */
+  /* 	   switch (overlaped) { */
+  /* 	   case (TP_overlap_none) : */
+  /* 	     break; */
+  /* 	   case (TP_overlap_begin) : */
+  /* 	     snprintf(mess, 2048, "The %d^th row and the %d^th column are overlaping in the begining of the row (row start %ld end %ld; row starts %ld ends on %ld).", */
+  /* 		      j, i, current_CSR_begin , current_CSR_end, CSR_begin, CSR_end); */
+  /* 	     print = 1; */
+  /* 	     break; */
+  /* 	   case (TP_overlap_end) : */
+  /* 	     snprintf(mess, 2048, "The %d^th row and the %d^th row are overlaping in the end of the row (row start %ld end %ld; row starts %ld ends on %ld).", */
+  /* 		      j, i, current_CSR_end, current_CSR_end, CSR_begin, CSR_end); */
+  /* 	     print = 1; */
+  /* 	     break; */
+  /* 	   case (TP_overlap_total) : */
+  /* 	     snprintf(mess, 2048, "The %d^th column and the %d^th column are overlapping (col starts at %ld and ends on %ld; col starts %ld ends on %ld).", */
+  /* 		      j, i, current_CSR_end, current_CSR_end, CSR_begin, CSR_end); */
+  /* 	     print = 1; */
+  /* 	     break; */
+  /* 	   default: */
+  /* 	     break; */
+  /* 	   } */
+  /* 	   if (print) */
+  /* 	     TP_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
+  /* 	} */
+  /*   } */
 }
 
 void
@@ -1202,16 +1385,16 @@ TP_schur_matrix_check_symetry(TP_schur_matrix self)
   
   for(col = 0; col < n; col++)
     {
-      struct CSC_struct *CSC = &self->CSC[col];
-      int *rows   = self->row + CSC->offset;
+      CSC_struct *CSC = &self->CSC[col];
+      int *rows   = CSC->row;
       int col_nb_elem = CSC->nb_elem;
       
       for(i = 0; i < col_nb_elem; i++)
 	{
 	  row = rows[i];
-	  struct CSR_struct *CSR = &self->CSR[row];
+	  CSR_struct *CSR = &self->CSR[row];
 	  int row_nb_elem = CSR->nb_elem;
-	  int *cols = self->col + CSR->offset;
+	  int *cols = CSR->col;
 	  int found = 0;
 	  for(j = 0; j < row_nb_elem; j++) {
 	    if(cols[j] == col) {
@@ -1230,104 +1413,106 @@ TP_schur_matrix_check_symetry(TP_schur_matrix self)
     }
 }
 
+/* TODO: addapt this to the new thing */
 void
 TP_print_GB(TP_schur_matrix self, char *mess)
 {
-  free_space CSC = self->unused_CSC;
-  free_space CSR = self->unused_CSR;
+  /* free_space CSC = self->unused_CSC; */
+  /* free_space CSR = self->unused_CSR; */
   
-  fprintf(stdout,"%s\n", mess);
-  if (CSC->previous)
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSC free memory has a predecessor");
-  if (CSR->previous)
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSR free memory has a predecessor");
+  /* fprintf(stdout,"%s\n", mess); */
+  /* if (CSC->previous) */
+  /*   TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSC free memory has a predecessor"); */
+  /* if (CSR->previous) */
+  /*   TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSR free memory has a predecessor"); */
   
-  fprintf(stdout, "|================||=================|\n");
-  fprintf(stdout, "|      CSC       ||      CSR        |\n");
-  fprintf(stdout, "|================||=================|\n");
-  fprintf(stdout, "|    address     ||    address      |\n");
-  fprintf(stdout, "|    nb_elem     ||    nb_elem      |\n");
-  fprintf(stdout, "|    offset      ||    offset       |\n");
-  fprintf(stdout, "|================||=================|\n\n");
-  fprintf(stdout, "|===================================|\n");
+  /* fprintf(stdout, "|================||=================|\n"); */
+  /* fprintf(stdout, "|      CSC       ||      CSR        |\n"); */
+  /* fprintf(stdout, "|================||=================|\n"); */
+  /* fprintf(stdout, "|    address     ||    address      |\n"); */
+  /* fprintf(stdout, "|    nb_elem     ||    nb_elem      |\n"); */
+  /* fprintf(stdout, "|    offset      ||    offset       |\n"); */
+  /* fprintf(stdout, "|================||=================|\n\n"); */
+  /* fprintf(stdout, "|===================================|\n"); */
   
-  while( CSC || CSR) {
-    if (CSC)
-      fprintf(stdout, "| %14p |", &CSC);
-    else
-      fprintf(stdout, "                  ");
+  /* while( CSC || CSR) { */
+  /*   if (CSC) */
+  /*     fprintf(stdout, "| %14p |", &CSC); */
+  /*   else */
+  /*     fprintf(stdout, "                  "); */
     
-    if (CSR)
-      fprintf(stdout, "| %14p  |\n", &CSR);
-    else
-      fprintf(stdout, "\n");
+  /*   if (CSR) */
+  /*     fprintf(stdout, "| %14p  |\n", &CSR); */
+  /*   else */
+  /*     fprintf(stdout, "\n"); */
     
-    if (CSC)
-      fprintf(stdout, "|  %11ld   |", CSC->nb_elem);
-    else
-      fprintf(stdout, "                  ");
+  /*   if (CSC) */
+  /*     fprintf(stdout, "|  %11ld   |", CSC->nb_elem); */
+  /*   else */
+  /*     fprintf(stdout, "                  "); */
     
-    if (CSR)
-      fprintf(stdout, "|   %11ld   |\n", CSR->nb_elem);
-     else
-       fprintf(stdout, "\n");
+  /*   if (CSR) */
+  /*     fprintf(stdout, "|   %11ld   |\n", CSR->nb_elem); */
+  /*    else */
+  /*      fprintf(stdout, "\n"); */
     
-    if (CSC)
-      fprintf(stdout, "|  %11ld   |", CSC->offset);
-    else
-      fprintf(stdout, "                  ");
+  /*   if (CSC) */
+  /*     fprintf(stdout, "|  %11ld   |", CSC->offset); */
+  /*   else */
+  /*     fprintf(stdout, "                  "); */
     
-    if (CSR)
-      fprintf(stdout, "|   %11ld   |\n", CSR->offset);
-    else
-      fprintf(stdout, "\n");
-    fprintf(stdout, "|===================================|\n");
+  /*   if (CSR) */
+  /*     fprintf(stdout, "|   %11ld   |\n", CSR->offset); */
+  /*   else */
+  /*     fprintf(stdout, "\n"); */
+  /*   fprintf(stdout, "|===================================|\n"); */
     
-    if (CSC)
-      if (CSC->next)
-	if (CSC->next->previous != CSC)
-	  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the CSC free memory's next cell, has a predecessor different from CSC");
+  /*   if (CSC) */
+  /*     if (CSC->next) */
+  /* 	if (CSC->next->previous != CSC) */
+  /* 	  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the CSC free memory's next cell, has a predecessor different from CSC"); */
 
-    if (CSR)
-      if (CSR->next)
-	if (CSR->next->previous != CSR)
-	  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the CSR free memory's next cell, has a predecessor different from CSR");
+  /*   if (CSR) */
+  /*     if (CSR->next) */
+  /* 	if (CSR->next->previous != CSR) */
+  /* 	  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the CSR free memory's next cell, has a predecessor different from CSR"); */
     
-    if (CSC)
-      CSC=CSC->next;
-    if (CSR)
-      CSR=CSR->next;
-  }
+  /*   if (CSC) */
+  /*     CSC=CSC->next; */
+  /*   if (CSR) */
+  /*     CSR=CSR->next; */
+  /* } */
 }
 
+/* TODO: addapt this to the new thing */
 void
 TP_print_single_GB(free_space self, char *mess)
 {
-  fprintf(stdout,"%s\n", mess);
+  /* fprintf(stdout,"%s\n", mess); */
   
-  if (self->previous)
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSR free memory has a predecessor");
+  /* if (self->previous) */
+  /*   TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSR free memory has a predecessor"); */
     
-  fprintf(stdout, "|================|\n");
-  fprintf(stdout, "|    address     |\n");
-  fprintf(stdout, "|    nb_elem     |\n");
-  fprintf(stdout, "|    offset      |\n");
-  fprintf(stdout, "|================|\n\n");
-  fprintf(stdout, "|================|\n");
+  /* fprintf(stdout, "|================|\n"); */
+  /* fprintf(stdout, "|    address     |\n"); */
+  /* fprintf(stdout, "|    nb_elem     |\n"); */
+  /* fprintf(stdout, "|    offset      |\n"); */
+  /* fprintf(stdout, "|================|\n\n"); */
+  /* fprintf(stdout, "|================|\n"); */
   
-  while(self)
-    {
-      fprintf(stdout, "| %14p |\n", &self);
-      fprintf(stdout, "|  %11ld   |\n", self->nb_elem);
-      fprintf(stdout, "|  %11ld   |\n", self->offset);
-      fprintf(stdout, "|================|\n");
+  /* while(self) */
+  /*   { */
+  /*     fprintf(stdout, "| %14p |\n", &self); */
+  /*     fprintf(stdout, "|  %11ld   |\n", self->nb_elem); */
+  /*     fprintf(stdout, "|  %11ld   |\n", self->offset); */
+  /*     fprintf(stdout, "|================|\n"); */
       
-      if (self->next)
-	if (self->next->previous != self)
-	  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the free memory's next cell, has a predecessor different from CSC");
+  /*     if (self->next) */
+  /* 	if (self->next->previous != self) */
+  /* 	  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the free memory's next cell, has a predecessor different from CSC"); */
       
-      self = self->next;
-    }
+  /*     self = self->next; */
+  /*   } */
 }
 
 
@@ -1344,15 +1529,15 @@ TP_check_current_counters(TP_schur_matrix self,
   for( pivot = 0; pivot < nb_perms; pivot++) 
     {
       int col = col_perm[pivot];
-      struct CSC_struct *CSC = &self->CSC[col];
-      int *rows              = self->row + CSC->offset;
+      CSC_struct *CSC = &self->CSC[col];
+      int *rows              = CSC->row;
       int nb_elem            = CSC->nb_elem;
       for( i = 0; i < nb_elem; i++) 
 	_row_count[rows[i]]++;
 
       int row = row_perm[pivot];
-      struct CSR_struct *CSR = &self->CSR[row];
-      int *cols              = self->col + CSR->offset;
+      CSR_struct *CSR = &self->CSR[row];
+      int *cols              = CSR->col;
       nb_elem                = CSR->nb_elem;
       for( i = 0; i < nb_elem; i++) 
 	_col_count[cols[i]]++;

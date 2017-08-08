@@ -27,9 +27,9 @@ get_candidates(TP_schur_matrix matrix,
 
   for(i = first_col; i < last_col; i++)
     {
-      struct CSC_struct *CSC = &matrix->CSC[i];
-      int *rows       = matrix->row + CSC->offset;
-      double *vals    = matrix->val + CSC->offset;
+      CSC_struct *CSC  = &matrix->CSC[i];
+      int *rows       = CSC->row;
+      double *vals    = CSC->val;
       int col_nb_elem = CSC->nb_elem;
       double col_max  = CSC->col_max;
 
@@ -219,8 +219,8 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
     cell->next   = tmp;
   }
 
-  update_counter(set->cols_count, matrix->col + matrix->CSR[cell->row].offset, matrix->CSR[cell->row].nb_elem, set->base);
-  update_counter(set->rows_count, matrix->row + matrix->CSC[cell->col].offset, matrix->CSC[cell->col].nb_elem, set->base);
+  update_counter(set->cols_count, matrix->CSR[cell->row].col, matrix->CSR[cell->row].nb_elem, set->base);
+  update_counter(set->rows_count, matrix->CSC[cell->col].row, matrix->CSC[cell->col].nb_elem, set->base);
   set->nb_elem++;
 
   /* int  i, n = matrix->n; */
