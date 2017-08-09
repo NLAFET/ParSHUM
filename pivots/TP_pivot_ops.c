@@ -153,7 +153,7 @@ TP_pivot_list
 merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix, TP_solver solver)
 {
   TP_pivot_list merged_list;
-#pragma omp parallel shared(self, merged_list)
+#pragma omp parallel shared(self, merged_list) num_threads(solver->exe_parms->nb_threads)
   {
 #pragma omp single
     {

@@ -271,208 +271,6 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
     TP_print_GB(self, "GB: after allocating");
 }
 
-/* free_space */
-/* add_unused_CSC(free_space unused_space, long nb_elem, long offset) */
-/* { */
-/*   free_space self = malloc(sizeof(*self)); */
-/*   assert(nb_elem > 0); */
-
-/*   self->nb_elem  = nb_elem; */
-/*   self->offset   = offset; */
-/*   self->next     = unused_space; */
-/*   if(unused_space) */
-/*     unused_space->previous = self; */
-/*   self->previous = NULL; */
-
-/*   return self; */
-/* } */
-
-/* free_space */
-/* add_unused_CSR(free_space unused_space, long nb_elem, long offset) */
-/* { */
-/*   free_space self = malloc(sizeof(*self)); */
-/*   assert(nb_elem > 0); */
-
-/*   self->nb_elem  = nb_elem; */
-/*   self->offset   = offset; */
-/*   self->next     = unused_space; */
-/*   if(unused_space) */
-/*     unused_space->previous = self; */
-/*   self->previous = NULL; */
-
-/*   return self; */
-/* } */
-
-/* free_space */
-/* TP_schur_matrix_realloc_CSC(free_space unused, double **val, */
-/* 			    int **row, long *allocated) */
-/* { */
-/*   long allocating = *allocated * 2; */
-
-/*   *val = realloc((void *) *val, allocating * sizeof(**val)); */
-/*   *row = realloc((void *) *row, allocating * sizeof(**row)); */
-
-/*   unused = add_unused_CSC (unused, *allocated, *allocated); */
-
-/*   *allocated  = allocating; */
-
-/*   return unused; */
-/* } */
-
-/* free_space */
-/* TP_schur_matrix_realloc_CSR(free_space unused, int **col, */
-/* 			    long *allocated) */
-/* { */
-/*   long allocating = *allocated * 2; */
-
-/*   *col = realloc((void *) *col, allocating * sizeof(**col)); */
-
-/*   unused = add_unused_CSR(unused, *allocated, *allocated); */
-/*   *allocated  = allocating; */
-
-/*   return unused; */
-/* } */
-
-
-/* free_space */
-/* CSC_find_free_memory(free_space unused_CSC,  struct CSC_struct *CSC, */
-/* 		     long nb_elem, double **vals, int **rows, long *allocated_CSC) */
-/* { */
-/*   free_space tmp = unused_CSC; */
-
-/*   if (CSC->nb_free > 0 ) */
-/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"acquiring new CSR memory to non-full memory "); */
-
-/*   if (CSC->nb_elem >= nb_elem ) */
-/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the acquired CSR memory is smaller or equal then the current one"); */
-
-/*   while(tmp) { */
-/*     if (tmp->nb_elem  < nb_elem)  */
-/*       tmp = tmp->next; */
-/*     else  */
-/*       break; */
-/*   } */
-
-/*   if (!tmp) {  */
-/*     tmp =  */
-/*     /\* UNUSED_CSC IS THE RETURN VLUE (THE START OF THE FREE_SPACE CHAIN) *\/ */
-/*       unused_CSC =  */
-/*       TP_schur_matrix_realloc_CSC(unused_CSC, vals, rows, allocated_CSC); */
-/*   } */
-
-/*   if (CSC->nb_elem) { */
-/*     double *CSC_vals  = *vals + CSC->offset; */
-/*     double *free_vals = *vals + tmp->offset; */
-/*     int *CSC_rows     = *rows + CSC->offset; */
-/*     int *free_rows    = *rows + tmp->offset; */
-    
-/*     memcpy(free_vals, CSC_vals, (size_t) CSC->nb_elem * sizeof(**vals)); */
-/*     memcpy(free_rows, CSC_rows, (size_t) CSC->nb_elem * sizeof(**rows)); */
-/*   } */
-
-/*   CSC->offset   = tmp->offset; */
-/*   CSC->nb_free  = nb_elem - CSC->nb_elem; */
-/*   tmp->offset  += nb_elem; */
-/*   tmp->nb_elem -= nb_elem; */
-
-/*   /\* is we need to destroy the tmp *\/ */
-/*   if (!tmp->nb_elem)  */
-/*     { */
-/*       /\* tmp == unused_CSC -> need to update  unused CSC *\/ */
-/*       if (tmp == unused_CSC)  */
-/* 	{ */
-/* 	  if (tmp->next) { */
-/* 	    /\* if it is not the only one, easy *\/ */
-/* 	    unused_CSC = tmp->next; */
-/* 	    unused_CSC->previous = NULL; */
-/* 	  } else  { */
-/* 	    /\* if not, there is no more memory, so realocate , allocate more memory  *\/ */
-/* 	    unused_CSC = TP_schur_matrix_realloc_CSC(NULL, vals, rows, allocated_CSC); */
-/* 	  } */
-/* 	} else  */
-/* 	{ */
-/* 	  if ( tmp->previous )  */
-/* 	    tmp->previous->next = tmp->next; */
-/* 	  if ( tmp->next )  */
-/* 	    tmp->next->previous = tmp->previous; */
-/* 	}       */
-/*       free(tmp); */
-/*     }  */
-
-/*   if (!unused_CSC)  */
-/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"something strange is happening in S (no more memory  apperently)"); */
-
-/*   return unused_CSC; */
-/* } */
-
-/* free_space */
-/* CSR_find_free_memory(free_space unused_CSR,  struct CSR_struct *CSR, */
-/* 		     long nb_elem, int **cols, long *allocated_CSR) */
-/* { */
-/*   free_space tmp = unused_CSR; */
-
-/*   if (CSR->nb_free > 0 ) */
-/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"acquiring new CSR memory to non-full memory "); */
-
-/*   if (CSR->nb_elem > nb_elem ) */
-/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the acquired CSR memory is smaller than the current one"); */
-
-/*   while(tmp)  */
-/*     if (tmp->nb_elem  < nb_elem)  */
-/*       tmp = tmp->next; */
-/*     else  */
-/*       break; */
-
-/*   if (!tmp) */
-/*     tmp =  */
-/*     /\* UNUSED_CSR IS THE RETURN VLUE (THE START OF THE FREE_SPACE CHAIN)  *\/ */
-/*       unused_CSR =  */
-/*       TP_schur_matrix_realloc_CSR(unused_CSR, cols, allocated_CSR); */
-
-/*   if (nb_elem) { */
-/*     int *CSR_cols = *cols + CSR->offset; */
-/*     int *tmp_cols = *cols + tmp->offset; */
-
-/*     memcpy(tmp_cols, CSR_cols, (size_t) CSR->nb_elem * sizeof(**cols)); */
-/*   } */
-
-/*   CSR->offset   = tmp->offset; */
-/*   CSR->nb_free  = nb_elem - CSR->nb_elem; */
-/*   tmp->offset  += nb_elem; */
-/*   tmp->nb_elem -= nb_elem; */
-  
-/*   /\* is we need to destroy the tmp *\/ */
-/*   if (!tmp->nb_elem)  */
-/*     { */
-/*       /\* tmp == unused_CSR -> need just an update  on unused CSR *\/ */
-/*       if (tmp == unused_CSR)  */
-/* 	{ */
-/* 	  if (tmp->next) { */
-/* 	    /\* if it is not the only one, easy *\/ */
-/* 	    unused_CSR = tmp->next; */
-/* 	    unused_CSR->previous = NULL; */
-/* 	  } else { */
-/* 	    /\* if not, there is no more memory, so realocate  *\/ */
-/* 	    unused_CSR = TP_schur_matrix_realloc_CSR(NULL, cols, allocated_CSR); */
-/* 	  } */
-/* 	} else  */
-/* 	{ */
-/* 	  /\* just adapt around tmp *\/ */
-/* 	  if ( tmp->previous )  */
-/* 	    tmp->previous->next = tmp->next; */
-/* 	  if ( tmp->next )  */
-/* 	    tmp->next->previous = tmp->previous; */
-/* 	} */
-      
-/*       free(tmp); */
-/*     }  */
-
-/*   if (!unused_CSR)  */
-/*     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"something strange is happening in S (no more memory  apperently)"); */
-
-/*   return unused_CSR; */
-/* } */
-
 void 
 TP_schur_matrix_init_ptr(TP_schur_matrix self, long *col_ptr, int *row_sizes)
 {
@@ -667,62 +465,64 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_matrix L, TP_matrix D,
   D->n += nb_pivots;
 
 #pragma omp parallel num_threads(nb_threads) private(step)
-  for(step = 0; step < nb_steps; step++) 
-    {
-      int me =  omp_get_thread_num();
-      int current_pivot = step * nb_threads + me;
-      if ( current_pivot < nb_pivots)  {
- 	CSC_struct *CSC;
-	int i, nb_elem, L_current_col, row, col;
-	int *rows, *L_rows;
-	double *vals, *L_vals, pivot_val;
-	
-	col     = col_perm[current_pivot];
-	row     = row_perm[current_pivot];
-	CSC     = &self->CSC[col];
-	nb_elem = CSC->nb_elem;
-	vals    = CSC->val;
-	rows    = CSC->row;
-	L_current_col = L->col_ptr[L_input_size + current_pivot];
-	L_rows        = L->row;
-	L_vals        = L->val;
-	
-	if ( L->nnz + nb_elem > L->allocated ) {
-	  TP_matrix_realloc(L);
+  {
+    long S_nnz = 0;
+    for(step = 0; step < nb_steps; step++) 
+      {
+	int me =  omp_get_thread_num();
+	int current_pivot = step * nb_threads + me;
+	if ( current_pivot < nb_pivots)  {
+	  CSC_struct *CSC;
+	  int i, nb_elem, L_current_col, row, col;
+	  int *rows, *L_rows;
+	  double *vals, *L_vals, pivot_val;
+	  
+	  col     = col_perm[current_pivot];
+	  row     = row_perm[current_pivot];
+	  CSC     = &self->CSC[col];
+	  nb_elem = CSC->nb_elem;
+	  vals    = CSC->val;
+	  rows    = CSC->row;
+	  L_current_col = L->col_ptr[L_input_size + current_pivot];
 	  L_rows        = L->row;
 	  L_vals        = L->val;
-	}
-	
-	for(i = 0; i < nb_elem; i++)
-	  {
-	    if ( rows[i] != row) {
-	      L_rows[L_current_col] = rows[i];
-	      L_vals[L_current_col] = vals[i];
-	      L_current_col++;
-	    } else {
-	      D->val[D_input_size + current_pivot] = pivot_val = vals[i];
-	    }
-	    pthread_mutex_lock(&self->row_locks[rows[i]]);
-	    delete_entry_from_CSR(self, col, rows[i]);
-	    pthread_mutex_unlock(&self->row_locks[rows[i]]);
+	  
+	  if ( L->nnz + nb_elem > L->allocated ) {
+	    TP_matrix_realloc(L);
+	    L_rows        = L->row;
+	    L_vals        = L->val;
 	  }
-	
-	/* TODO: we could split the previopud for in two fors: one before we found the pivot, update the begining, and then do the rest */
-	/* TODO do the delete_entru_from_CSR  in a seperate loop maybe better???  try that option */
-	for( i = L->col_ptr[L_input_size + current_pivot]; i < L->col_ptr[L_input_size + current_pivot + 1]; i++)
-	  L_vals[i] /= pivot_val;
-	
-	/* TODO: recycle the col's memory */
-	CSC->nb_elem = 0;
-	CSC->nb_free = 0;
-	self->nnz   -= nb_elem;
+	  
+	  for(i = 0; i < nb_elem; i++)
+	    {
+	      if ( rows[i] != row) {
+		L_rows[L_current_col] = rows[i];
+		L_vals[L_current_col] = vals[i];
+		L_current_col++;
+	      } else {
+		D->val[D_input_size + current_pivot] = pivot_val = vals[i];
+	      }
+	      pthread_mutex_lock(&self->row_locks[rows[i]]);
+	      delete_entry_from_CSR(self, col, rows[i]);
+	      pthread_mutex_unlock(&self->row_locks[rows[i]]);
+	    }
+	  
+	  /* TODO: we could split the previopud for in two fors: one before we found the pivot, update the begining, and then do the rest */
+	  /* TODO do the delete_entru_from_CSR  in a seperate loop maybe better???  try that option */
+	  for( i = L->col_ptr[L_input_size + current_pivot]; i < L->col_ptr[L_input_size + current_pivot + 1]; i++)
+	    L_vals[i] /= pivot_val;
+	  
+	  /* TODO: recycle the col's memory */
+	  CSC->nb_elem = 0;
+	  CSC->nb_free = 0;
+	  S_nnz += nb_elem;
+	}
       }
-    }
+#pragma omp atomic
+    self->nnz   -= S_nnz;
+  }
 }
 
-/* NAREDNO: instead of going row by row, go col by col using rows struct, 
-   construct the new part of U, save the coresponding colums of L 
-   and the cost of each col for the spmm */
 void
 TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L, 
 			 int nb_pivots, int *row_perm,
@@ -732,17 +532,18 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
   int nb_threads = S->nb_threads;
   int indices[nb_threads+1];
   int nnz_part = U_new_nnz / nb_threads;
+  long *L_col_ptr = L->col_ptr;
   
-  if ( U_new_n <= nb_threads) {
-    nb_threads = U_new_n;
-    for( i = 0; i < nb_threads; i++)
+  if ( nb_pivots <= nb_threads) {
+    nb_threads = nb_pivots;
+    for( i = 0; i <= nb_threads; i++)
       indices[i] = i;
   } else { 
     *indices = 0;
     for ( i = 1, j = 0; i < nb_threads; i++) 
       {
 	int part = 0;
-	while ( part < nnz_part )
+	while ( part < nnz_part &&  j < nb_pivots )
 	  part += S->CSR[row_perm[j++]].nb_elem;
 	indices[i] = j;
       }
@@ -759,14 +560,14 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
       TP_U_col_realloc(u_col);
   }
   
-/* #pragma omp parallel num_threads(nb_threads) private(pivot) */
-/*   { */
-/*     int me =  omp_get_thread_num(); */
-    long *L_col_ptr = L->col_ptr;
-    for( pivot = 0; pivot < nb_pivots; pivot++)
+#pragma omp parallel num_threads(nb_threads) private(pivot, i)
+  {
+    int me =  omp_get_thread_num();
+    long S_nnz = 0;
+    for( pivot = indices[me]; pivot < indices[me+1]; pivot++)
       {
 	int row = row_perm[pivot];
-	
+
 	CSR_struct *CSR = &S->CSR[row];
 	int row_nb_elem = CSR->nb_elem;
 	int *cols = CSR->col;
@@ -774,20 +575,20 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
 	for( i = 0; i < row_nb_elem; i++) {
 	  int current_col = cols[i];
 	  U_col  *u_col = &U->col[current_col];
-	  /* int indice = __atomic_fetch_add(&u_col->nb_elem, 1, __ATOMIC_SEQ_CST); */
+	  int indice = __atomic_fetch_add(&u_col->nb_elem, 1, __ATOMIC_SEQ_CST);
 
-	  u_col->row[u_col->nb_elem++] = row;
-	  u_col->cost += L_col_ptr[row+1] - L_col_ptr[row];
+	  u_col->row[indice] = row;
 	}
 	
-	/* todo: recycle the row's memory */
 	CSR->nb_elem = 0;
 	CSR->nb_free = 0;
-	S->nnz      -= row_nb_elem;
+	S_nnz    += row_nb_elem;
       }
-  /* } */
+#pragma omp atomic
+    S->nnz -= S_nnz;
+  }
 }
-  
+
 /* NAREDNO: VIDI SO KE BIDE NAREDNATA STRUKTURA I NAPRAVI CHECK SO NEA.
  args: Schur i structurata i rows struct  */
 
@@ -865,23 +666,6 @@ TP_schur_matrix_insert_entry(TP_schur_matrix self, int row, int col, double val)
   CSC->nb_free--;
   CSR->nb_free--;
   self->nnz++;
-}
-
-void
-TP_schur_matrix_update_colmax(TP_schur_matrix self)
-{
-  int n = self->n, nb_threads = self->nb_threads;
-  int nb_steps = ( n + nb_threads - 1 ) / nb_threads, step;
-
-/* /\* #pragma omp parallel num_threads(nb_threads) private(step) *\/ */
-/* /\*   { *\/ */
-/* /\*     int me =  omp_get_thread_num(); *\/ */
-    for( step = 0; step < n; step++) {
-      int my_col = step; // * nb_threads + me;
-      /* if (my_col < n) */
-      self->CSC[my_col].col_max = get_max_double(self->CSC[my_col].val, self->CSC[my_col].nb_elem);
-    }
-/*   /\* } *\/ */
 }
 
 void
@@ -982,10 +766,9 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
           }
         }
       }
-    
+      CSC->col_max = get_max_double(CSC->val, CSC->nb_elem);
     }
 
-  TP_schur_matrix_update_colmax(S);
 }
 
 

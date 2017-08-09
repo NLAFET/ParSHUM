@@ -5,7 +5,7 @@
 #include <string.h>
 #include <signal.h>
 
-#define GDB_BREAK  raise(SIGINT)
+#define GDB_BREAK  /* raise(SIGINT) */
 
 #include "TP_auxiliary.h"
 
@@ -58,7 +58,6 @@ update_counter(int *counter, int *index, int n, int base)
       counter[tmp] = base;
     else
       counter[tmp]++;
-    /* counter[tmp] =  ? base : counter[tmp]++; */
   }
 }
 

@@ -13,7 +13,6 @@ struct _U_col {
   int nb_elem;
   int allocated;
   int cost;
-  pthread_mutex_t mutex;
 
   double *val;
   int *row;
