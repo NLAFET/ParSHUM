@@ -30,7 +30,7 @@ struct _TP_matrix {
 TP_matrix TP_matrix_create();
 TP_matrix TP_matrix_create_random_matrix(int m, int n);
 
-int       read_rutherford_boeing(TP_matrix self, const char*filename);
+/* int       read_rutherford_boeing(TP_matrix self, const char*filename); */
 void      TP_read_mtl_file(TP_matrix self, const char*filename);
 void      TP_matrix_allocate(TP_matrix self, int n, int m, long nnz, double extra_space, TP_matrix_type type);
 void      TP_matrix_copy(TP_matrix src, TP_matrix dest);

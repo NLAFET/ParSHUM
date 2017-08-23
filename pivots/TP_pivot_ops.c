@@ -107,7 +107,7 @@ get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col,
   for(i = 1; i < nb_threads; i++) 
     best_marko = (best_marko > candidates->best_marko[i]) ? candidates->best_marko[i] : best_marko;
   best_marko = (best_marko == 0) ? 1 : best_marko;
-
+  printf("best marko = %d \t", best_marko);
 #pragma omp parallel num_threads(nb_threads)
   {
 #pragma omp single
@@ -238,6 +238,129 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
   return NULL;
 }
 
+TP_pivot_cell
+get_independent_cells(TP_pivot_cell cell, int *cols_count, int *rows_count, int base)
+{
+  TP_pivot_cell first = NULL, last;
+
+  while (cell)
+    {
+      TP_pivot_cell tmp = cell->next;
+      if( cols_count[cell->col] >= base ||
+	  rows_count[cell->row] >= base )
+	{
+	  free(cell);
+	}
+      else 
+	{ 
+	  if ( !first )  {
+	    first = cell;
+	    last = cell;
+	  } else {
+	    last->next = cell;
+	    last = cell;
+	  }
+	  last->next = NULL;
+	}
+      cell = tmp;
+    }
+  return first;
+}
+
+/* TP_pivot_cell */
+/* TP_cells_merge(TP_pivot_cell first, TP_pivot_cell second) */
+/* { */
+/*   if (!first && !second)  */
+/*     return NULL; */
+/*   if (!first)  */
+/*     return second; */
+/*   if(!second) */
+/*     return first; */
+
+/*   while ( second )  */
+/*     { */
+/*       TP_pivot_cell cell = second; */
+/*       TP_pivot_cell cell1, cell2; */
+/*       second = second->next; */
+
+/*       if ( first->marko > cell->marko) { */
+/* 	cell->next = first; */
+/* 	first = cell; */
+/* 	continue; */
+/*       } */
+/*       cell1 = first; */
+/*       cell2 = first->next; */
+/*       while ( cell2 ) */
+/* 	{ */
+/* 	  if( cell2->marko > cell->marko ) */
+/* 	    break; */
+/* 	  cell1 = cell2; */
+/* 	  cell2 = cell2->next; */
+/* 	}  */
+/*       cell1->next = cell; */
+/*       cell->next = cell2; */
+/*     } */
+
+/*   return first; */
+/* } */
+
+TP_pivot_cell
+TP_cells_merge(TP_pivot_cell first, TP_pivot_cell second)
+{
+  TP_pivot_cell res, cells;
+  if (!first && !second) 
+    return NULL;
+  if (!first) 
+    return second;
+  if (!second) 
+    return first;
+  if (first->marko <= second->marko) {
+    res = cells = first;
+    first = first->next;
+  } else {
+    res = cells = second;
+    second = second->next;
+  }
+  cells->next = NULL;
+  
+  while (first && second)
+    {
+      if (first->marko <= second->marko) {
+	cells->next = first; 
+	while (first->next && first->marko <= second->marko) 
+	  first = first->next;
+	cells = first;
+	first = first->next;
+      } else {
+	cells->next = second;
+	while (second->next && second->marko <= first->marko) 
+	  second = second->next;
+	cells = second;
+	second = second->next;
+      }
+    }
+
+  if (!first) 
+    cells->next = second;
+  if (!second) 
+    cells->next = first;
+  
+  return res;
+}
+
+int
+update_both(TP_pivot_cell cell, TP_schur_matrix matrix, int *cols_count, int *rows_count, int base)
+{
+  int cells = 0;
+  while ( cell)
+    {
+      update_counter(cols_count, matrix->CSR[cell->row].col, matrix->CSR[cell->row].nb_elem, base);
+      update_counter(rows_count, matrix->CSC[cell->col].row, matrix->CSC[cell->col].nb_elem, base);
+      cells++;
+      cell = cell->next;
+    }
+  return cells;
+}
 
 TP_pivot_set
 merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix, TP_solver solver)
@@ -262,18 +385,21 @@ merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix, TP_solver solver)
   cells_to_merge = small->cells;
   small->cells   = NULL;
 
-  while(cells_to_merge)
-    {
-      TP_pivot_cell cell = cells_to_merge;
-      cells_to_merge = cells_to_merge->next;
-      cell->next = NULL;
+  cells_to_merge = get_independent_cells(cells_to_merge, large->cols_count, large->rows_count, large->base);
+  large->nb_elem += update_both(cells_to_merge, matrix, large->cols_count, large->rows_count, large->base);
+  large->cells = TP_cells_merge(large->cells, cells_to_merge);
 
-      if ( (add_cell_to_sorted_set(large, cell, matrix)) )
-	TP_pivot_cell_destroy(cell);
-    }
+  /* while(cells_to_merge) */
+  /*   { */
+  /*     TP_pivot_cell cell = cells_to_merge; */
+  /*     cells_to_merge = cells_to_merge->next; */
+  /*     cell->next = NULL; */
+
+  /*     if ( (add_cell_to_sorted_set(large, cell, matrix)) ) */
+  /* 	TP_pivot_cell_destroy(cell); */
+  /*   } */
 
   TP_pivot_set_destroy(small, solver);
-  self = large;
   large->next = NULL;
   return large;
 }

@@ -495,9 +495,9 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
  
   file = fopen(filename, "w+");
        
-  if (!strcmp(file_ext, ".rb")) 
-    read_rutherford_boeing(A, exe_parms->matrix_file);
-  else if (!strcmp(file_ext, ".mtl"))
+  /* if (!strcmp(file_ext, ".rb"))  */
+  /*   read_rutherford_boeing(A, exe_parms->matrix_file); */
+  if (!strcmp(file_ext, ".mtl"))
     TP_read_mtl_file(A, exe_parms->matrix_file);
   else 
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unrecognized file type format");
@@ -705,9 +705,9 @@ TP_solver_read_matrix(TP_solver self)
   char *file_ext = strrchr(self->exe_parms->matrix_file, '.');
   self->A        = TP_matrix_create();
   
-  if (!strcmp(file_ext, ".rb")) 
-    read_rutherford_boeing(self->A, self->exe_parms->matrix_file);
-  else if (!strcmp(file_ext, ".mtl"))
+  /* if (!strcmp(file_ext, ".rb"))  */
+  /*   read_rutherford_boeing(self->A, self->exe_parms->matrix_file); */
+  if (!strcmp(file_ext, ".mtl"))
     TP_read_mtl_file(self->A, self->exe_parms->matrix_file);
   else 
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsupported matrix file");
@@ -759,7 +759,7 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
 	self->U_struct = realloc(self->U_struct, self->allocated_U_struct * sizeof(*self->U_struct));
       }
   }
-
+  printf("found %d pivots\n", new_pivots);
   self->n_U_structs = k;
   self->nnz_U_structs = nnz;
 
@@ -939,6 +939,7 @@ TP_solver_factorize(TP_solver self)
 				   exe_parms->min_pivot_per_steps,
 				   self->debug, verbose) )
     { 
+      
        TP_verbose_per_step  step = TP_verbose_step_start(verbose);
        TP_verbose_start_timing(&step->timing_step);
        TP_verbose_start_timing(&step->timing_pivot_search);

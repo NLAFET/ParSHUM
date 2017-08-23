@@ -76,14 +76,14 @@ get_next_merging_set(TP_pivot_list self)
    sets in the list of sets, but does not check if they are 
    indpenedent or no. After this the funtion the  
    get_independent_pivots should be called */
-/* TP_pivot_set  */
+/* TP_pivot_set */
 /* merge_sorted_sets(TP_pivot_set self) */
 /* { */
 /*   TP_pivot_cell cell1, cell2, merged; */
 
-/*   if (!self )  */
+/*   if (!self ) */
 /*     return NULL; */
-/*   if (!self->next  )  */
+/*   if (!self->next  ) */
 /*     return self; */
 
   
@@ -92,37 +92,37 @@ get_next_merging_set(TP_pivot_list self)
   
 /*   // init self->cells to the start of the new merged set */
 /*   // and merged is used to add new elements */
-/*   if (cell1->marko <= cell2->marko)  */
+/*   if (cell1->marko <= cell2->marko) */
 /*     { */
 /*       self->cells = merged = cell1; */
 /*       cell1 = cell1->next; */
 /*     } */
-/*   else  */
+/*   else */
 /*     { */
 /*       self->cells = merged = cell2; */
 /*       cell2 = cell2->next; */
 /*     } */
   
-/*   while ( cell1 && cell2)  */
+/*   while ( cell1 && cell2) */
 /*     { */
 /*       TP_pivot_cell  new_cell; */
-/*       if (cell1->marko < cell2->marko)  */
+/*       if (cell1->marko < cell2->marko) */
 /* 	{ */
 /* 	  new_cell = cell1; */
 /* 	  cell1 = cell1->next; */
 /* 	} */
-/*       else  */
+/*       else */
 /* 	{ */
 /* 	  new_cell = cell2; */
 /* 	  cell2 = cell2->next; */
 /* 	} */
-/*       merged->next = new_cell;  */
-/*       merged = new_cell;  */
+/*       merged->next = new_cell; */
+/*       merged = new_cell; */
 /*     } */
   
-/*   if (!cell1)  */
-/*     merged->next = cell2;  */
-/*   if (!cell2)  */
+/*   if (!cell1) */
+/*     merged->next = cell2; */
+/*   if (!cell2) */
 /*     merged->next = cell1; */
 
 /*   free(self->next); */

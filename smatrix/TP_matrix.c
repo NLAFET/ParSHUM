@@ -4,8 +4,8 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include "spral_matrix_util.h"
-#include "spral_rutherford_boeing.h"
+/* #include "spral_matrix_util.h" */
+/* #include "spral_rutherford_boeing.h" */
 
 #include "TP_enum.h"
 #include "TP_auxiliary.h"
@@ -22,27 +22,26 @@ TP_matrix_create()
   return self;
 }
 
+/* int */
+/* read_rutherford_boeing(TP_matrix self, const char*filename) */
+/* { */
+/*   int retval = 0;  */
+/*   enum spral_matrix_type matrix_type; */
+/*   struct spral_rb_read_options options; */
 
-int
-read_rutherford_boeing(TP_matrix self, const char*filename)
-{
-  int retval = 0; 
-  enum spral_matrix_type matrix_type;
-  struct spral_rb_read_options options;
+/*   spral_rb_default_read_options(&options); */
+/*   options.values = 4; */
 
-  spral_rb_default_read_options(&options);
-  options.values = 4;
+/*   spral_rb_read(filename, &self->handle, &matrix_type, &self->m, &self->n, &self->col_ptr, */
+/* 		&self->row, &self->val, &options, NULL, NULL, NULL); */
+/*   self->type = TP_Rutherford_matrix; */
 
-  spral_rb_read(filename, &self->handle, &matrix_type, &self->m, &self->n, &self->col_ptr,
-		&self->row, &self->val, &options, NULL, NULL, NULL);
-  self->type = TP_Rutherford_matrix;
+/*   self->nnz       = self->col_ptr[self->n];   */
+/*   self->allocated = self->col_ptr[self->n];   */
+/*   self->type      = TP_Rutherford_matrix; */
 
-  self->nnz       = self->col_ptr[self->n];  
-  self->allocated = self->col_ptr[self->n];  
-  self->type      = TP_Rutherford_matrix;
-
-  return retval;
-}
+/*   return retval; */
+/* } */
 
 void
 TP_read_mtl_file(TP_matrix self, const char*filename)
@@ -534,7 +533,7 @@ TP_matrix_destroy(TP_matrix self)
       return;
 
     case TP_Rutherford_matrix:
-      spral_rb_free_handle(&self->handle);
+      /* spral_rb_free_handle(&self->handle); */
        free(self);
       return;
     }
