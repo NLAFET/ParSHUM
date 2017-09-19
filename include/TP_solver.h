@@ -54,6 +54,8 @@ struct _TP_solver {
   int *random_col;
   int *previous_pivots;
 
+  int nb_row_singletons;
+  int nb_col_singletons;
   int found_pivots;
   int done_pivots;
   int dense_pivots;

@@ -2,6 +2,9 @@
 #define _TP_AUXILIARY_H 
 
 #include <TP_enum.h>
+#include <signal.h>
+
+#define GDB_BREAK   raise(SIGINT)
 
 void  TP_fatal_error(const char *func, char *filename, const int line, const char *msg);
 void  TP_warning    (const char *func, char *filename, const int line, const char *msg);

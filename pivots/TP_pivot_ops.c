@@ -107,7 +107,7 @@ get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col,
   for(i = 1; i < nb_threads; i++) 
     best_marko = (best_marko > candidates->best_marko[i]) ? candidates->best_marko[i] : best_marko;
   best_marko = (best_marko == 0) ? 1 : best_marko;
-  printf("best marko = %d \t", best_marko);
+
 #pragma omp parallel num_threads(nb_threads)
   {
 #pragma omp single

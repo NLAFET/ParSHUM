@@ -19,8 +19,13 @@ main(int argc, char **argv)
   int i;
   long j;
   FILE *file;
+  char *file_ext = strrchr(argv[1], '.');
 
-  TP_read_mtl_file(A, argv[1]);
+  if (!strcmp(file_ext, ".mtl"))
+    TP_read_mtl_file(A, argv[1]);
+  else 
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the input matrix should be in mtl format");
+
   file = fopen(argv[2], "r");
   if (!file)
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"error while opening the  matrix file");

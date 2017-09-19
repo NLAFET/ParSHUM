@@ -3,9 +3,6 @@
 #include <math.h>
 #include <libgen.h>
 #include <string.h>
-#include <signal.h>
-
-#define GDB_BREAK  /* raise(SIGINT) */
 
 #include "TP_auxiliary.h"
 
@@ -13,6 +10,7 @@ void
 TP_fatal_error(const char *func, char *filename, const int line, const char *msg)
 {
   printf("TP_FATAL ERROR in %s(%s:%d) \n%s\n", func, basename(filename), line, msg);
+  GDB_BREAK;
   abort();
 }
 

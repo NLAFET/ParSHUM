@@ -64,7 +64,6 @@ TP_solver_dealloc(TP_solver self)
   free(self);
 }
 
-
 int
 check_TP_with_plasma_perm(int argc, char **argv)
 {
@@ -495,8 +494,8 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
  
   file = fopen(filename, "w+");
        
-  /* if (!strcmp(file_ext, ".rb"))  */
-  /*   read_rutherford_boeing(A, exe_parms->matrix_file); */
+  if (!strcmp(file_ext, ".rb"))
+    read_rutherford_boeing(A, exe_parms->matrix_file);
   if (!strcmp(file_ext, ".mtl"))
     TP_read_mtl_file(A, exe_parms->matrix_file);
   else 
@@ -705,9 +704,9 @@ TP_solver_read_matrix(TP_solver self)
   char *file_ext = strrchr(self->exe_parms->matrix_file, '.');
   self->A        = TP_matrix_create();
   
-  /* if (!strcmp(file_ext, ".rb"))  */
-  /*   read_rutherford_boeing(self->A, self->exe_parms->matrix_file); */
-  if (!strcmp(file_ext, ".mtl"))
+  if (!strcmp(file_ext, ".rb"))
+    read_rutherford_boeing(self->A, self->exe_parms->matrix_file);
+  else if (!strcmp(file_ext, ".mtl")) 
     TP_read_mtl_file(self->A, self->exe_parms->matrix_file);
   else 
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsupported matrix file");
@@ -759,7 +758,6 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
 	self->U_struct = realloc(self->U_struct, self->allocated_U_struct * sizeof(*self->U_struct));
       }
   }
-  printf("found %d pivots\n", new_pivots);
   self->n_U_structs = k;
   self->nnz_U_structs = nnz;
 
@@ -786,9 +784,20 @@ TP_solver_find_pivot_set(TP_solver self)
   TP_pivot_list list;
   TP_exe_parms exe_parms = self->exe_parms;
   TP_verbose_per_step step = TP_verbose_get_step(self->verbose);
-  int nb_threads = self->exe_parms->nb_threads;
+  int nb_threads = self->exe_parms->nb_threads, nb_singeltons = 0;
+  
+  TP_schur_get_singletons(self->S, self->done_pivots,
+  			  &self->nb_col_singletons, &self->nb_row_singletons,
+  			  /* exe_parms->value_tol, */ self->col_perm, self->row_perm,
+  			  self->invr_col_perm, self->invr_row_perm);
+  nb_singeltons = self->nb_col_singletons + self->nb_row_singletons;
 
-
+  if ( nb_singeltons){
+    self->found_pivots += nb_singeltons ;
+    TP_verbose_update_pivots(self->verbose, nb_singeltons);
+    return;
+  }
+    
   if (self->debug & TP_CHECK_COUNTERS )
     TP_solver_check_counters(self);
 
@@ -831,50 +840,76 @@ TP_solver_update_matrix(TP_solver self)
   int nb_pivots = self->found_pivots - self->done_pivots;
   TP_verbose_per_step step = TP_verbose_get_step(self->verbose);
 
-  TP_verbose_start_timing(&step->timing_update_LD);
-  TP_schur_matrix_update_LD(S, L, D, &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], nb_pivots);
-  TP_verbose_stop_timing(&step->timing_update_LD);
-  if (self->debug & TP_CHECK_SCHUR_MEMORY )
-    TP_schur_matrix_memory_check(self->S);
-  if (self->debug & TP_CHECK_SCHUR_SYMETRY )
-    TP_schur_matrix_check_symetry(self->S);
-
-  TP_verbose_start_timing(&step->timing_update_U);
-  TP_schur_matrix_update_U(S, U, L, nb_pivots,  &self->row_perm[self->done_pivots],
-			   self->U_struct, self->n_U_structs, self->nnz_U_structs);
-  TP_verbose_stop_timing(&step->timing_update_U);
-  /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
-  /*   TP_schur_matrix_memory_check(self->S); */
-  /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
-  /*   TP_schur_matrix_check_symetry(self->S); */
-
-  TP_verbose_start_timing(&step->timing_update_S);
-  TP_schur_matrix_update_S(S, L, U, self->U_struct, self->n_U_structs, self->invr_row_perm);
-  TP_verbose_stop_timing(&step->timing_update_S);
-  if (self->debug & TP_CHECK_SCHUR_MEMORY )
-    TP_schur_matrix_memory_check(self->S);
-  if (self->debug & TP_CHECK_SCHUR_SYMETRY )
-    TP_schur_matrix_check_symetry(self->S);
-
+  if ( self->nb_row_singletons || self->nb_col_singletons)
+    {
+      
+      if ( self->nb_row_singletons) {
+	TP_verbose_start_timing(&step->timing_update_LD);
+	TP_schur_matrix_update_LD(S, L, D,
+				  &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots],
+				  self->nb_row_singletons);
+	TP_verbose_stop_timing(&step->timing_update_LD);
+      }
+      
+      if (self->nb_col_singletons) {
+	TP_verbose_start_timing(&step->timing_update_U);
+	TP_schur_matrix_update_U_singletons(S, U, D, L, self->nb_col_singletons,
+					    &self->col_perm[self->done_pivots + self->nb_row_singletons],
+					    &self->row_perm[self->done_pivots + self->nb_row_singletons]);
+      TP_verbose_stop_timing(&step->timing_update_U);
+      }
+    }
+  else
+    {
+      TP_verbose_start_timing(&step->timing_update_LD);
+      TP_schur_matrix_update_LD(S, L, D, &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], nb_pivots);
+      TP_verbose_stop_timing(&step->timing_update_LD);
+      /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
+      /* 	TP_schur_matrix_memory_check(self->S); */
+      /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
+      /* 	TP_schur_matrix_check_symetry(self->S); */
+      
+      TP_verbose_start_timing(&step->timing_update_U);
+      TP_schur_matrix_update_U(S, U, L, nb_pivots,  &self->row_perm[self->done_pivots],
+			       self->U_struct, self->n_U_structs, self->nnz_U_structs);
+      TP_verbose_stop_timing(&step->timing_update_U);
+      /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
+      /*   TP_schur_matrix_memory_check(self->S); */
+      /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
+      /*   TP_schur_matrix_check_symetry(self->S); */
+      
+      TP_verbose_start_timing(&step->timing_update_S);
+      TP_schur_matrix_update_S(S, L, U, self->U_struct, self->n_U_structs, self->invr_row_perm);
+      TP_verbose_stop_timing(&step->timing_update_S);
+      /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
+      /* 	TP_schur_matrix_memory_check(self->S); */
+      /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
+      /* 	TP_schur_matrix_check_symetry(self->S); */
+    }
   self->done_pivots = self->found_pivots;
-
-  if (self->debug & TP_CHECK_PIVOTS )
+  
+  if (self->debug & TP_CHECK_PIVOTS ) {
     TP_schur_matrix_check_pivots(self->S,
 				 self->row_perm,
 				 self->col_perm,
 				 self->invr_row_perm,
 				 self->invr_col_perm,
 				 self->done_pivots);
-
+  }
+  
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL)) {
     TP_schur_matrix_print(S, "S after update");
     TP_matrix_print(L, "L after update");
     TP_matrix_print(D, "D after update");
     TP_U_matrix_print(U, "U after update");
   }
-
-  if (self->debug & TP_CHECK_SCHUR_DOUBLES)
+  
+  if (self->debug & TP_CHECK_SCHUR_DOUBLES) { 
     TP_schur_check_doubles(S);
+  }
+  if (self->debug & TP_CHECK_SCHUR_SYMETRY ) {
+    TP_schur_matrix_check_symetry(self->S);
+  }
 }
 
 int
@@ -1125,7 +1160,7 @@ TP_solver_destroy(TP_solver self)
 
   if (self->debug & TP_CHECK_DENSE_W_TP_PERM) {
     TP_dense_2D_destroy(self->A_debug);
-  } else   {
+  } else {
     TP_matrix_destroy(self->A);
     TP_schur_matrix_destroy(self->S);
     TP_matrix_destroy(self->L);
@@ -1139,7 +1174,7 @@ TP_solver_destroy(TP_solver self)
     free(self->candidates->best_marko);
     free(self->candidates);
     
-    for(i = 0; i <  self->nb_counters; i++) {
+    for(i = 0; i < self->nb_counters; i++) {
       free(self->counters[i]->array);
       free(self->counters[i]->used_counters);
       free(self->counters[i]);

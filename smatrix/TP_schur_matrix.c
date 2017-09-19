@@ -20,8 +20,8 @@ struct _schur_mem {
   
   free_space *unused_CSC;
   free_space *unused_CSR;
-  pthread_mutex_t *CSC_lock;
-  pthread_mutex_t *CSR_lock;
+  omp_lock_t *CSC_lock;
+  omp_lock_t *CSR_lock;
 
   int nb_CSC;
   int nb_CSR;
@@ -60,10 +60,10 @@ TP_schur_mem_create(long nnz)
   *self->unused_CSR = calloc(1, sizeof(**self->unused_CSR));
   self->unused_CSR[0]->nb_elem = nnz;
 
-  self->CSC_lock = malloc(sizeof(*self->CSC_lock));
-  self->CSR_lock = malloc(sizeof(*self->CSR_lock));
-  pthread_mutex_init(self->CSC_lock, NULL);
-  pthread_mutex_init(self->CSR_lock, NULL);
+  /* self->CSC_lock = malloc(sizeof(*self->CSC_lock)); */
+  /* self->CSR_lock = malloc(sizeof(*self->CSR_lock)); */
+  /* pthread_mutex_init(self->CSC_lock, NULL); */
+  /* pthread_mutex_init(self->CSR_lock, NULL); */
   
   return self;
 }
@@ -101,8 +101,8 @@ TP_schur_mem_destroy(schur_mem self)
   free(self->col);
   free(self->unused_CSR);
 
-  free(self->CSC_lock);
-  free(self->CSR_lock);
+  /* free(self->CSC_lock); */
+  /* free(self->CSR_lock); */
   
   free(self);
 }
@@ -127,6 +127,7 @@ TP_schur_mem_realloc_CSC(schur_mem self)
   self->val[self->nb_CSC - 1] = malloc((size_t) size * sizeof(**self->val));
   self->row[self->nb_CSC - 1] = malloc((size_t) size * sizeof(**self->row));
 }
+
 
 /* TODO: nutex  and concurent execution */
 void
@@ -262,13 +263,50 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
 
   self->row_locks = malloc(m * sizeof(*self->row_locks));
   for( i = 0; i < m; i++)
-    pthread_mutex_init(&self->row_locks[i], NULL);
+    omp_init_lock(&self->row_locks[i]);
   self->col_locks = malloc(n * sizeof(*self->col_locks));
   for( i = 0; i < n; i++)
-    pthread_mutex_init(&self->col_locks[i], NULL);
+    omp_init_lock(&self->col_locks[i]);
 
   if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR))
     TP_print_GB(self, "GB: after allocating");
+}
+
+void
+TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, 
+			int *nb_col_singletons, int *nb_row_singletons,
+			int *col_perm, int *row_perm, 
+			int *invr_col_perm, int *invr_row_perm)
+{
+  int n = self->n, m = self->m, i;
+  int _nb_col_singletons = 0, _nb_row_singletons = 0;
+
+  for(i = 0; i < m; i++) 
+    if ( self->CSR[i].nb_elem == 1 &&
+	 self->CSC[self->CSR[i].col[0]].nb_elem > 0)
+      {
+	int col = self->CSR[i].col[0];
+	row_perm[done_pivots + _nb_row_singletons] = i;
+	invr_row_perm[i]  = _nb_row_singletons + done_pivots;
+	col_perm[done_pivots +_nb_row_singletons] = col;
+	invr_col_perm[col] = _nb_row_singletons + done_pivots;
+	_nb_row_singletons++;
+      }
+  done_pivots += _nb_row_singletons;
+
+  for(i = 0; i < n; i++)
+    if ( self->CSC[i].nb_elem == 1 && self->CSR[self->CSC[i].row[0]].nb_elem > 1)
+      {
+	int row = self->CSC[i].row[0];
+	col_perm[done_pivots + _nb_col_singletons] = i;
+	invr_col_perm[i]  = _nb_col_singletons + done_pivots;
+	row_perm[done_pivots + _nb_col_singletons] = row;
+	invr_row_perm[row] = _nb_col_singletons + done_pivots;
+	_nb_col_singletons++;
+      }
+
+  *nb_col_singletons = _nb_col_singletons;
+  *nb_row_singletons = _nb_row_singletons;
 }
 
 void 
@@ -502,9 +540,9 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_matrix L, TP_matrix D,
 	      } else {
 		D->val[D_input_size + current_pivot] = pivot_val = vals[i];
 	      }
-	      pthread_mutex_lock(&self->row_locks[rows[i]]);
+	      omp_set_lock(&self->row_locks[rows[i]]);
 	      delete_entry_from_CSR(self, col, rows[i]);
-	      pthread_mutex_unlock(&self->row_locks[rows[i]]);
+	      omp_unset_lock(&self->row_locks[rows[i]]);
 	    }
 	  
 	  /* TODO: we could split the previopud for in two fors: one before we found the pivot, update the begining, and then do the rest */
@@ -520,6 +558,82 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_matrix L, TP_matrix D,
       }
 #pragma omp atomic
     self->nnz   -= S_nnz;
+  }
+}
+
+void
+TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U, 
+				    TP_matrix D, TP_matrix L, int nb_pivots,
+				    int *col_perm, int *row_perm)
+{
+  int nb_threads = S->nb_threads, d, sthg = L->col_ptr[L->n];
+  int nb_steps = ( nb_pivots + nb_threads -1 ) / nb_threads, step;
+  if ( D->n + nb_pivots > D->allocated ) 
+    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
+
+  for ( d = 0; d < nb_pivots; d++) {
+    L->n++;
+    L->col_ptr[L->n] = sthg;
+  }
+
+#pragma omp parallel num_threads(nb_threads) private(step)
+  {
+    int me =  omp_get_thread_num();
+    for ( step = 0; step < nb_steps; step++) 
+      {
+	int current_pivot = step * nb_threads + me;
+	if ( current_pivot < nb_pivots)  {
+	  CSC_struct *CSC;
+	  CSR_struct *CSR;
+	  int col, row, D_indice, row_n, i;
+	  int *row_cols;
+
+	  col = col_perm[current_pivot];
+	  row = row_perm[current_pivot];
+
+	  CSC = &S->CSC[col]; 
+	  CSR = &S->CSR[row];
+	  row_cols = CSR->col;
+
+	  if (CSC->nb_elem != 1) { 
+	    printf("nb_elem = %d\n", CSC->nb_elem);
+	    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "The pivot is not row singelton");
+	  }
+	  if (CSC->row[0] != row) 
+	    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "The pivot is not the same as before");
+	  D_indice = __atomic_fetch_add(&D->n, 1, __ATOMIC_SEQ_CST);
+	  D->val[D_indice] = CSC->val[0];
+
+	  delete_entry_from_CSR(S, col, row);	  
+	  row_n = CSR->nb_elem;
+
+	  for ( i = 0; i < row_n; i++)
+	    {
+	      int col1 = row_cols[i]; 
+	      U_col *u_col = &U->col[col1];
+	      double val;
+
+	      omp_set_lock(&S->col_locks[col1]);
+	      val = delete_entry_from_CSC(S, col1, row);
+	      omp_unset_lock(&S->col_locks[col1]);
+	      
+	      omp_set_lock(&u_col->lock);
+	      if (u_col->nb_elem == u_col->allocated) 
+		TP_U_col_realloc(u_col);
+	      u_col->row[u_col->nb_elem] = row;
+	      u_col->val[u_col->nb_elem] = val;
+	      u_col->nb_elem++;
+	      omp_unset_lock(&u_col->lock);
+	    }
+
+	  CSR->nb_elem = 0;
+	  CSR->nb_free = 0;
+	  CSC->nb_elem = 0;
+	  CSC->nb_free = 0;
+#pragma omp atomic
+	  S->nnz -= row_n + 1;
+	}
+      }
   }
 }
 
@@ -567,7 +681,7 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
     for( pivot = indices[me]; pivot < indices[me+1]; pivot++)
       {
 	int row = row_perm[pivot];
-
+	
 	CSR_struct *CSR = &S->CSR[row];
 	int row_nb_elem = CSR->nb_elem;
 	int *cols = CSR->col;
@@ -576,7 +690,7 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
 	  int current_col = cols[i];
 	  U_col  *u_col = &U->col[current_col];
 	  int indice = __atomic_fetch_add(&u_col->nb_elem, 1, __ATOMIC_SEQ_CST);
-
+	  
 	  u_col->row[indice] = row;
 	}
 	
@@ -865,9 +979,9 @@ TP_schur_matrix_destroy(TP_schur_matrix self)
   free(self->row_struct);
   
   for( i = 0; i < self->m; i++)
-    pthread_mutex_destroy(&self->row_locks[i]);
+    omp_destroy_lock(&self->row_locks[i]);
   for( i = 0; i <  self->n; i++)
-    pthread_mutex_destroy(&self->col_locks[i]);
+    omp_destroy_lock(&self->col_locks[i]);
   free(self->row_locks);
   free(self->col_locks);
 
@@ -930,7 +1044,7 @@ TP_schur_matrix_check_pivots(TP_schur_matrix self,
 			     int *invr_row_perms, int *invr_col_perms,
 			     int nb_pivots)
 {
-  int  i;
+  int  i, j, k, n = self->n, m = self->m;
   int needed_pivots = self->n < self->m ? self->n : self->m;
   char mess[2048];
 
@@ -938,7 +1052,6 @@ TP_schur_matrix_check_pivots(TP_schur_matrix self,
   check_vlaid_perms(col_perms,      needed_pivots, nb_pivots);
   check_vlaid_perms(invr_row_perms, needed_pivots, nb_pivots);
   check_vlaid_perms(invr_row_perms, needed_pivots, nb_pivots);
-
 
   for( i = 0; i < nb_pivots; i++)
     {
@@ -956,8 +1069,39 @@ TP_schur_matrix_check_pivots(TP_schur_matrix self,
 	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
     }
-}
 
+  for ( i = 0; i < n; i++) 
+    {
+      CSC_struct *CSC = &self->CSC[i];
+      int nb_elem = CSC->nb_elem;
+      int *rows = CSC->row;
+      for ( j = 0; j < nb_elem; j++) 
+	{
+	  int row = rows[j];
+	  for(k = 0; k < nb_pivots; k++)
+	    if ( row_perms[k] == row ) {
+	      snprintf(mess, 2048, "in col %d, %d is present, but %d is a row pivot\n", i, row, row);
+	      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	    }
+	}
+    }
+
+  for ( i = 0; i < m; i++) 
+    {
+      CSR_struct *CSR = &self->CSR[i];
+      int nb_elem = CSR->nb_elem;
+      int *cols = CSR->col;
+      for ( j = 0; j < nb_elem; j++) 
+	{
+	  int col = cols[j];
+	  for(k = 0; k < nb_pivots; k++)
+	    if ( col_perms[k] == col ) {
+	      snprintf(mess, 2048, "in row %d, %d is present, but %d is a row pivot\n", i, col, col);
+	      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	    }
+	}
+    }
+}
 
 void
 TP_schur_matrix_memory_check(TP_schur_matrix self)

@@ -1,7 +1,8 @@
 #ifndef   _TP_SCHUR_MATRIX_H 
 #define   _TP_SCHUR_MATRIX_H 
 
-#include <pthread.h>
+#include <omp.h>
+/* #include <pthread.h> */
 
 #include "TP_matrix.h"
 #include "TP_U_matrix.h"
@@ -24,6 +25,7 @@ struct _CSC_struct {
   double col_max;
   int    nb_elem;
   int    nb_free;
+  omp_lock_t lock;
 
   double *val;
   int    *row;
@@ -33,8 +35,8 @@ struct _TP_schur_matrix {
   CSC_struct *CSC;
   CSR_struct *CSR;
 
-  pthread_mutex_t *row_locks;
-  pthread_mutex_t *col_locks;
+  omp_lock_t *row_locks;
+  omp_lock_t *col_locks;
 
   schur_mem internal_mem;
 
@@ -52,7 +54,6 @@ struct _TP_schur_matrix {
   double extra_space_inbetween;
 };
 
-
 TP_schur_matrix TP_schur_matrix_create();
 
 void TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug,
@@ -61,6 +62,15 @@ void TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int 
 void TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self);
 
 void TP_schur_matrix_print(TP_schur_matrix self, char *mess);
+
+void TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, 
+			     int *nb_col_singletons, int *nb_row_singletons,
+			     int *col_perm, int *row_perm, 
+			     int *invr_col_perm, int *invr_row_perm);
+
+void TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U, 
+					 TP_matrix D, TP_matrix L, int nb_pivots,
+					 int *col_perm, int *row_perm);
 
 void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_matrix L, TP_matrix D,
 			       int *row_perm, int *col_perm, int nb_pivots);

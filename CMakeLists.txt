@@ -11,21 +11,21 @@ set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 set(LIBRARY_OUTPUT_PATH lib)
 SET(CMAKE_BUILD_TYPE DEBUG) 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -g -lm -Wall -fPIC")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -g -lm -Wall -O3")
 
 # The following folder will be included
 include_directories(include)
 
-# Spral
-# set(SPRAL_DIR "/home/cseg/numanlys/scarf523/install/spral" CACHE PATH "Root directory containing Spral")
+#Spral
+set(SPRAL_DIR "/home/cseg/numanlys/scarf523/install/spral" CACHE PATH "Root directory containing Spral")
 
-# if( SPRAL_DIR )
+if( SPRAL_DIR )
 
-#   set(ENV{PKG_CONFIG_PATH} "${SPRAL_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+  set(ENV{PKG_CONFIG_PATH} "${SPRAL_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
 
-#   include_directories(${SPRAL_DIR}/include)
-#   link_directories(${SPRAL_DIR} ${SPRAL_DIR}/lib/)
-# endif()
+  include_directories(${SPRAL_DIR}/include)
+  link_directories(${SPRAL_DIR} ${SPRAL_DIR}/lib/)
+endif()
 
 
 # Plasma
@@ -34,8 +34,8 @@ link_directories(/home/cseg/numanlys/scarf523/install/plasma/lib /apps/intel/201
 
 file(GLOB_RECURSE SOURCES control/*.c pivots/*.c smatrix/*.c )
 
-add_library(Tournament_Pivoting SHARED ${SOURCES})
-#target_link_libraries(Tournament_Pivoting spral)
+add_library(Tournament_Pivoting STATIC ${SOURCES})
+target_link_libraries(Tournament_Pivoting spral)
 target_link_libraries(Tournament_Pivoting gfortran)
 target_link_libraries(Tournament_Pivoting pthread)
 target_link_libraries(Tournament_Pivoting )

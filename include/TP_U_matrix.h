@@ -1,8 +1,7 @@
 #ifndef _TP_U_MATRIX
 #define _TP_U_MATRIX
 
-#include <pthread.h>
-
+#include <omp.h>
 #include "TP_matrix.h"
 
 typedef struct _U_col U_col;
@@ -16,6 +15,7 @@ struct _U_col {
 
   double *val;
   int *row;
+  omp_lock_t lock;
 };
 
 

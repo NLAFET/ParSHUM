@@ -17,6 +17,7 @@ TP_U_matrix_create(TP_matrix A, double extra_space)
       self->col[i].val = malloc(col_size * sizeof(*self->col[i].val));
       self->col[i].row = malloc(col_size * sizeof(*self->col[i].row));
       self->col[i].allocated = col_size;
+      omp_init_lock(&self->col[i].lock);
     }
 
   return self;
@@ -93,6 +94,7 @@ TP_U_matrix_destroy(TP_U_matrix self)
     {
       free(self->col[i].val);
       free(self->col[i].row);
+      omp_destroy_lock(&self->col[i].lock);
     }
   free(self->col);
   free(self);
