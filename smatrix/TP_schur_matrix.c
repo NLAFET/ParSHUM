@@ -20,8 +20,8 @@ struct _schur_mem {
   
   free_space *unused_CSC;
   free_space *unused_CSR;
-  omp_lock_t *CSC_lock;
-  omp_lock_t *CSR_lock;
+  omp_lock_t CSC_lock;
+  omp_lock_t CSR_lock;
 
   int nb_CSC;
   int nb_CSR;
@@ -60,10 +60,8 @@ TP_schur_mem_create(long nnz)
   *self->unused_CSR = calloc(1, sizeof(**self->unused_CSR));
   self->unused_CSR[0]->nb_elem = nnz;
 
-  /* self->CSC_lock = malloc(sizeof(*self->CSC_lock)); */
-  /* self->CSR_lock = malloc(sizeof(*self->CSR_lock)); */
-  /* pthread_mutex_init(self->CSC_lock, NULL); */
-  /* pthread_mutex_init(self->CSR_lock, NULL); */
+  omp_init_lock(&self->CSC_lock);
+  omp_init_lock(&self->CSR_lock);
   
   return self;
 }
@@ -101,8 +99,8 @@ TP_schur_mem_destroy(schur_mem self)
   free(self->col);
   free(self->unused_CSR);
 
-  /* free(self->CSC_lock); */
-  /* free(self->CSR_lock); */
+  omp_destroy_lock(&self->CSC_lock);
+  omp_destroy_lock(&self->CSR_lock);
   
   free(self);
 }
@@ -151,6 +149,7 @@ TP_schur_mem_realloc_CSR(schur_mem self)
 void
 TP_schur_mem_CSC_alloc(schur_mem self, CSC_struct *CSC, long size)
 {
+  omp_set_lock(&self->CSC_lock);
   int i, nb = self->nb_CSC; 
 
   /* first try to find memory in the current space  */
@@ -168,6 +167,7 @@ TP_schur_mem_CSC_alloc(schur_mem self, CSC_struct *CSC, long size)
 	  CSC->row = &self->row[i][current_unused->offset];
 	  current_unused->offset  += size;
 	  current_unused->nb_elem -= size;
+	  omp_unset_lock(&self->CSC_lock);
 	  return;
 	}
 	current_unused = current_unused->next;
@@ -188,11 +188,11 @@ TP_schur_mem_CSC_alloc(schur_mem self, CSC_struct *CSC, long size)
       CSC->row = &self->row[i][current_unused->offset];
       current_unused->offset  += size;
       current_unused->nb_elem -= size;
+      omp_unset_lock(&self->CSC_lock);
       return;
     }
     i++;
   }
-
 }
 #define TP_schur_mem_CSC_realloc(self, CSC) TP_schur_mem_CSC_alloc(self, CSC, 2*CSC->nb_elem)
 
@@ -200,6 +200,7 @@ TP_schur_mem_CSC_alloc(schur_mem self, CSC_struct *CSC, long size)
 void
 TP_schur_mem_CSR_alloc(schur_mem self, CSR_struct *CSR, long size)
 {
+  omp_set_lock(&self->CSR_lock);
   int i, nb = self->nb_CSR; 
 
   /* first try to find memory in the current space  */
@@ -214,6 +215,7 @@ TP_schur_mem_CSR_alloc(schur_mem self, CSR_struct *CSR, long size)
 	  CSR->col = &self->col[i][current_unused->offset];
 	  current_unused->offset  += size;
 	  current_unused->nb_elem -= size;
+	  omp_unset_lock(&self->CSR_lock);
 	  return;
 	}
 	current_unused = current_unused->next;
@@ -231,6 +233,7 @@ TP_schur_mem_CSR_alloc(schur_mem self, CSR_struct *CSR, long size)
       CSR->col = &self->col[self->nb_CSR - 1][current_unused->offset];
       current_unused->offset  += size;
       current_unused->nb_elem -= size;
+      omp_unset_lock(&self->CSR_lock);
       return;
     }
   }
@@ -260,14 +263,15 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
   self->row_struct = malloc((size_t) nb_threads * sizeof(*self->row_struct));
   for( i = 0; i < nb_threads; i++)
     self->row_struct[i] = malloc((size_t) n * sizeof(**self->row_struct));
-
+  
   self->row_locks = malloc(m * sizeof(*self->row_locks));
   for( i = 0; i < m; i++)
     omp_init_lock(&self->row_locks[i]);
-  self->col_locks = malloc(n * sizeof(*self->col_locks));
-  for( i = 0; i < n; i++)
-    omp_init_lock(&self->col_locks[i]);
 
+  self->col_locks = malloc(m * sizeof(*self->col_locks));
+  for( i = 0; i < m; i++)
+    omp_init_lock(&self->col_locks[i]);
+  
   if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR))
     TP_print_GB(self, "GB: after allocating");
 }
@@ -448,35 +452,6 @@ delete_entry(TP_schur_matrix self, int col, int row)
   return delete_entry_from_CSC(self, col, row);
 }
 
-/* void */
-/* TP_schur_matrix_update_LD_V2(TP_schur_matrix self, TP_matrix L, TP_matrix D, */
-/* 			     int *row_perm, int *col_perm, int nb_pivots) */
-/* { */
-/*   int pivot; */
-/*   int L_current = L->n; */
-/*   int D_current = D->n; */
- 
-
-/*   for(pivot = 0; pivot < nb_pivots; pivot++)  { */
-/*     int col     = col_perm[current_pivot]; */
-/*     int row     = row_perm[current_pivot]; */
-/*     struct CSC_struct *S_col = &self->CSC[col]; */
-/*     struct CSC_struct *L_col = &L->cols[L_current + pivot]; */
-
-/*     double  pivot_val = delete_entry(self, col, row); */
-/*     /\* podeli a S_col so pivot_val i posle stavi a u L_col  *\/ */
-/*     /\*  AAA da, i stavi go pivot_val u D *\/ */
-/*   } */
-/* } */
-
-/* PETOK: vaa ke treba da prais poinaku i da go izrecikliras  rows_counters. 
-   PETOK: ideata e deka u CSR, voa entry pa ke se vrate samo so dr col. razmisli ubavo za voa, 
-   PETOK: sea veke ne me biva za mislenje :D :D :D :D: D: (.Y.) (.Y.)(.Y.)(.Y.)(.Y.)(.Y.)(.Y.)(.Y.)(.Y.)(.Y.)(.Y.)
-   PETOK: (.Y.)(.Y.)(.Y.)(.Y.)(.Y.)(.Y.)(.Y.)(.Y.)(.Y.)  
-   PETOK: mozis da go predvidis duri koku  maximum sekoj row ke se sire  u S (ako a imas strukturata na U) razmisli 
-   PETOK: ubavo ubavo!!!!!! (.Y.)
-*/
-
 void
 TP_schur_matrix_update_LD(TP_schur_matrix self, TP_matrix L, TP_matrix D,
 			  int *row_perm, int *col_perm, int nb_pivots)
@@ -646,7 +621,6 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
   int nb_threads = S->nb_threads;
   int indices[nb_threads+1];
   int nnz_part = U_new_nnz / nb_threads;
-  long *L_col_ptr = L->col_ptr;
   
   if ( nb_pivots <= nb_threads) {
     nb_threads = nb_pivots;
@@ -752,33 +726,21 @@ TP_schur_matrix_insert_entry(TP_schur_matrix self, int row, int col, double val)
 {
   CSC_struct *CSC = &self->CSC[col];
   CSR_struct *CSR = &self->CSR[row];
-  double       *CSC_vals = CSC->val;
-  int          *CSC_rows = CSC->row;
-  int          *CSR_cols = CSR->col;
 
-  if (CSC->nb_free <= 0) {
+  if (CSC->nb_free <= 0) 
     TP_schur_mem_CSC_realloc(self->internal_mem, CSC);
-    CSC_vals = CSC->val;
-    CSC_rows = CSC->row;
-    
-    /* if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR)) */
-    /*   TP_print_single_GB(self->unused_CSC, "CSC GB: after reallocing col"); */
-  }
-  
-  if (CSR->nb_free <= 0) {
-    TP_schur_mem_CSR_realloc(self->internal_mem, CSR);
-    CSR_cols = CSR->col;
-    /* if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR)) */
-    /*   TP_print_single_GB(self->unused_CSR, "CSR GB: after reallocing col"); */
-  }
-  
-  CSC_vals[CSC->nb_elem  ] = val;
-  CSC_rows[CSC->nb_elem++] = row;
-  
-  CSR_cols[CSR->nb_elem++] = col;
-  
+  CSC->val[CSC->nb_elem  ] = val;
+  CSC->row[CSC->nb_elem++] = row;
   CSC->nb_free--;
+  
+  omp_set_lock(&self->row_locks[row]);
+  if (CSR->nb_free <= 0) 
+    TP_schur_mem_CSR_realloc(self->internal_mem, CSR);
+  CSR->col[CSR->nb_elem++] = col;
   CSR->nb_free--;
+  omp_unset_lock(&self->row_locks[row]);
+  
+#pragma omp atomic 
   self->nnz++;
 }
 
@@ -786,18 +748,29 @@ void
 TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
 			 TP_U_struct *U_struct, int U_new_n, int *invr_row_perm)
 {
-  int n = S->n;
-  int  i, j, k, l;
-  long *schur_row_struct = S->row_struct[0];
+  int pivot, nb_threads = S->nb_threads;
+  int nb_steps = (U_new_n + nb_threads - 1) / nb_threads, step; 
+
   long *L_col_ptr = L->col_ptr;
   int  *L_rows    = L->row;
   double *L_vals  = L->val;
   
+
+#pragma omp parallel num_threads(nb_threads) private(step) 
+  {
+  int me =  omp_get_thread_num();
+  int n = S->n;
+  int  i, j, k, l;
+  long *schur_row_struct = S->row_struct[me];
+
   for ( i = 0; i < n; i++)
     schur_row_struct[i] = -1;
-
-  for(i  = 0; i < U_new_n; i++)
+  
+  for(step = 0; step < nb_steps; step++)
     {
+      i = step * nb_threads + me;
+      if ( i >= U_new_n) 
+	continue;
       TP_U_struct U_col_struct = U_struct[i];
       int col = U_col_struct.col;
       int U_col_new = U_col_struct.nb_elem;
@@ -882,7 +855,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
       }
       CSC->col_max = get_max_double(CSC->val, CSC->nb_elem);
     }
-
+  }
 }
 
 
@@ -980,9 +953,9 @@ TP_schur_matrix_destroy(TP_schur_matrix self)
   
   for( i = 0; i < self->m; i++)
     omp_destroy_lock(&self->row_locks[i]);
-  for( i = 0; i <  self->n; i++)
-    omp_destroy_lock(&self->col_locks[i]);
   free(self->row_locks);
+  for( i = 0; i < self->n; i++)
+    omp_destroy_lock(&self->col_locks[i]);
   free(self->col_locks);
 
   free(self);

@@ -100,15 +100,6 @@ TP_vector_add(TP_vector A, double alpha, TP_vector B, double beta, TP_vector C)
     C->vect[i] = alpha * A->vect[i] + beta * B->vect[i];
 }
 
-/* void */
-/* TP_vector_rand(TP_vector self) */
-/* { */
-/*   int n = self->n, i; */
-  
-
-/* } */
-
-
 void
 TP_vector_print(TP_vector self, char *mess)
 {
@@ -127,14 +118,9 @@ TP_vector_destroy(TP_vector self)
   free(self);
 }
 
-
-
-
-
 /* ******************************************************************************** */
 /* ****************************DENSE MATRIX************************************* */
 /* ******************************************************************************** */
-
 
 TP_dense_matrix 
 TP_dense_matrix_create(int n, int m)
@@ -153,8 +139,9 @@ TP_dense_matrix_create(int n, int m)
 
 
 void
-TP_dense_matrix_factorize(TP_dense_matrix self)
+TP_dense_matrix_factorize(TP_dense_matrix self, int nb_threads)
 {
+  omp_set_num_threads(nb_threads);
   int ret = plasma_dgetrf(self->m, self->n, self->val, self->m, self->pivots);  
   if (ret) 
     printf("The factorization of the dense schur is completed, but the entry U(%d,%d) has a zero on it.\n", ret, ret);

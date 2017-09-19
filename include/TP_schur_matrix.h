@@ -2,7 +2,6 @@
 #define   _TP_SCHUR_MATRIX_H 
 
 #include <omp.h>
-/* #include <pthread.h> */
 
 #include "TP_matrix.h"
 #include "TP_U_matrix.h"

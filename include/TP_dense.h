@@ -39,7 +39,7 @@ void      TP_vector_add(TP_vector A, double alpha, TP_vector B, double beta, TP_
 
 
 TP_dense_matrix TP_dense_matrix_create(int n, int m);
-void            TP_dense_matrix_factorize(TP_dense_matrix self);
+void            TP_dense_matrix_factorize(TP_dense_matrix self, int nb_threads);
 int *           TP_dense_get_row_perms(TP_dense_matrix self);
 void            TP_dense_matrix_print(TP_dense_matrix self, char *mess);
 void            TP_dense_matrix_destroy(TP_dense_matrix slef);

@@ -1008,7 +1008,7 @@ TP_solver_factorize(TP_solver self)
   if (self->debug & TP_CHECK_DENSE_W_TP_PERM)  {
     TP_dense_2D_facto(self->A_debug);
   } else {
-    TP_dense_matrix_factorize(self->S_dense);
+    TP_dense_matrix_factorize(self->S_dense, exe_parms->nb_threads);
 
     // Handeling the pivots
     memcpy(&self->row_perm[self->done_pivots], self->S_dense->original_rows,
