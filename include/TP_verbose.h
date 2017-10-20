@@ -34,6 +34,7 @@ struct _TP_exe_parms {
   int nb_threads;
   int nb_candidates_per_block;
   int nb_previous_pivots;
+  int max_dense_schur;
 };
 
 struct _TP_verbose_per_step {
@@ -97,7 +98,7 @@ struct _TP_verbose {
 
   int nb_steps;
 
-  TP_why_KO reason;
+  int reason;
 
   TP_verbose_per_step stats_first;
   TP_verbose_per_step stats_last;

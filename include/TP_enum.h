@@ -22,14 +22,11 @@ typedef  enum _TP_matrix_type
     TP_Rutherford_matrix
   } TP_matrix_type;
 
-typedef enum _TP_why_KO 
-  {
-    TP_reason_unknown, 
-    TP_density, 
-    TP_no_pivots, 
-    TP_rectangle,
-    TP_because
-  } TP_why_KO;
+#define  TP_reason_unknown              0 
+#define  TP_reason_density          (1<<1)
+#define  TP_reason_no_pivots        (1<<2)
+#define  TP_reason_dense_too_large  (1<<3)
+#define  TP_reason_because          (1<<4)
 
 typedef enum _TP_overlaps
   {

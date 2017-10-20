@@ -23,7 +23,7 @@ const char *usageStrign[] = {
   "            [--min_pivot_per_steps #steps] [--prog_name name ] [--check_schur_symetry] [--check_schur_memory] [--check_pivots]",
   "            [--check_TP_with_plasma_perm] [--check_dense_with_TP_perm] [--print_each_step] [--check_GC]",
   "            [--group_run value_tol|marko_tol|schur_density|nb_candidates|min_pivots|nb_threads init inc nb_steps]",
-  "            [--counters_size #double_counters] [--check_counters] [--check_schur_doubles]",
+  "            [--counters_size #double_counters] [--check_counters] [--check_schur_doubles] [--max_dense_schur size]",
   NULL,
 };
 
@@ -50,6 +50,7 @@ TP_solver_create()
   self->exe_parms->nb_previous_pivots      = 5;
   self->exe_parms->min_pivot_per_steps     = 20;
   self->exe_parms->density_tolerance       = 0.2;
+  self->exe_parms->max_dense_schur         = 20000;
 
   self->verbose = TP_verbose_create(self->exe_parms);
   return self;
@@ -325,6 +326,12 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
     } else if (!strcmp(argv[i], "--counters_size")) {
       self->size_counters = atoi(argv[++i]);
       continue;
+    } else if (!strcmp(argv[i], "--max_dense_schur")) {
+      int tmp = atof(argv[++i]);
+      if (tmp < 1)
+	TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "max_dense_schur should be at least 1");
+      self->exe_parms->max_dense_schur = tmp;
+      continue;
     } else if (!strcmp(argv[i], "--help")) {
       int j = 0;
       while( usageStrign[j] !=  NULL)
@@ -339,7 +346,7 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, mess);
     }
   }
-
+  
   if (run_args_start) {
     TP_parm_type type;
     if ( !strcmp(argv[run_args_start], "value_tol") ) {
@@ -496,7 +503,7 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
        
   if (!strcmp(file_ext, ".rb"))
     read_rutherford_boeing(A, exe_parms->matrix_file);
-  if (!strcmp(file_ext, ".mtl"))
+  else  if (!strcmp(file_ext, ".mtl"))
     TP_read_mtl_file(A, exe_parms->matrix_file);
   else 
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unrecognized file type format");
@@ -915,42 +922,52 @@ TP_solver_update_matrix(TP_solver self)
 int
 TP_continue_pivot_search(TP_schur_matrix S,
 			 int nb_done_pivots,
-			 int nb_needed_pivots, 
+			 int nb_needed_pivots,
 			 int *previous_pivots,
-			 int nb_previous_pivots, 
+			 int nb_previous_pivots,
 			 double density_tolerance,
 			 int min_pivot_per_steps,
+			 int max_dense_schur,
 			 int debug,
 			 TP_verbose verbose)
 {
-  long n_schur, m_schur, i, sum_pivots ; 
+  long n_schur, m_schur, i, sum_pivots;
+  int retval = 1;
 
   if ( debug & TP_CHECK_TP_W_PLASMA_PERM ||
        debug & TP_CHECK_DENSE_W_TP_PERM ) {
-    verbose->reason = TP_because;
+    verbose->reason = TP_reason_because;
     return 0;
   }
 
   n_schur = (long) S->n - nb_done_pivots;
   m_schur = (long) S->m - nb_done_pivots;
   if ( S->nnz > n_schur * m_schur * density_tolerance) {
-    verbose->reason = TP_density;
-    return 0;
+    verbose->reason = TP_reason_density;
+    printf("density failed with reason = %d and TP_reason_density = %d \n", verbose->reason, TP_reason_density);
+    retval = 0;
   }
 
-  for( i = 0, sum_pivots = 0; i < nb_previous_pivots; i++)
-    sum_pivots += previous_pivots[i];
-  if (sum_pivots < min_pivot_per_steps) {
-    verbose->reason = TP_no_pivots;
-    return 0;
-  }
+  if (retval)
+    {
+      for( i = 0, sum_pivots = 0; i < nb_previous_pivots; i++)
+	sum_pivots += previous_pivots[i];
+      if (sum_pivots < min_pivot_per_steps) {
+	verbose->reason = TP_reason_no_pivots;
+	retval = 0;
+      }
+    }
 
-  if (nb_done_pivots >= nb_needed_pivots) {
-    verbose->reason = TP_no_pivots;
-    return 0;
+  if (nb_done_pivots >= nb_needed_pivots && retval) {
+    verbose->reason = TP_reason_no_pivots;
+    retval = 0;
   }
-
-  return 1;
+  
+  if ( !retval && max_dense_schur < (nb_needed_pivots - nb_done_pivots) ) {
+    verbose->reason |= TP_reason_dense_too_large;
+    printf("reason updated with value of %d\n", verbose->reason);
+  }
+  return retval;
 }
 
 void
@@ -972,6 +989,7 @@ TP_solver_factorize(TP_solver self)
 				   previous_pivots, nb_previous_pivots,
 				   exe_parms->density_tolerance,
 				   exe_parms->min_pivot_per_steps,
+				   exe_parms->max_dense_schur,
 				   self->debug, verbose) )
     { 
       
@@ -979,7 +997,8 @@ TP_solver_factorize(TP_solver self)
        TP_verbose_start_timing(&step->timing_step);
        TP_verbose_start_timing(&step->timing_pivot_search);
        TP_solver_find_pivot_set(self);
-       previous_pivots[nb_pivot_blocks++ % nb_previous_pivots] = self->found_pivots - self->done_pivots;
+       if ( !self->nb_row_singletons && !self->nb_col_singletons)
+	 previous_pivots[nb_pivot_blocks++ % nb_previous_pivots] = self->found_pivots - self->done_pivots;
        TP_verbose_stop_timing(&step->timing_pivot_search);
        
        TP_verbose_start_timing(&step->timing_apply_perms);
@@ -988,6 +1007,9 @@ TP_solver_factorize(TP_solver self)
        TP_verbose_stop_timing(&step->timing_step);
     }
   TP_verbose_stop_timing(&verbose->timing_facto_sparse);
+
+  if (verbose->reason & TP_reason_dense_too_large)
+    return;
   
   TP_verbose_start_timing(&verbose->timing_convert_schur);
   if ( self->debug & TP_CHECK_DENSE_W_TP_PERM )  {
@@ -1009,7 +1031,6 @@ TP_solver_factorize(TP_solver self)
     TP_dense_2D_facto(self->A_debug);
   } else {
     TP_dense_matrix_factorize(self->S_dense, exe_parms->nb_threads);
-
     // Handeling the pivots
     memcpy(&self->row_perm[self->done_pivots], self->S_dense->original_rows,
 	   (self->A->m - self->done_pivots) * sizeof(*self->row_perm));
@@ -1022,14 +1043,10 @@ TP_solver_factorize(TP_solver self)
     }
     self->dense_pivots = needed_pivots - self->done_pivots;
     TP_verbose_update_dense_pivots(verbose, self->dense_pivots);
-    /* verbose->nnz_final   = self->L->nnz + self->U->nnz + self->D->n + self->S_dense->n * self->S_dense->m; */
-    /* verbose->nnz_L       = self->L->nnz  + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2 )  ; */
-    /* verbose->nnz_U       = self->U->nnz + self->D->n + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2    + self->S_dense->m ) ; */
-    /* verbose->nnz_S_dense = self->S_dense->n * self->S_dense->m; */
-    verbose->nnz_final   = -1;
-    verbose->nnz_L       = -1;
-    verbose->nnz_U       = -1;
-    verbose->nnz_S_dense = -1;
+    verbose->nnz_final   = self->L->nnz + self->U->nnz + self->D->n + self->S_dense->n * self->S_dense->m;
+    verbose->nnz_L       = self->L->nnz  + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2 )  ;
+    verbose->nnz_U       = self->U->nnz + self->D->n + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2    + self->S_dense->m ) ;
+    verbose->nnz_S_dense = self->S_dense->n * self->S_dense->m;
   }
 
   TP_verbose_stop_timing(&verbose->timing_facto_dense);
@@ -1040,6 +1057,8 @@ TP_solver_factorize(TP_solver self)
 void
 TP_solver_solve(TP_solver self, TP_vector RHS)
 {
+  if (self->verbose->reason & TP_reason_dense_too_large)
+    return;
   double *RHS_vals          = RHS->vect;
   TP_verbose verbose        = self->verbose;
 
@@ -1086,6 +1105,8 @@ void
 TP_solver_copmpute_norms(TP_solver self,       TP_vector X,
 			 TP_vector X_computed, TP_vector rhs)
 {
+  if (self->verbose->reason & TP_reason_dense_too_large)
+    return;
   double x_norm, A_norm, b_norm;
   TP_vector tmp = TP_vector_create(X->n);
 
@@ -1113,6 +1134,8 @@ TP_solver_iterative_refinement(TP_solver self,
 			       TP_vector rhs,
 			       double wanted_precision)
 {
+  if (self->verbose->reason & TP_reason_dense_too_large)
+    return;
   TP_vector sol = TP_vector_create(self->A->n);
   TP_vector tmp = TP_vector_create(self->A->n);
   int i = 0;

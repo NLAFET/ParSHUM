@@ -260,22 +260,18 @@ TP_verbose_print_raw(TP_verbose verbose)
   fprintf(file,"#sparse_pivots\t%d\n", verbose->sparse_pivots);
   fprintf(file,"#dense_pivots\t%d\n", verbose->dense_pivots);
   fprintf(file,"#nb_steps\t%d\n", verbose->nb_steps);
-  switch  (verbose->reason){ 
-  case (TP_reason_unknown) :
+
+  if (verbose->reason & TP_reason_unknown) 
     fprintf(file,"#unknown_reason_for_switch\n");
-    break;
-  case (TP_density) :
+  else if (verbose->reason & TP_reason_density) 
     fprintf(file,"#density_failed\n");
-    break;
-  case (TP_no_pivots) : 
+  else if (verbose->reason & TP_reason_no_pivots)  
     fprintf(file,"#min_pivots_failed\n");
-    break;
-  case (TP_because) : 
+  else if (verbose->reason & TP_reason_because) 
     fprintf(file,"#switched_to_dense_just_because\n");
-    break;
-  default:
-    break;
-  }
+
+  if (verbose->reason & TP_reason_dense_too_large)
+    fprintf(file,"#facto_unfinished(too_large_dense_part)\n");
 
   while(step)
     {
@@ -313,45 +309,42 @@ TP_verbose_print_V0(TP_verbose self)
 
   fprintf(file,"[%s] %d independent sets of pivots were found with a total of %d pivots in %f seconds\n", 
 	  prog_name, self->nb_steps, self->sparse_pivots, self->timing_facto_sparse / 1e6);
-  if (self->dense_pivots) {
-    fprintf(file,"[%s] %d pivots were handeled by the dense code in %f seconds\n", 
-	    prog_name, self->dense_pivots, self->timing_facto_dense / 1e6); 
-    fprintf(file,"[%s] The convertion of the sparse Schur to a dense matrix of size %d took %f seconds\n",
-	    prog_name, self->dense_pivots, self->timing_convert_schur / 1e6);
-  }
-
-  fprintf(file,"[%s] \n", prog_name);
-  fprintf(file,"[%s] The solve was performed in %f seconds\n", prog_name, self->timing_solve/1e6);
-  fprintf(file,"[%s] The solve on L took %f seconds ", prog_name, self->timing_solve_L/1e6);
-  if (self->dense_pivots)  fprintf(file,", the dense part in %f seconds ", self->timing_solve_dense/1e6);
-  fprintf(file,"and the U in %f seconds.\n", self->timing_solve_U/1e6);
+  if ( ! ( self->reason & TP_reason_dense_too_large ) )
+    {
+      if (self->dense_pivots) {
+	fprintf(file,"[%s] %d pivots were handeled by the dense code in %f seconds\n", 
+		prog_name, self->dense_pivots, self->timing_facto_dense / 1e6); 
+	fprintf(file,"[%s] The convertion of the sparse Schur to a dense matrix of size %d took %f seconds\n",
+		prog_name, self->dense_pivots, self->timing_convert_schur / 1e6);
+      }
+      
+      fprintf(file,"[%s] \n", prog_name);
+      fprintf(file,"[%s] The solve was performed in %f seconds\n", prog_name, self->timing_solve/1e6);
+      fprintf(file,"[%s] The solve on L took %f seconds ", prog_name, self->timing_solve_L/1e6);
+      if (self->dense_pivots)  fprintf(file,", the dense part in %f seconds ", self->timing_solve_dense/1e6);
+      fprintf(file,"and the U in %f seconds.\n", self->timing_solve_U/1e6);
+    }
+  else 
+    {
+      fprintf(file,"[%s] The factorization was not finished  because the dense part was too large.\n", prog_name);
+    }
 
   fprintf(file,"[%s] The switch to dense code was done ", prog_name);
-  switch  (self->reason){ 
-  case (TP_reason_unknown) :
-    fprintf(file," for uknown reason.\n");
-    break;
-  case (TP_density) :
+  if (self->reason & TP_reason_unknown)
+    fprintf(file,"for uknown reason.\n");
+  else if (self->reason & TP_reason_density)
     fprintf(file,"beacuse the schur became too dense.\n");
-    break;
-  case (TP_no_pivots) : 
+  else if (self->reason & TP_reason_no_pivots)
     fprintf(file,"because we did not found engough pibots.\n");
-    break;
-  case (TP_because) : 
+  else if (self->reason & TP_reason_because)
     fprintf(file,"just because.\n");
-    break;
-  default:
-    break;
-  }
 
-  fprintf(file,"[%s] ", prog_name);
   if(self->backward_error)
   fprintf(file,"[%s] The backward error is (%e) and the forward error is (%e)\n",
  	  prog_name, self->backward_error, self->forward_error);
 
   TP_verbose_print_steps(self->stats_first, self->parms);
 }
-
 
 void
 create_plot_file(char *plot_file, char *data_file, 

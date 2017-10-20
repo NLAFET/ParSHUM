@@ -607,6 +607,8 @@ TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U,
 	  CSC->nb_free = 0;
 #pragma omp atomic
 	  S->nnz -= row_n + 1;
+#pragma omp atomic
+	  U->nnz += row_n;
 	}
       }
   }
@@ -647,6 +649,7 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
     while(u_col->allocated - u_col->nb_elem  < nb_elem)
       TP_U_col_realloc(u_col);
   }
+  U->nnz += U_new_nnz;
   
 #pragma omp parallel num_threads(nb_threads) private(pivot, i)
   {
@@ -676,31 +679,6 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
     S->nnz -= S_nnz;
   }
 }
-
-/* NAREDNO: VIDI SO KE BIDE NAREDNATA STRUKTURA I NAPRAVI CHECK SO NEA.
- args: Schur i structurata i rows struct  */
-
-/* void  */
-/* TP_check_U_update(TP_U_matrix U, int n, int base, int *rows_struct) */
-/* { */
-/*   for( i = 0; i < n; i++) */
-/*     int row_new_elems = ( rows_struct[i] - base_value + 1; */
-/*     if (expected_new[i] >= 0) { */
-/*       if (expected_new[i] != U->col[i].nb_new) */
-/*         if (expected_new[i] == 1 && U->col[i].nb_new ==0) */
-/*           pivots_in_U++; */
-/*         else */
-/*           printf("for the %dth col: expected = %d  and new = %d with basevaue of %d \n",
-	     i, expected_new[i], U->col[i].nb_new, base_value); */
-/*     } else { */
-/*       if ( U->col[i].nb_new > 0) */
-/*         printf("for the %dth col: non are expected  and there is %d new\n", i, U->col[i].nb_new); */
-/*     } */
-/*   if ( pivots_in_U != nb_pivots)  */
-/*     printf("expected %d pivots but we have found %d\n", nb_pivots, pivots_in_U); */
-    
-/*   free(expected_new); */
-/* } */
 
 void
 TP_schur_matrix_add_to_entry(TP_schur_matrix self, int row, int col, double val)
