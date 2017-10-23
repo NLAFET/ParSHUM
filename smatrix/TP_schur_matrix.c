@@ -618,7 +618,9 @@ void
 TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L, 
 			 int nb_pivots, int *row_perm,
 			 TP_U_struct *U_struct, int U_new_n, int U_new_nnz)
+
 {
+
   int pivot, i, j;
   int nb_threads = S->nb_threads;
   int indices[nb_threads+1];
@@ -724,21 +726,38 @@ TP_schur_matrix_insert_entry(TP_schur_matrix self, int row, int col, double val)
 
 void
 TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
-			 TP_U_struct *U_struct, int U_new_n, int *invr_row_perm)
+			 TP_U_struct *U_struct, int U_new_n, int U_new_nnz,
+			 int *invr_row_perm, int nb_pivots, int *row_perms)
 {
   int pivot, nb_threads = S->nb_threads;
-  int nb_steps = (U_new_n + nb_threads - 1) / nb_threads, step; 
+  /* int nb_steps = (U_new_n + nb_threads - 1) / nb_threads, step, i;  */
+  int nb_steps = U_new_n, step, i; 
 
   long *L_col_ptr = L->col_ptr;
   int  *L_rows    = L->row;
   double *L_vals  = L->val;
-  
 
-#pragma omp parallel num_threads(nb_threads) private(step) 
+  for( i = 0; i < U_new_n; i++) {
+    int col = U_struct[i].col;
+    int nb_elem = U_struct[i].nb_elem;
+    U_col *u_col = &U->col[col];
+    
+    u_col->cost = 0;
+    while(u_col->allocated - u_col->nb_elem  < nb_elem)
+      TP_U_col_realloc(u_col);
+  }
+  U->nnz += U_new_nnz;
+  for( i = 0; i < nb_pivots; i++)  {
+    S->CSR[row_perms[i]].nb_free += S->CSR[row_perms[i]].nb_elem;
+    S->CSR[row_perms[i]].nb_elem = 0;
+  }
+  S->nnz -= U_new_nnz;
+
+#pragma omp parallel num_threads(nb_threads) private(step, i)
   {
   int me =  omp_get_thread_num();
   int n = S->n;
-  int  i, j, k, l;
+  int  j, k, l;
   long *schur_row_struct = S->row_struct[me];
 
   for ( i = 0; i < n; i++)
@@ -752,11 +771,10 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
       TP_U_struct U_col_struct = U_struct[i];
       int col = U_col_struct.col;
       int U_col_new = U_col_struct.nb_elem;
-      int U_col_new_unchanged = U_col_new ;
 
       CSC_struct *CSC = &S->CSC[col];
-      double *U_vals  = U->col[col].val + U->col[col].nb_elem - U_col_new;
-      int    *U_rows  = U->col[col].row + U->col[col].nb_elem - U_col_new;
+      double *U_vals  = U->col[col].val;
+      int    *U_rows  = U->col[col].row;
 
       int S_col_nb_elem      = CSC->nb_elem;
       int *S_rows            = CSC->row;
@@ -765,46 +783,20 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
       /* constructing schur_row_struct and discovering the vals of U  */
       for ( k = 0; k < S_col_nb_elem; ) {
 	int S_row = S_rows[k];
-	int found = 0;
-
-	for ( j = 0; j < U_col_new; j++)  {
-	  /* If we find an entry that needs to go in U, put it in the
-	     ebginig  of U and increment the pointers of U. additionaly  
-	     decrease U_col_new (we got the original one in backup in U_col_new_unchanged).
-	     For S, just put the last elemnt in the k^th place and redo 
-	     k again. Decrease the number of elements of course. */
-	  if (U_rows[j] == S_row ) { 
-
-	    U_rows[j] = U_rows[0];
-
-	    U_rows[0] = S_row;
-	    U_vals[0] = S_vals[k];
-
-	    S_rows[k] = S_rows[S_col_nb_elem - 1];
-	    S_vals[k] = S_vals[S_col_nb_elem - 1];
-
-	    S_col_nb_elem--;
-	    U_col_new--;
-	    found = 1;
-	    U_rows++;
-	    U_vals++;
-
-	    break;
-	  }
-	}
-
- 	if ( !found )
+	if (invr_row_perm[S_row] != TP_UNUSED_PIVOT ) {
+	  U_rows[U->col[col].nb_elem  ] = S_row;
+	  U_vals[U->col[col].nb_elem++] = S_vals[k];
+	  S_rows[k] = S_rows[--S_col_nb_elem];
+	  S_vals[k] = S_vals[  S_col_nb_elem];
+	} else { 
 	  schur_row_struct[S_row] = (long) col*n + k++;
+	}
       }
-
-      if (U_col_new) 
-	TP_warning(__FUNCTION__, __FILE__, __LINE__,"All vals for U were not found");
       
-      if (S_col_nb_elem + U_col_new_unchanged != CSC->nb_elem) 
+      if (S_col_nb_elem + U_col_new != CSC->nb_elem) 
 	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Somethign went wrong");
-
+      
       /* UPDATE ALL THE POINTERS AND STRUCTURES  */
-      U_col_new = U_col_new_unchanged;
       CSC->nb_elem -= U_col_new;
       CSC->nb_free += U_col_new;
       U_vals  = U->col[col].val + U->col[col].nb_elem - U_col_new;

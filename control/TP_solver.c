@@ -876,17 +876,18 @@ TP_solver_update_matrix(TP_solver self)
       /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
       /* 	TP_schur_matrix_check_symetry(self->S); */
       
-      TP_verbose_start_timing(&step->timing_update_U);
-      TP_schur_matrix_update_U(S, U, L, nb_pivots,  &self->row_perm[self->done_pivots],
-			       self->U_struct, self->n_U_structs, self->nnz_U_structs);
-      TP_verbose_stop_timing(&step->timing_update_U);
+      /* TP_verbose_start_timing(&step->timing_update_U); */
+      /* TP_schur_matrix_update_U(S, U, L, nb_pivots,  &self->row_perm[self->done_pivots], */
+      /* 			       self->U_struct, self->n_U_structs, self->nnz_U_structs); */
+      /* TP_verbose_stop_timing(&step->timing_update_U); */
       /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
       /*   TP_schur_matrix_memory_check(self->S); */
       /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
       /*   TP_schur_matrix_check_symetry(self->S); */
       
       TP_verbose_start_timing(&step->timing_update_S);
-      TP_schur_matrix_update_S(S, L, U, self->U_struct, self->n_U_structs, self->invr_row_perm);
+      TP_schur_matrix_update_S(S, L, U, self->U_struct, self->n_U_structs, self->nnz_U_structs, self->invr_row_perm,
+			       nb_pivots, &self->row_perm[self->done_pivots]);
       TP_verbose_stop_timing(&step->timing_update_S);
       /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
       /* 	TP_schur_matrix_memory_check(self->S); */
@@ -943,8 +944,8 @@ TP_continue_pivot_search(TP_schur_matrix S,
   n_schur = (long) S->n - nb_done_pivots;
   m_schur = (long) S->m - nb_done_pivots;
   if ( S->nnz > n_schur * m_schur * density_tolerance) {
+    printf(" S nnz %ld n %ld m %ld tol %f\n", S->nnz, n_schur, m_schur, density_tolerance); 
     verbose->reason = TP_reason_density;
-    printf("density failed with reason = %d and TP_reason_density = %d \n", verbose->reason, TP_reason_density);
     retval = 0;
   }
 
