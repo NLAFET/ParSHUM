@@ -42,6 +42,7 @@ struct _TP_solver {
   TP_counters *counters;
   
   TP_U_struct *U_struct;
+  TP_U_struct *L_struct;
 
   pthread_mutex_t counters_lock;
 
@@ -65,6 +66,9 @@ struct _TP_solver {
   int allocated_U_struct;  
   int n_U_structs;  
   int nnz_U_structs;  
+  int allocated_L_struct;  
+  int n_L_structs;  
+  int nnz_L_structs;  
 
   int debug;
 

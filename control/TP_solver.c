@@ -682,6 +682,10 @@ TP_solver_alloc_internal(TP_solver self)
   self->allocated_U_struct = self->allocated_U_struct ? self->allocated_U_struct : 1;
   self->U_struct = calloc(self->allocated_U_struct, sizeof(*self->U_struct));
 
+  self->allocated_L_struct = self->A->m / 100;  
+  self->allocated_L_struct = self->allocated_L_struct ? self->allocated_L_struct : 1;
+  self->L_struct = calloc(self->allocated_L_struct, sizeof(*self->L_struct));
+
   pthread_mutex_init(&self->counters_lock, NULL);
 }
 
@@ -699,7 +703,7 @@ TP_solver_init(TP_solver self)
     is_plasma_init = 1;
   }
   
-  if ( ! (self->debug & TP_CHECK_DENSE_W_TP_PERM) )
+  if ( !(self->debug & TP_CHECK_DENSE_W_TP_PERM) )
     TP_solver_alloc_internal(self);
 
   TP_verbose_create_dirs(self->verbose->parms->output_dir);
@@ -758,7 +762,6 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
     self->U_struct[k].col = i;
     self->U_struct[k].nb_elem = set->cols_count[i] - set->base + 1;
     nnz += self->U_struct[k].nb_elem;
-
     if( ++k >= self->allocated_U_struct)
       {
 	self->allocated_U_struct *= 2;
@@ -767,6 +770,28 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
   }
   self->n_U_structs = k;
   self->nnz_U_structs = nnz;
+  
+  for ( i = 0, k=0, nnz = 0; i < n; i++) {
+    if (set->rows_count[i] < set->base)
+      continue;
+    if (self->invr_row_perm[i] != TP_UNUSED_PIVOT)  {
+      if (set->rows_count[i] > set->base) {
+	TP_warning(__FUNCTION__, __FILE__, __LINE__, "row is supposed to be a pivot bit is larger then base ");
+      } else {
+	continue;
+      }
+    }
+    self->L_struct[k].col = i;
+    self->L_struct[k].nb_elem = set->rows_count[i] - set->base + 1;
+    nnz += self->L_struct[k].nb_elem;
+    if( ++k >= self->allocated_L_struct)
+      {
+	self->allocated_L_struct *= 2;
+	self->L_struct = realloc(self->L_struct, self->allocated_L_struct * sizeof(*self->L_struct));
+      }
+  }
+  self->n_L_structs = k;
+  self->nnz_L_structs = nnz;
 
   self->rows_count = set->rows_count;
   self->cols_count = set->cols_count;
@@ -799,7 +824,7 @@ TP_solver_find_pivot_set(TP_solver self)
   			  self->invr_col_perm, self->invr_row_perm);
   nb_singeltons = self->nb_col_singletons + self->nb_row_singletons;
 
-  if ( nb_singeltons){
+  if (nb_singeltons){
     self->found_pivots += nb_singeltons ;
     TP_verbose_update_pivots(self->verbose, nb_singeltons);
     return;
@@ -852,9 +877,9 @@ TP_solver_update_matrix(TP_solver self)
       
       if ( self->nb_row_singletons) {
 	TP_verbose_start_timing(&step->timing_update_LD);
-	TP_schur_matrix_update_LD(S, L, D,
-				  &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots],
-				  self->nb_row_singletons);
+	TP_schur_matrix_update_LD_singeltons(S, L, D,
+					     &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots],
+					     self->invr_col_perm, self->nb_row_singletons);
 	TP_verbose_stop_timing(&step->timing_update_LD);
       }
       
@@ -869,7 +894,9 @@ TP_solver_update_matrix(TP_solver self)
   else
     {
       TP_verbose_start_timing(&step->timing_update_LD);
-      TP_schur_matrix_update_LD(S, L, D, &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], nb_pivots);
+      TP_schur_matrix_update_LD(S, L, D, &self->row_perm[self->done_pivots],
+				&self->col_perm[self->done_pivots], self->invr_col_perm, nb_pivots,
+                                self->L_struct, self->n_L_structs, self->nnz_L_structs);
       TP_verbose_stop_timing(&step->timing_update_LD);
       /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
       /* 	TP_schur_matrix_memory_check(self->S); */

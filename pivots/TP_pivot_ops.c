@@ -223,18 +223,6 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
   update_counter(set->rows_count, matrix->CSC[cell->col].row, matrix->CSC[cell->col].nb_elem, set->base);
   set->nb_elem++;
 
-  /* int  i, n = matrix->n; */
-  /* printf("cols_count for pivot %d :  ", cell->row); */
-  /* for (i = 0; i < n; i++)  */
-  /*   printf("%d: %d    ", i, set->cols_count[i]); */
-  /* printf("\n"); */
-
-  /* printf("rows_count for pivot %d :  ", cell->col); */
-  /* for (i = 0; i < n; i++)  */
-  /*   printf("%d: %d    ", i, set->rows_count[i]); */
-  /* printf("\n"); */
-  /* printf("\n"); */
-
   return NULL;
 }
 
