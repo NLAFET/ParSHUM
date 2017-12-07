@@ -590,7 +590,6 @@ TP_solver_alloc_counters(TP_solver solver, int **col_count, int **row_count)
     solver->counters[new]->used_counters = calloc((size_t) solver->size_counters, sizeof(*solver->counters[new]->used_counters));
     counter = solver->counters[new];
   }
-  
   total = solver->size_counters;
 
   for(i = 0; i < total; i++)
@@ -804,7 +803,7 @@ void
 TP_solver_check_counters(TP_solver self)
 {
   int i; 
-
+  
   for (i = 0; i < self->nb_counters; i++) 
     TP_check_counters(i, self->counters[i]->array, self->counters[i]->used_counters,
 		      self->done_pivots + 1, self->size_counters, self->A->n);

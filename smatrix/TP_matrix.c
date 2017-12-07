@@ -164,7 +164,6 @@ TP_matrix_allocate(TP_matrix self, int n, int m, long nnz,
      TP_warning(__FUNCTION__, __FILE__, __LINE__,"No memory is allocated, Rutherford Boeing matrices are allocated by SPRAL.");
       return;
     }
-
   self->allocated = size_index;
 
   *ptr   = calloc((size_t) size_ptr  , sizeof(**ptr));

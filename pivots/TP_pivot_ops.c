@@ -14,7 +14,8 @@ void
 get_candidates(TP_schur_matrix matrix,
 	       TP_pivot_candidates candidates,
 	       double value_tol,
-	       int first_col, int last_col)
+	       int first_col, int last_col, 
+	       int max_col_length)
 {
   int best_marko = INT_MAX;
   int i, j;
@@ -32,6 +33,8 @@ get_candidates(TP_schur_matrix matrix,
       double *vals    = CSC->val;
       int col_nb_elem = CSC->nb_elem;
       double col_max  = CSC->col_max;
+      if ( col_nb_elem > max_col_length)
+	continue;
 
       for(j = 0; j < col_nb_elem; j++)
   	{
@@ -91,6 +94,8 @@ get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col,
   TP_pivot_list self = TP_pivot_list_create();
   int i, candidates_per_set = 0;
   int n = matrix->n, best_marko;
+  int max_col_length = (int)  ( matrix->nnz / (matrix->n - solver->done_pivots) );
+  max_col_length /= 1.2;
 
 #pragma omp parallel num_threads(nb_threads)
   {
@@ -100,7 +105,7 @@ get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col,
     if ( me == (nb_threads - 1) )
       end = n;
     
-    get_candidates(matrix, candidates, value_tol, start, end);
+    get_candidates(matrix, candidates, value_tol, start, end, max_col_length);
   }  
 
   best_marko = candidates->best_marko[0];
@@ -120,7 +125,6 @@ get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col,
 	  continue;
 	
 	candidates_per_set++;
-	
 	
 	if (candidates_per_set > nb_candidates_per_block) {
 	  candidates_per_set = 0;
