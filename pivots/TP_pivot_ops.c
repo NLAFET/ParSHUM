@@ -95,7 +95,7 @@ get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col,
   int i, candidates_per_set = 0;
   int n = matrix->n, best_marko;
   int max_col_length = (int)  ( matrix->nnz / (matrix->n - solver->done_pivots) );
-  max_col_length /= 1.2;
+  max_col_length *= 2;
 
 #pragma omp parallel num_threads(nb_threads)
   {
@@ -348,8 +348,8 @@ update_both(TP_pivot_cell cell, TP_schur_matrix matrix, int *cols_count, int *ro
     {
       update_counter(cols_count, matrix->CSR[cell->row].col, matrix->CSR[cell->row].nb_elem, base);
       update_counter(rows_count, matrix->CSC[cell->col].row, matrix->CSC[cell->col].nb_elem, base);
-      cells++;
-      cell = cell->next;
+      cells++; 
+     cell = cell->next;
     }
   return cells;
 }

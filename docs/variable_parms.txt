@@ -1,7 +1,6 @@
 value_tol
 for(i=$1; i<$2; i*=$3)
 
-
 marko_tol
 for(i=$1; i<$2; i+=$3)
 

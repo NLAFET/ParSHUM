@@ -80,7 +80,7 @@ TP_read_mtl_file(TP_matrix self, const char*filename)
   _col_ptr[_n] = _nnz;
   
   fclose(file);
-
+  
   self->n         = _n;
   /* for this function we supose that the matrix is square */
   self->m         = _n;
@@ -402,41 +402,12 @@ TP_matrix_create_random_matrix(int m, int n)
   self->val     = malloc((size_t) n*m  *sizeof(*self->val));
 
   self->col_ptr[0] = 0;
-  /* self->col_ptr[1] = 3; */
-  /* self->col_ptr[2] = 5; */
-  /* self->col_ptr[3] = 7; */
-
-  /* self->val[0] = 1.0; */
-  /* self->val[1] = 1.0; */
-  /* self->val[2] = 1.0; */
-  /* self->val[3] = 4.0; */
-  /* self->val[4] = 1.0; */
-  /* self->val[5] = 1.0; */
-  /* self->val[6] = 1.0; */
-
-  /* self->row[0] = 0; */
-  /* self->row[1] = 1; */
-  /* self->row[2] = 2; */
-  /* self->row[3] = 0; */
-  /* self->row[4] = 1; */
-  /* self->row[5] = 1; */
-  /* self->row[6] = 2; */
-
 
   for(col = 0; col < n; col++)
     {
       self->col_ptr[col+1] = (col + 1) * m;
       for(row = 0; row < m; row++)
   	{
-  	  /* self->row[col*m + row] = row; */
-  	  /* self->val[col*m + row] = 1.00; */
-  	  /* if (row == 0 && col == 2) */
-  	  /*   self->val[col*m + row] = 0.0; */
-  	  /* if (row == 0 && col == 1) */
-  	  /*   self->val[col*m + row] = 4.0; */
-  	  /* if (row == 2 && col == 1) */
-  	  /*   self->val[col*m + row] = 0.0; */
-	  
   	  self->val[col*m + row] =  ( (double)rand() / (double)RAND_MAX ) * 10;
   	  if (col == row)
   	    self->val[col*m + row] *= 4;
@@ -469,7 +440,6 @@ TP_print_LDU(TP_matrix A, TP_matrix L, TP_matrix D, TP_matrix U, int *row_perms)
 	  }
 	printf("[%d,%d]:(%f)\t", i, j, val);
       }
-
       printf("[%d,%d]:(%f)\t", i, j++, D->val[i]);
 
       for( ; j < n; j++) {

@@ -17,7 +17,6 @@ TP_vector_create(int n)
   return self;
 }
 
-
 void
 TP_vector_read_mtl_file(TP_vector self, char *filename)
 {

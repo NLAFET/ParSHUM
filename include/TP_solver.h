@@ -6,6 +6,7 @@
 #include "TP_enum.h"
 #include "TP_matrix.h" 
 #include "TP_U_matrix.h" 
+#include "TP_Luby.h" 
 #include "TP_schur_matrix.h" 
 #include "TP_dense.h"
 #include "TP_verbose.h"
@@ -40,7 +41,9 @@ struct _TP_solver {
   
   TP_pivot_candidates candidates;
   TP_counters *counters;
-  
+
+  TP_Luby Luby;
+
   TP_U_struct *U_struct;
   TP_U_struct *L_struct;
 
@@ -69,6 +72,7 @@ struct _TP_solver {
   int allocated_L_struct;  
   int n_L_structs;  
   int nnz_L_structs;  
+  int luby_algo;
 
   int debug;
 

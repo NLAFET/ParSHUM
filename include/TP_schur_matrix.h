@@ -6,29 +6,9 @@
 #include "TP_matrix.h"
 #include "TP_U_matrix.h"
 #include "TP_dense.h"
+#include "TP_internal_mem.h"
 
 typedef struct _TP_schur_matrix *TP_schur_matrix;
-typedef struct _free_space  *free_space;
-typedef struct _schur_mem *schur_mem;
-typedef struct _CSC_struct CSC_struct;
-typedef struct _CSR_struct CSR_struct;
-
-
-struct _CSR_struct {
-  int nb_elem;
-  int nb_free;
-  int *col;
-};
-
-struct _CSC_struct {
-  double col_max;
-  int    nb_elem;
-  int    nb_free;
-  omp_lock_t lock;
-
-  double *val;
-  int    *row;
-};
 
 struct _TP_schur_matrix {
   CSC_struct *CSC;
@@ -37,10 +17,9 @@ struct _TP_schur_matrix {
   omp_lock_t *row_locks;
   omp_lock_t *col_locks;
 
-  schur_mem internal_mem;
+  TP_internal_mem internal_mem;
 
   long **row_struct;
-
   int nb_threads;
   
   int n;
@@ -101,11 +80,10 @@ void  TP_schur_matrix_memory_check(TP_schur_matrix self);
 
 void  TP_schur_matrix_check_symetry(TP_schur_matrix self);
 void  TP_print_GB(TP_schur_matrix self, char *mess);
-void  TP_print_single_GB(free_space self, char *mess);
+/* void  TP_print_single_GB(free_space self, char *mess); */
 void  TP_check_current_counters(TP_schur_matrix self,
 				int *col_perm, int *row_perm, int nb_perms, 
 				int *col_count, int *row_count, int base);
-
 
 #endif //  _TP_SCHUR_MATRIX_H 
 

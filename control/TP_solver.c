@@ -24,6 +24,7 @@ const char *usageStrign[] = {
   "            [--check_TP_with_plasma_perm] [--check_dense_with_TP_perm] [--print_each_step] [--check_GC]",
   "            [--group_run value_tol|marko_tol|schur_density|nb_candidates|min_pivots|nb_threads init inc nb_steps]",
   "            [--counters_size #double_counters] [--check_counters] [--check_schur_doubles] [--max_dense_schur size]",
+  "            [--luby_algorithm]", 
   NULL,
 };
 
@@ -51,7 +52,7 @@ TP_solver_create()
   self->exe_parms->min_pivot_per_steps     = 20;
   self->exe_parms->density_tolerance       = 0.2;
   self->exe_parms->max_dense_schur         = 20000;
-
+  
   self->verbose = TP_verbose_create(self->exe_parms);
   return self;
 }
@@ -201,7 +202,7 @@ check_dense_with_TP_perm(int argc, char **argv)
   TP_vector_destroy(sol_dense);
   TP_solver_destroy(dense_solver);
   TP_solver_destroy(self);
-
+  
   return 0;
 }
 
@@ -332,6 +333,8 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
 	TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "max_dense_schur should be at least 1");
       self->exe_parms->max_dense_schur = tmp;
       continue;
+    }  if (!strcmp(argv[i], "--luby_algorithm")) {
+      self->luby_algo = 1;
     } else if (!strcmp(argv[i], "--help")) {
       int j = 0;
       while( usageStrign[j] !=  NULL)
@@ -550,7 +553,6 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
       TP_verbose_print_group_run(run->verbose, type, (void *) &current_val, i, file);
       TP_solver_destroy(run);
     }
-
   fclose(file);
   
   TP_vector_destroy(X);
@@ -558,9 +560,7 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
   TP_vector_destroy(sol);
 
   TP_matrix_destroy(A);
-  
   free(output_runs_file);
-
   TP_solver_dealloc(solver);
   
   return 0;
@@ -660,8 +660,6 @@ TP_solver_alloc_internal(TP_solver self)
   int_array_memset(self->invr_col_perm, TP_UNUSED_PIVOT, needed_pivots);
   int_array_memset(self->invr_row_perm, TP_UNUSED_PIVOT, needed_pivots);
 
-  self->random_col = create_randomize(self->A->n);
-
   self->previous_pivots = malloc(self->exe_parms->nb_previous_pivots *  sizeof(*self->previous_pivots));
   int_array_memset(self->previous_pivots, INT_MAX / self->exe_parms->nb_previous_pivots, self->exe_parms->nb_previous_pivots);
 
@@ -673,6 +671,8 @@ TP_solver_alloc_internal(TP_solver self)
   self->counters              = calloc( 1, sizeof(*self->counters));
   *self->counters             = calloc( 1, sizeof(**self->counters));
 
+  self->random_col = create_randomize(self->A->n);
+
   (*self->counters)->array    = calloc((size_t) self->size_counters * 2 * self->A->n,  sizeof(*self->counters[0]->array));
   (*self->counters)->used_counters = calloc((size_t) self->size_counters, sizeof(*self->counters[0]->used_counters));
   self->nb_counters = 1;
@@ -680,10 +680,11 @@ TP_solver_alloc_internal(TP_solver self)
   self->allocated_U_struct = self->A->n / 100;  
   self->allocated_U_struct = self->allocated_U_struct ? self->allocated_U_struct : 1;
   self->U_struct = calloc(self->allocated_U_struct, sizeof(*self->U_struct));
-
   self->allocated_L_struct = self->A->m / 100;  
   self->allocated_L_struct = self->allocated_L_struct ? self->allocated_L_struct : 1;
   self->L_struct = calloc(self->allocated_L_struct, sizeof(*self->L_struct));
+  
+  self->Luby = TP_Luby_create(self->A->n, self->A->m);
 
   pthread_mutex_init(&self->counters_lock, NULL);
 }
@@ -747,7 +748,7 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
       new_pivots++;
       cells = cells->next;
     }
-
+                            
   for ( i = 0, k=0, nnz = 0; i < n; i++) {
     if (set->cols_count[i] < set->base)
       continue;
@@ -768,7 +769,7 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
       }
   }
   self->n_U_structs = k;
-  self->nnz_U_structs = nnz;
+  self->nnz_U_structs =  nnz;
   
   for ( i = 0, k=0, nnz = 0; i < n; i++) {
     if (set->rows_count[i] < set->base)
@@ -797,6 +798,98 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
 
   self->found_pivots += new_pivots;
   TP_verbose_update_pivots(self->verbose, new_pivots);
+}
+
+
+
+void 
+TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
+{
+  int i, j, n = self->A->n;
+  int *col_counts = Luby->invr_col_perm;
+  int *row_counts = Luby->invr_row_perm;
+  int *row_perms = self->row_perm;
+  int *col_perms = self->col_perm;
+
+  int *invr_row_perms = self->invr_row_perm;
+  int *invr_col_perms = self->invr_col_perm;
+  TP_schur_matrix S = self->S;
+  new_pivots += self->done_pivots;
+  
+  for( i = self->done_pivots; i < new_pivots; i++)
+    {
+      invr_col_perms[col_perms[i]] = i;
+      invr_row_perms[row_perms[i]] = i;
+    }
+
+  self->n_U_structs = 0;
+  self->nnz_U_structs = 0;
+  self->n_L_structs = 0;
+  self->nnz_L_structs = 0;
+  
+  bzero(col_counts, n * sizeof(*col_counts));
+  bzero(row_counts, n * sizeof(*row_counts));
+  for ( i = self->done_pivots; i < new_pivots; i++)
+    {
+      CSC_struct *CSC = &S->CSC[col_perms[i]];
+      int *rows = CSC->row; 
+      int nb_elem = CSC->nb_elem;
+      for ( j = 0; j < nb_elem; j++)
+	  row_counts[rows[j]]++;
+      CSR_struct *CSR = &S->CSR[row_perms[i]];
+      int *cols = CSR->col;
+      nb_elem = CSR->nb_elem;
+      for ( j = 0; j < nb_elem; j++)
+	  col_counts[cols[j]]++;
+    }
+
+  /* print_int_array(col_counts, n,  "col_counts"); */
+  /* print_int_array(row_counts, n, "row_counts"); */
+  /* print_int_array(invr_col_perms, n,  "invr_col_perms"); */
+  /* print_int_array(invr_row_perms, n, "invr_row_perms"); */
+  for(i = 0; i < n; i++)
+    {
+      if (invr_row_perms[i] != TP_UNUSED_PIVOT) { 
+	if ( row_counts[i] > 1 ) 
+	  printf("KO on row_counts[%d] with %d elements !!\n", i, row_counts[i]);
+      }
+
+      if (invr_col_perms[i] != TP_UNUSED_PIVOT) { 
+	if ( col_counts[i] > 1 ) 
+	  printf("KO on col_counts[%d] with %d elements !!\n", i, col_counts[i]);
+      }
+    }
+
+  for( i = 0; i < n; i++) {
+    if (row_counts[i] && invr_row_perms[i] == TP_UNUSED_PIVOT) {
+      self->nnz_L_structs += row_counts[i];
+
+      if (self->n_L_structs >= self->allocated_L_struct )  {
+	self->allocated_L_struct *= 2;
+	self->L_struct = realloc(self->L_struct, self->allocated_L_struct * sizeof(*self->L_struct));
+      }
+      self->L_struct[self->n_L_structs].col = i;
+      self->L_struct[self->n_L_structs].nb_elem = row_counts[i];
+      self->n_L_structs++;
+    }
+  }
+
+  for( i = 0; i < n; i++) {
+    if (col_counts[i] && invr_col_perms[i] == TP_UNUSED_PIVOT) {
+      self->nnz_U_structs += col_counts[i];
+
+      if (self->n_U_structs >= self->allocated_U_struct )  {
+	self->allocated_U_struct *= 2;
+	self->U_struct = realloc(self->U_struct, self->allocated_U_struct * sizeof(*self->U_struct));
+      }
+      self->U_struct[self->n_U_structs].col = i;
+      self->U_struct[self->n_U_structs].nb_elem = col_counts[i];
+      self->n_U_structs++;
+    }
+  }
+
+  self->found_pivots = new_pivots;
+  TP_verbose_update_pivots(self->verbose,  new_pivots - self->done_pivots );
 }
 
 void
@@ -828,37 +921,70 @@ TP_solver_find_pivot_set(TP_solver self)
     TP_verbose_update_pivots(self->verbose, nb_singeltons);
     return;
   }
+  if (self->luby_algo) {
+    int best_marko = TP_Luby_get_candidates(self->S, self->Luby, exe_parms->value_tol, 0, self->S->n, 0);
+    TP_Luby_assign_score(self->S, self->Luby, exe_parms->marko_tol, best_marko, 0, self->S->n);
+    int new_pivots = 0;
+    /* TP_Luby_print_scores(self->Luby, self->S, "when assigned"); */
+    while( 1 )  {
+      int step_pivots;
+      TP_Luby_get_max(self->S, self->Luby, 0, self->S->n);
+      step_pivots = TP_Luby_first_pass(self->Luby,
+				       &self->col_perm[self->done_pivots + new_pivots],
+				       &self->row_perm[self->done_pivots + new_pivots]);
+      /* printf("candidates %d\n", step_pivots); */
+      if (!step_pivots) 
+	break;
+      
+      TP_Luby_second_pass(self->S, self->Luby, step_pivots, 
+			  &self->col_perm[self->done_pivots + new_pivots],
+			  &self->row_perm[self->done_pivots + new_pivots]);
+      
+      new_pivots += TP_Luby_discard(self->S, self->Luby, step_pivots,
+				    &self->col_perm[self->done_pivots + new_pivots],
+				    &self->row_perm[self->done_pivots + new_pivots]);
+      /* printf(" pivots found: "); */
+      /* for( int i = 0; i < new_pivots; i++)  */
+      /* 	printf("(%d,%d) ", self->col_perm[i+self->done_pivots],self->row_perm[i+self->done_pivots]);  */
+      /* printf("\n"); */
+      TP_Luby_check_pivots(self->Luby, self->S, &self->col_perm[self->done_pivots],  &self->row_perm[self->done_pivots], new_pivots);
+      /* TP_Luby_print_scores(self->Luby, self->S, "after discarding"); */
+      /* printf("found %d pivots\n", new_pivots); */
+    }
+    TP_solver_get_Luby_pivots(self, self->Luby, new_pivots);
+  } else {
     
-  if (self->debug & TP_CHECK_COUNTERS )
-    TP_solver_check_counters(self);
-
-  TP_verbose_start_timing(&step->timing_extracting_candidates);
-  list = get_possible_pivots(self, self->S, self->random_col, self->candidates, nb_threads,
-  			     exe_parms->value_tol, exe_parms->marko_tol,
-  			     exe_parms->nb_candidates_per_block);
-  TP_verbose_stop_timing(&step->timing_extracting_candidates);
-  
-  if( !list->nb_elem )
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "no possible pivot were found");
-  
-  TP_verbose_start_timing(&step->timing_merging_pivots);
-  list = merge_pivot_sets(list, self->S, self);
-
-  if (list->nb_elem > 1 )
-    TP_warning(__FUNCTION__, __FILE__, __LINE__, "not unique set");
-
-  TP_solver_get_pivots(self, list->sets);
-
-  if (self->debug & TP_CHECK_COUNTERS )
-    TP_check_current_counters(self->S, &self->col_perm[self->done_pivots], &self->row_perm[self->done_pivots],
-			      self->found_pivots - self->done_pivots, 
-			      self->cols_count, self->rows_count, self->done_pivots + 1);
-
-  if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
-    print_pivot_list(list, "found pivots");
-  TP_pivot_list_destroy(list, self);
-
-  TP_verbose_stop_timing(&step->timing_merging_pivots);
+    if (self->debug & TP_CHECK_COUNTERS )
+      TP_solver_check_counters(self);
+    
+    TP_verbose_start_timing(&step->timing_extracting_candidates);
+    list = get_possible_pivots(self, self->S, self->random_col, self->candidates, nb_threads,
+			       exe_parms->value_tol, exe_parms->marko_tol,
+			       exe_parms->nb_candidates_per_block);
+    TP_verbose_stop_timing(&step->timing_extracting_candidates);
+    
+    if( !list->nb_elem )
+      TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "no possible pivot were found");
+    
+    TP_verbose_start_timing(&step->timing_merging_pivots);
+    list = merge_pivot_sets(list, self->S, self);
+    
+    if (list->nb_elem > 1 )
+      TP_warning(__FUNCTION__, __FILE__, __LINE__, "not unique set");
+    
+    TP_solver_get_pivots(self, list->sets);
+    
+    if (self->debug & TP_CHECK_COUNTERS )
+      TP_check_current_counters(self->S, &self->col_perm[self->done_pivots], &self->row_perm[self->done_pivots],
+				self->found_pivots - self->done_pivots, 
+				self->cols_count, self->rows_count, self->done_pivots + 1);
+    
+    if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
+      print_pivot_list(list, "found pivots");
+    TP_pivot_list_destroy(list, self);
+    
+    TP_verbose_stop_timing(&step->timing_merging_pivots);
+  }
 }
 
 void
@@ -873,7 +999,6 @@ TP_solver_update_matrix(TP_solver self)
 
   if ( self->nb_row_singletons || self->nb_col_singletons)
     {
-      
       if ( self->nb_row_singletons) {
 	TP_verbose_start_timing(&step->timing_update_LD);
 	TP_schur_matrix_update_LD_singeltons(S, L, D,
@@ -893,10 +1018,21 @@ TP_solver_update_matrix(TP_solver self)
   else
     {
       TP_verbose_start_timing(&step->timing_update_LD);
+      
+      /* if (self->debug & TP_CHECK_PIVOTS ) { */
+      /* 	TP_schur_matrix_check_pivots(self->S, */
+      /* 				     self->row_perm, */
+      /* 				     self->col_perm, */
+      /* 				     self->invr_row_perm, */
+      /* 				     self->invr_col_perm, */
+      /* 				     self->found_pivots); */
+      /* } */
+      
       TP_schur_matrix_update_LD(S, L, D, &self->row_perm[self->done_pivots],
 				&self->col_perm[self->done_pivots], self->invr_col_perm, nb_pivots,
                                 self->L_struct, self->n_L_structs, self->nnz_L_structs);
       TP_verbose_stop_timing(&step->timing_update_LD);
+
       /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
       /* 	TP_schur_matrix_memory_check(self->S); */
       /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
@@ -921,16 +1057,7 @@ TP_solver_update_matrix(TP_solver self)
       /* 	TP_schur_matrix_check_symetry(self->S); */
     }
   self->done_pivots = self->found_pivots;
-  
-  if (self->debug & TP_CHECK_PIVOTS ) {
-    TP_schur_matrix_check_pivots(self->S,
-				 self->row_perm,
-				 self->col_perm,
-				 self->invr_row_perm,
-				 self->invr_col_perm,
-				 self->done_pivots);
-  }
-  
+   
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL)) {
     TP_schur_matrix_print(S, "S after update");
     TP_matrix_print(L, "L after update");
@@ -1019,7 +1146,6 @@ TP_solver_factorize(TP_solver self)
 				   exe_parms->max_dense_schur,
 				   self->debug, verbose) )
     { 
-      
        TP_verbose_per_step  step = TP_verbose_step_start(verbose);
        TP_verbose_start_timing(&step->timing_step);
        TP_verbose_start_timing(&step->timing_pivot_search);
@@ -1072,14 +1198,13 @@ TP_solver_factorize(TP_solver self)
     TP_verbose_update_dense_pivots(verbose, self->dense_pivots);
     verbose->nnz_final   = self->L->nnz + self->U->nnz + self->D->n + self->S_dense->n * self->S_dense->m;
     verbose->nnz_L       = self->L->nnz  + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2 )  ;
-    verbose->nnz_U       = self->U->nnz + self->D->n + ( ( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2    + self->S_dense->m ) ;
+    verbose->nnz_U       = self->U->nnz + self->D->n + (( self->S_dense->n * self->S_dense->m - self->S_dense->m) / 2 + self->S_dense->m ) ;
     verbose->nnz_S_dense = self->S_dense->n * self->S_dense->m;
   }
 
   TP_verbose_stop_timing(&verbose->timing_facto_dense);
   TP_verbose_stop_timing(&verbose->timing_facto);
 }
-
 
 void
 TP_solver_solve(TP_solver self, TP_vector RHS)
@@ -1096,7 +1221,7 @@ TP_solver_solve(TP_solver self, TP_vector RHS)
     TP_vector_permute(RHS, self->invr_col_perm);
   } else {
     TP_verbose_start_timing(&verbose->timing_solve_L);
-    if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL)) 
+     if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL)) 
       TP_vector_print(RHS, "initial RHS");
     TP_vector_permute(RHS, self->row_perm);
     if (self->debug & TP_DEBUG_GOSSIP_GIRL) 
@@ -1229,8 +1354,8 @@ TP_solver_destroy(TP_solver self)
       free(self->counters[i]->used_counters);
       free(self->counters[i]);
     }
+
     free(self->counters);
-    
     free(self->U_struct);
     
     pthread_mutex_destroy(&self->counters_lock);
@@ -1241,6 +1366,8 @@ TP_solver_destroy(TP_solver self)
     free(self->invr_col_perm);
     free(self->random_col);
     free(self->previous_pivots);
+
+    TP_Luby_destroy(self->Luby);
   }
   
   TP_solver_dealloc(self);

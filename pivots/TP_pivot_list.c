@@ -208,6 +208,7 @@ get_next_merging_set(TP_pivot_list self)
 /*   candidates->cells = independent_cell; */
 /*   return candidates; */
 /* } */
+
 void
 print_pivot_list(TP_pivot_list self, char *mess)
 {
