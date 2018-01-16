@@ -8,6 +8,7 @@ typedef struct _TP_verbose *TP_verbose;
 typedef struct _TP_verbose_per_step *TP_verbose_per_step;
 typedef struct _TP_verbose_parms *TP_verbose_parms;
 typedef struct _TP_exe_parms *TP_exe_parms;
+typedef struct _TP_Luby_step *TP_Luby_step; 
 
 struct _TP_verbose_parms {
   char *prog_name;
@@ -40,11 +41,8 @@ struct _TP_exe_parms {
 struct _TP_verbose_per_step {
   double timing_step;
 
-  /* Total time for finding a set of independent pivots  */
   double timing_pivot_search;
-  /* Time  to extract initial  pivot sets */
   double timing_extracting_candidates;
-  /* Time for merging tbe pivot sets */
   double timing_merging_pivots;
 
   /* total time for updating the Schur with the new pivot set */
@@ -56,19 +54,43 @@ struct _TP_verbose_per_step {
   long new_nnz;
   long nb_flops;
   int nb_pivots;
+  int nb_Luby_steps;
+
+  TP_Luby_step Luby_init_phase;
+
+  TP_Luby_step Luby_step_first;
+  TP_Luby_step Luby_step_last;
 
   TP_verbose_per_step next;
+};
+
+struct _TP_Luby_step {
+  double timing_max;
+  double timing_first_pass;
+  double timing_second_pass;
+  double timing_discarding;
+
+  int nb_candidates;
+  int nb_pivots;
+
+  TP_Luby_step next;
 };
 
 struct _TP_verbose {
   double timing_facto;
   double timing_facto_sparse;
   double timing_facto_dense;
+
   /* time needed to convert the Schur from schur matrix to a dense matrix */
   double timing_convert_schur;
   double timing_total_pivot_search;
   double timing_total_extracting_candidates;
   double timing_total_merging_pivots;
+
+  /* LUBY's algorithm */
+  double timing_total_Luby_assign_scores;
+  double timing_total_Luby_first_pass;
+  double timing_total_Luby_second_pass;
 
   double timing_solve;
   double timing_solve_L;
@@ -99,6 +121,8 @@ struct _TP_verbose {
   int nb_steps;
 
   int reason;
+  
+  int Luby;
 
   TP_verbose_per_step stats_first;
   TP_verbose_per_step stats_last;
@@ -117,6 +141,7 @@ void                TP_verbose_destroy_V0(TP_verbose self);
 void                TP_verbose_print_parms_raw(TP_exe_parms exe_parms, TP_parm_type type, FILE *file);
 void                TP_verbose_print_group_run(TP_verbose verbose, TP_parm_type type, void *val,
 					       int current_run, FILE *file);
+void                TP_verbose_update_Luby_step_V0(TP_verbose_per_step step, TP_Luby_step Luby_step);
 
 static inline void
 TP_verbose_timing_start_V0(double *timing)
@@ -148,6 +173,7 @@ TP_verbose_timing_stop_V0(double *timing)
 #define TP_verbose_update_dense_pivots(V,n) V->dense_pivots = n
 #define TP_verbose_create_dirs(S)           TP_verbose_create_dirs_V0(S)
 #define TP_verbose_draw_graph(V)            TP_verbose_draw_graph_V0(V)
+#define TP_verbose_update_Luby_step(s,l)    TP_verbose_update_Luby_step_V0(s, l)
 /* #elif TP_VERBOSITY == 1  */
 
 #endif
@@ -164,7 +190,7 @@ TP_verbose_timing_stop_V0(double *timing)
 #define TP_verbose_update_dense_pivots(V,n) (void) 0
 #define TP_verbose_create_dirs(S)           (void) 0
 #define TP_verbose_draw_graph(S)            (void) 0
-
+#define TP_verbose_update_Luby_step(s,l)    (void) 0
 #endif 
 
 #endif // _TP_VERBOSE_H

@@ -627,9 +627,9 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
   }
   S->nnz -= U_new_nnz;
 
-/* #pragma omp parallel num_threads(nb_threads) private(step, i) */
-  /* { */
-  int me =  0; //omp_get_thread_num();
+#pragma omp parallel num_threads(nb_threads) private(step, i)
+  {
+  int me =  omp_get_thread_num();
   int n = S->n;
   int  j, k, l;
   long *schur_row_struct = S->row_struct[me];
@@ -699,7 +699,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
       }
       CSC->col_max = get_max_double(CSC->val, CSC->nb_elem);
     }
-  /* } */
+  }
 }
 
 TP_dense_matrix 

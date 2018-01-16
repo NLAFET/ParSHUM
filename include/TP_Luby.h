@@ -10,6 +10,7 @@ struct _TP_Luby_score {
   int     nb_elem;
   int     allocated;
   double *score;
+  int *row;
 };
 
 struct _TP_Luby_ {
@@ -27,9 +28,10 @@ struct _TP_Luby_ {
   
   int m;
   int n;
+  long nnz;
 };
  
-TP_Luby  TP_Luby_create(int n, int m);
+TP_Luby  TP_Luby_create(TP_schur_matrix matrix);
 
 void TP_Luby_destroy(TP_Luby self);
 

@@ -59,11 +59,19 @@ TP_verbose_step_start_V0(TP_verbose self)
 }
 
 void
-TP_verbose_print_run(TP_verbose self, FILE *file)
+TP_verbose_update_Luby_step_V0(TP_verbose_per_step step, TP_Luby_step Luby_step)
 {
-
+  if (!step->nb_Luby_steps) 
+    {
+      step->Luby_step_first = step->Luby_step_last = Luby_step;
+    }
+  else
+    {
+      step->Luby_step_last->next = Luby_step;
+      step->Luby_step_last = Luby_step;
+    }
+  step->nb_Luby_steps++;
 }
-
 
 void
 TP_verbose_print_steps(TP_verbose_per_step self, TP_verbose_parms parms)
@@ -95,7 +103,6 @@ TP_verbose_print_parms_raw(TP_exe_parms exe_parms, TP_parm_type type, FILE *file
     fprintf(file,"#valut_tol\t%f\n", exe_parms->value_tol);
   if (type != TP_marko_tol)
     fprintf(file,"#marko_tol\t%f\n", exe_parms->marko_tol);
-  /* TODO: add this two  parms to the TP_parm_type and everywhere that is used */
   fprintf(file,"#extra_space\t%f\n", exe_parms->extra_space);
   fprintf(file,"#extra_space_inbetween\t%f\n", exe_parms->extra_space_inbetween);
   if (type != TP_schur_density)
@@ -106,7 +113,6 @@ TP_verbose_print_parms_raw(TP_exe_parms exe_parms, TP_parm_type type, FILE *file
     fprintf(file,"#nb_threads\t%d\n", exe_parms->nb_threads);
   if (type != TP_nb_candidates)
     fprintf(file,"#nb_candidates_per_block\t%d\n", exe_parms->nb_candidates_per_block);
-  /* TODO: add this parm to the TP_parm_type and everywhere that is used */
   fprintf(file,"#nb_previous_pivots\t%d\n", exe_parms->nb_previous_pivots);
   fprintf(file,"#\n");
 }
@@ -252,6 +258,8 @@ TP_verbose_print_raw(TP_verbose verbose)
   fprintf(file,"#nnz_U\t%ld\n", verbose->nnz_U);
   fprintf(file,"#nnz_S_dense\t%ld\n", verbose->nnz_S_dense);
   fprintf(file,"#        ###########OTHERS##################\n");  
+  if (verbose->Luby) 
+    fprintf(file,"#Luby_algorithm\n");
   fprintf(file,"#schur_density\t%f\n", verbose->schur_density);
   fprintf(file,"#pivots_avg\t%f\n", pivots_avg);
   fprintf(file,"#pivots_stddev\t%f\n", pivots_stddev);
@@ -281,8 +289,46 @@ TP_verbose_print_raw(TP_verbose verbose)
       step = step->next;
     }
   fclose(file);
+
+  TP_verbose_print_Luby(verbose);
 }
 
+void
+TP_verbose_print_Luby(TP_verbose self)
+{
+  TP_verbose_per_step step = self->stats_first;
+  char filename[2048];
+  FILE *file;
+
+  snprintf(filename, 2048, "%s/data/%s_Luby.dat", self->parms->output_dir, self->parms->outfiles_prefix);
+  file = fopen(filename, "w+");
+
+  fprintf(file,"===================================================================================================================================================<\n");
+  fprintf(file,"| #candidates\t| #pivots\t| candidates\t| scores\t|computing max\t| first passs\t|  second pass\t|  discarding\t| managing pivots |\n");
+  fprintf(file,"===================================================================================================================================================\n");
+  while(step)
+    {
+      TP_Luby_step init_phase = step->Luby_init_phase;
+      TP_Luby_step Luby_step = step->Luby_step_first;
+
+      /* this test is needed because of singletons */
+      if ( init_phase ) {
+	fprintf(file,"| %12d\t| \t\t| %12f\t| %12f\t| 0.000000000\t| 0.000000000\t| 0.000000000\t| 0.000000000\t| %12f\t|\n", 
+		init_phase->nb_candidates, init_phase->timing_first_pass,
+		init_phase->timing_second_pass, init_phase->timing_discarding);
+	while(Luby_step) {
+	  fprintf(file,"| %12d\t| %12d\t| 0.000000000\t| 0.000000000\t| %12f\t| %12f\t| %12f\t| %12f\t| 0.000000000\t|\n",
+		  Luby_step->nb_candidates, Luby_step->nb_pivots,
+		  Luby_step->timing_max, Luby_step->timing_first_pass,
+		  Luby_step->timing_second_pass, Luby_step->timing_discarding);
+	  Luby_step = Luby_step->next;
+	}
+	fprintf(file,"===================================================================================================================================================\n");
+      }
+      step = step->next;
+    }
+  fclose(file);
+}
 
 void
 TP_verbose_print_V0(TP_verbose self)
@@ -335,7 +381,7 @@ TP_verbose_print_V0(TP_verbose self)
   else if (self->reason & TP_reason_density)
     fprintf(file,"beacuse the schur became too dense.\n");
   else if (self->reason & TP_reason_no_pivots)
-    fprintf(file,"because we did not found engough pibots.\n");
+    fprintf(file,"because we did not found engough pivots.\n");
   else if (self->reason & TP_reason_because)
     fprintf(file,"just because.\n");
 
@@ -353,7 +399,7 @@ create_plot_file(char *plot_file, char *data_file,
 {
   FILE *file = fopen(plot_file, "w+");
   int i ;  
-  fprintf(file, "set terminal eps\n");
+ fprintf(file, "set terminal eps\n");
   fprintf(file, "set style data  histogram\n");
   fprintf(file, "set style fill solid border\n");
   fprintf(file, "set style histogram rowstacked\n");

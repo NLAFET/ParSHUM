@@ -684,7 +684,7 @@ TP_solver_alloc_internal(TP_solver self)
   self->allocated_L_struct = self->allocated_L_struct ? self->allocated_L_struct : 1;
   self->L_struct = calloc(self->allocated_L_struct, sizeof(*self->L_struct));
   
-  self->Luby = TP_Luby_create(self->A->n, self->A->m);
+  self->Luby = TP_Luby_create(self->S);
 
   pthread_mutex_init(&self->counters_lock, NULL);
 }
@@ -695,9 +695,10 @@ TP_solver_init(TP_solver self)
   self->verbose->n = self->A->n;
   self->verbose->m = self->A->m;
   self->verbose->nnz_input = self->verbose->nnz_final = self->A->nnz;
+  self->verbose->Luby = self->luby_algo;
 
   self->verbose->parms->outfiles_prefix = get_outfile_prefix(self->exe_parms, TP_parm_none);
-  
+
   if (!is_plasma_init) {
     plasma_init(1);
     is_plasma_init = 1;
@@ -921,37 +922,61 @@ TP_solver_find_pivot_set(TP_solver self)
     TP_verbose_update_pivots(self->verbose, nb_singeltons);
     return;
   }
+
   if (self->luby_algo) {
-    int best_marko = TP_Luby_get_candidates(self->S, self->Luby, exe_parms->value_tol, 0, self->S->n, 0);
+    TP_Luby_step init_phase = calloc(1, sizeof(*init_phase));
+    int new_pivots = 0, best_marko, stepl = 0;
+
+    TP_verbose_start_timing(&step->timing_extracting_candidates);
+    TP_verbose_start_timing(&init_phase->timing_first_pass);
+    best_marko = TP_Luby_get_candidates(self->S, self->Luby, exe_parms->value_tol, 0, self->S->n, 0);
+    TP_verbose_stop_timing(&init_phase->timing_first_pass);
+    best_marko = !best_marko ? 1 : best_marko;
+
+    TP_verbose_start_timing(&init_phase->timing_second_pass);
     TP_Luby_assign_score(self->S, self->Luby, exe_parms->marko_tol, best_marko, 0, self->S->n);
-    int new_pivots = 0;
-    /* TP_Luby_print_scores(self->Luby, self->S, "when assigned"); */
+    TP_verbose_stop_timing(&init_phase->timing_second_pass);
+    TP_verbose_stop_timing(&step->timing_extracting_candidates);
+    init_phase->nb_candidates = (int) self->Luby->nnz;
+    TP_verbose_start_timing(&step->timing_merging_pivots);
     while( 1 )  {
-      int step_pivots;
+      printf("step %d\n", stepl++);
+      TP_Luby_step Luby_step = calloc(1, sizeof(*Luby_step));
+      TP_verbose_start_timing(&Luby_step->timing_max);
       TP_Luby_get_max(self->S, self->Luby, 0, self->S->n);
-      step_pivots = TP_Luby_first_pass(self->Luby,
-				       &self->col_perm[self->done_pivots + new_pivots],
-				       &self->row_perm[self->done_pivots + new_pivots]);
-      /* printf("candidates %d\n", step_pivots); */
-      if (!step_pivots) 
+      TP_verbose_stop_timing(&Luby_step->timing_max);
+
+      TP_verbose_start_timing(&Luby_step->timing_first_pass);
+      Luby_step->nb_candidates = TP_Luby_first_pass(self->Luby,
+						    &self->col_perm[self->done_pivots + new_pivots],
+						    &self->row_perm[self->done_pivots + new_pivots]);
+      TP_verbose_stop_timing(&Luby_step->timing_first_pass);
+
+      if (!Luby_step->nb_candidates) 
 	break;
       
-      TP_Luby_second_pass(self->S, self->Luby, step_pivots, 
+      TP_verbose_start_timing(&Luby_step->timing_second_pass);
+      TP_Luby_second_pass(self->S, self->Luby, Luby_step->nb_candidates, 
 			  &self->col_perm[self->done_pivots + new_pivots],
 			  &self->row_perm[self->done_pivots + new_pivots]);
+      TP_verbose_stop_timing(&Luby_step->timing_second_pass);
       
-      new_pivots += TP_Luby_discard(self->S, self->Luby, step_pivots,
-				    &self->col_perm[self->done_pivots + new_pivots],
-				    &self->row_perm[self->done_pivots + new_pivots]);
-      /* printf(" pivots found: "); */
-      /* for( int i = 0; i < new_pivots; i++)  */
-      /* 	printf("(%d,%d) ", self->col_perm[i+self->done_pivots],self->row_perm[i+self->done_pivots]);  */
-      /* printf("\n"); */
-      TP_Luby_check_pivots(self->Luby, self->S, &self->col_perm[self->done_pivots],  &self->row_perm[self->done_pivots], new_pivots);
-      /* TP_Luby_print_scores(self->Luby, self->S, "after discarding"); */
-      /* printf("found %d pivots\n", new_pivots); */
+      TP_verbose_start_timing(&Luby_step->timing_discarding);
+      Luby_step->nb_pivots = TP_Luby_discard(self->S, self->Luby, Luby_step->nb_candidates,
+					     &self->col_perm[self->done_pivots + new_pivots],
+					     &self->row_perm[self->done_pivots + new_pivots]);
+      new_pivots += Luby_step->nb_pivots;
+
+      TP_verbose_update_Luby_step(step, Luby_step);
+      TP_verbose_stop_timing(&Luby_step->timing_discarding);
     }
+    TP_verbose_stop_timing(&step->timing_merging_pivots);
+
+    TP_verbose_start_timing(&init_phase->timing_discarding);
     TP_solver_get_Luby_pivots(self, self->Luby, new_pivots);
+    TP_verbose_stop_timing(&init_phase->timing_discarding);
+
+    step->Luby_init_phase = init_phase;
   } else {
     
     if (self->debug & TP_CHECK_COUNTERS )
@@ -1357,6 +1382,7 @@ TP_solver_destroy(TP_solver self)
 
     free(self->counters);
     free(self->U_struct);
+    free(self->L_struct);
     
     pthread_mutex_destroy(&self->counters_lock);
     

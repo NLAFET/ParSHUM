@@ -3,27 +3,31 @@
 #include <strings.h>
 #include <math.h>
 #include <limits.h>
+#include <time.h>
 #include "TP_auxiliary.h"
 
 #include "TP_Luby.h"
-
-double
-randfrom(double min, double max) 
-{
-  double range = (max - min); 
-  double div = RAND_MAX / range;
-  return min + (rand() / div);
-}
  
 TP_Luby 
-TP_Luby_create(int n, int m)
+TP_Luby_create(TP_schur_matrix matrix)
 {
   TP_Luby self = calloc(1, sizeof(*self));
+  int brrr, n = matrix->n, m = matrix->m, i;
+
+  brrr = time(NULL);
 
   self->n = n;
   self->m = m;
   
   self->scores = calloc( n, sizeof(*self->scores));
+  for ( i = 0; i < n; i++)
+    {
+      TP_Luby_score *luby_score = &self->scores[i];
+      int nb_elem = matrix->CSC[i].nb_elem;
+      luby_score->score = calloc(nb_elem, sizeof(*luby_score->score));
+      luby_score->row = calloc(nb_elem, sizeof(*luby_score->row));
+      luby_score->allocated = nb_elem;
+    }
   
   self->col_max_val = malloc(n * sizeof(*self->col_max_val));
   self->col_max_row = malloc(n * sizeof(*self->col_max_row));
@@ -32,7 +36,9 @@ TP_Luby_create(int n, int m)
 
   self->invr_col_perm = malloc(n * sizeof(*self->invr_col_perm));
   self->invr_row_perm = malloc(n * sizeof(*self->invr_row_perm));
-  srand(time(NULL));
+
+  /* srand(brrr); */
+  
   return self;
 }
 
@@ -41,8 +47,11 @@ TP_Luby_destroy(TP_Luby self)
 {
   int i, n = self->n;
 
-  for(i = 0; i < n; i++) 
+  for(i = 0; i < n; i++)  {
     free(self->scores[i].score);
+    free(self->scores[i].row);
+  }
+  free(self->scores);
 
   free(self->col_max_val);
   free(self->col_max_row);
@@ -89,9 +98,9 @@ TP_Luby_get_candidates(TP_schur_matrix matrix,
 	    vals[j] = tmp_double;
 	    rows[nb_eligible++] = rows[j];
 	    rows[j] = tmp_int;
+	    if ( best_marko > current_marko) 
+	      best_marko = current_marko;
 	  }
-	  if ( best_marko > current_marko) 
-	    best_marko = current_marko;
 	}
       luby_score->nb_elem = nb_eligible;
     }
@@ -105,6 +114,7 @@ TP_Luby_assign_score(TP_schur_matrix matrix, TP_Luby Luby,
 		     int first_col, int last_col)
 {
   int i, j;
+  Luby->nnz = 0;
 
   for (i = first_col; i < last_col; i++)
     {
@@ -115,7 +125,7 @@ TP_Luby_assign_score(TP_schur_matrix matrix, TP_Luby Luby,
       int col_nb_elem = CSC->nb_elem;
       int     nb_elem = luby_score->nb_elem;
       
-      if (luby_score->allocated)  {
+      if (!luby_score->allocated)  {
 	luby_score->score = malloc(nb_elem * sizeof(*luby_score->score));
 	luby_score->allocated = nb_elem;
       } else if (luby_score->allocated < nb_elem ) {
@@ -136,10 +146,12 @@ TP_Luby_assign_score(TP_schur_matrix matrix, TP_Luby Luby,
 	  rows[j] = rows[nb_elem];
 	  rows[nb_elem] = row;
 	} else { 
-	  scores[j++] = randfrom(1.0, 15.0);
+	  scores[j++] = (double) 1.00 + ( (double) rand() / (double) RAND_MAX) *
+	                (1.00 + 1.00/(1.00 + (double) current_marko));
 	}
       }
       luby_score->nb_elem = nb_elem;
+      Luby->nnz  += nb_elem;
     }
 }
 
@@ -152,12 +164,13 @@ TP_Luby_get_max(TP_schur_matrix matrix, TP_Luby Luby,
   int    *col_max_row = Luby->col_max_row;
   double *row_max_val = Luby->row_max_val;
   int    *row_max_col = Luby->row_max_col;
+ 
+  Luby->nnz = 0;
 
   bzero(Luby->col_max_val, Luby->n * sizeof(*Luby->col_max_val));
   bzero(Luby->row_max_val, Luby->m * sizeof(*Luby->row_max_val));
   int_array_memset(col_max_row, -1, Luby->n);
   int_array_memset(row_max_col, -1, Luby->m);
-
   int_array_memset(Luby->invr_col_perm, -1, Luby->n);
   int_array_memset(Luby->invr_row_perm, -1, Luby->m);
 
@@ -167,6 +180,7 @@ TP_Luby_get_max(TP_schur_matrix matrix, TP_Luby Luby,
       int nb_elem = luby_score->nb_elem;
       int *rows = matrix->CSC[i].row;
       double *scores = luby_score->score;
+      Luby->nnz += nb_elem;
       for ( j = 0; j < nb_elem; j++)  {
 	int row = rows[j];
 	if (col_max_val[i] < scores[j]) {
@@ -179,6 +193,8 @@ TP_Luby_get_max(TP_schur_matrix matrix, TP_Luby Luby,
 	}
       }
     }
+  if (Luby->nnz == 0)
+    printf("no Luby's scores were assigned\n");
 }
 
 int
@@ -283,7 +299,6 @@ TP_Luby_discard(TP_schur_matrix matrix, TP_Luby Luby,
       row_perm[i] = -100;
     }    
 
-
   /* TODO: move this in the previous loop */
   for(i = 0; i < nb_eligible_pivots; i++) 
     {
@@ -322,7 +337,6 @@ TP_Luby_discard(TP_schur_matrix matrix, TP_Luby Luby,
 	  if ( invr_row_perm[row] > -1 )  {
 	    nb_elem--;
 	    double tmp_val = vals[j];
-	    double tmp_score = scores[j]; 
 	    vals[j] = vals[nb_elem];
 	    vals[nb_elem] = tmp_val;
 	    scores[j] = scores[nb_elem];
@@ -388,4 +402,7 @@ TP_Luby_check_pivots(TP_Luby Luby, TP_schur_matrix matrix,
       if (row_counts[row_perms[i]] != 1) 
 	printf("%d is suppose to be a pivot but col_count = %d\n",  row_perms[i], row_counts[row_perms[i]]);
     }
+
+  free(col_counts);
+  free(row_counts);
 } 
