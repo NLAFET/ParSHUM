@@ -17,7 +17,7 @@ struct _CSC_struct {
   double col_max;
   int    nb_elem;
   int    nb_free;
-  omp_lock_t lock;
+  int    nb_eligible;
 
   double *val;
   int    *row;

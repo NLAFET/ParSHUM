@@ -11,7 +11,7 @@ set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 set(LIBRARY_OUTPUT_PATH lib)
 SET(CMAKE_BUILD_TYPE DEBUG) 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -g -lm -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -ggdb -lm -Wall -O3")
 
 # The following folder will be included
 include_directories(include)

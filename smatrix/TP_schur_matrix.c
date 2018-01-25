@@ -712,7 +712,6 @@ TP_schur_matrix_convert(TP_schur_matrix S, int done_pivots)
   int n_schur = n - done_pivots;
   int m_schur = m - done_pivots;
   int invr_row[m];
-
   self = TP_dense_matrix_create(n_schur, m_schur);
   
   for(i = 0, k=0; i < m; i++)
