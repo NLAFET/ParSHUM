@@ -23,7 +23,7 @@ TP_matrix_create()
 }
 
 int
-read_rutherford_boeing(TP_matrix self, const char*filename)
+TP_read_rutherford_boeing(TP_matrix self, const char*filename)
 {
   int retval = 0;
   enum spral_matrix_type matrix_type;
@@ -128,11 +128,11 @@ void
 TP_matrix_allocate(TP_matrix self, int n, int m, long nnz,
 		   double extra_space, TP_matrix_type type)
 {
-  int  **index;
-  long **ptr;
-  double **val;
-  int size_index;
-  long size_ptr;
+  int  **index = NULL;
+  long **ptr = NULL;
+  double **val = NULL;
+  long size_index = -1;
+  int size_ptr  = -1;
 
   switch (type)  
     {
@@ -171,24 +171,6 @@ TP_matrix_allocate(TP_matrix self, int n, int m, long nnz,
   *val   = calloc((size_t) size_index, sizeof(**val));
 }
 
-
-double
-TP_matrix_get_val(TP_matrix A, int row, int col)
-{
-  int i;
-  int col_start = A->col_ptr[col];
-  int col_end   = A->col_ptr[col+1];
- 
-  for(i = col_start; i < col_end; i++)
-    if (A->row[i] == row) 
-      return A->val[i];
-
-  char mess[2048];
-  snprintf(mess, 2048, "accesing not exisiting A[%d, %d]", row, col);
-  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, mess);
-  return 0.0;
-}
-
 void 
 TP_matrix_realloc(TP_matrix self)
 {
@@ -214,7 +196,8 @@ double
 TP_matrix_get_norm(TP_matrix self)
 {
   int i;
-  int m = self->m, nnz = self->nnz;
+  int m = self->m;
+  long nnz = self->nnz;
   double tmp[m], res = 0.00;
 
   if (self->type != TP_CSC_matrix &&
@@ -236,10 +219,10 @@ TP_matrix_get_norm(TP_matrix self)
 void 
 TP_matrix_print(TP_matrix self, char *mess)
 {
-  int n, i, j;
-  long    *ptr;
-  double  *array;
-  int     *index;
+  int n = 0, i, j;
+  long    *ptr = NULL;
+  double  *array = NULL;
+  int     *index = NULL;
   
   printf("%s\n", mess);
     
@@ -398,8 +381,8 @@ TP_matrix_create_random_matrix(int m, int n)
   self->m = m;
   self->allocated = self->nnz = n*m;
   self->col_ptr = malloc((size_t) (n+1)*sizeof(*self->col_ptr));
-  self->row     = malloc((size_t) n*m  *sizeof(*self->row));
-  self->val     = malloc((size_t) n*m  *sizeof(*self->val));
+  self->row     = malloc((size_t) n * m  *sizeof(*self->row));
+  self->val     = malloc((size_t) n * m  *sizeof(*self->val));
 
   self->col_ptr[0] = 0;
 
@@ -479,9 +462,9 @@ TP_dense_2D_convert_sparse(TP_matrix A)
 void
 TP_matrix_destroy(TP_matrix self)
 {
-  int    *index;
-  long   *ptr;
-  double *val;
+  int    *index = NULL;
+  long   *ptr   = NULL;
+  double *val   = NULL;
   switch (self->type)  
     {
     case TP_CSC_matrix:

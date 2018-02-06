@@ -8,14 +8,14 @@ TP_U_matrix_create(TP_matrix A, double extra_space)
 {
   int i, n = A->n;
   TP_U_matrix self = calloc(1, sizeof(*self));
-  self->col     = calloc(n, sizeof(*self->col));
+  self->col     = calloc((size_t) n, sizeof(*self->col));
   self->n       = n;
   
   for ( i = 0; i < n; i++)
     {
-      int col_size = A->col_ptr[i+1] - A->col_ptr[i]; 
-      self->col[i].val = malloc(col_size * sizeof(*self->col[i].val));
-      self->col[i].row = malloc(col_size * sizeof(*self->col[i].row));
+      int col_size = (int) A->col_ptr[i+1] - A->col_ptr[i]; 
+      self->col[i].val = malloc((size_t) col_size * sizeof(*self->col[i].val));
+      self->col[i].row = malloc((size_t) col_size * sizeof(*self->col[i].row));
       self->col[i].allocated = col_size;
       omp_init_lock(&self->col[i].lock);
     }
@@ -62,8 +62,8 @@ void
 TP_U_col_realloc(U_col *self)
 {
   self->allocated *=  2;
-  self->val        = realloc(self->val, self->allocated * sizeof(*self->val));
-  self->row        = realloc(self->row, self->allocated * sizeof(*self->row));
+  self->val        = realloc(self->val, (size_t) self->allocated * sizeof(*self->val));
+  self->row        = realloc(self->row, (size_t) self->allocated * sizeof(*self->row));
 }
 
 void

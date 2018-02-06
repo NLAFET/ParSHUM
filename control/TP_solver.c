@@ -284,7 +284,7 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       self->exe_parms->density_tolerance = tmp;
       continue;
     } else if (!strcmp(argv[i], "--min_pivot_per_steps")) {
-      int tmp = atof(argv[++i]);
+      int tmp = atoi(argv[++i]);
       if ( tmp < self->exe_parms->nb_previous_pivots ) 
 	TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "min_pivot_per_steps should be at least nb_previous_pivots");
       self->exe_parms->min_pivot_per_steps = tmp;
@@ -328,7 +328,7 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
       self->size_counters = atoi(argv[++i]);
       continue;
     } else if (!strcmp(argv[i], "--max_dense_schur")) {
-      int tmp = atof(argv[++i]);
+      int tmp = atoi(argv[++i]);
       if (tmp < 1)
 	TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "max_dense_schur should be at least 1");
       self->exe_parms->max_dense_schur = tmp;
@@ -505,7 +505,7 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
   file = fopen(filename, "w+");
        
   if (!strcmp(file_ext, ".rb"))
-    read_rutherford_boeing(A, exe_parms->matrix_file);
+    TP_read_rutherford_boeing(A, exe_parms->matrix_file);
   else  if (!strcmp(file_ext, ".mtl"))
     TP_read_mtl_file(A, exe_parms->matrix_file);
   else 
@@ -660,13 +660,13 @@ TP_solver_alloc_internal(TP_solver self)
   int_array_memset(self->invr_col_perm, TP_UNUSED_PIVOT, needed_pivots);
   int_array_memset(self->invr_row_perm, TP_UNUSED_PIVOT, needed_pivots);
 
-  self->previous_pivots = malloc(self->exe_parms->nb_previous_pivots *  sizeof(*self->previous_pivots));
+  self->previous_pivots = malloc((size_t) self->exe_parms->nb_previous_pivots *  sizeof(*self->previous_pivots));
   int_array_memset(self->previous_pivots, INT_MAX / self->exe_parms->nb_previous_pivots, self->exe_parms->nb_previous_pivots);
 
   self->candidates = calloc(1, sizeof(*self->candidates));
-  self->candidates->row             = malloc(self->A->n * sizeof(*self->candidates->row));
-  self->candidates->marko           = malloc(self->A->n * sizeof(*self->candidates->marko));
-  self->candidates->best_marko      = malloc(self->exe_parms->nb_threads * sizeof(*self->candidates->best_marko));
+  self->candidates->row        = malloc((size_t) self->A->n * sizeof(*self->candidates->row));
+  self->candidates->marko      = malloc((size_t) self->A->n * sizeof(*self->candidates->marko));
+  self->candidates->best_marko = malloc((size_t) self->exe_parms->nb_threads * sizeof(*self->candidates->best_marko));
  
   self->counters              = calloc( 1, sizeof(*self->counters));
   *self->counters             = calloc( 1, sizeof(**self->counters));
@@ -679,13 +679,17 @@ TP_solver_alloc_internal(TP_solver self)
 
   self->allocated_U_struct = self->A->n / 100;  
   self->allocated_U_struct = self->allocated_U_struct ? self->allocated_U_struct : 1;
-  self->U_struct = calloc(self->allocated_U_struct, sizeof(*self->U_struct));
+  self->U_struct = calloc((size_t) self->allocated_U_struct, sizeof(*self->U_struct));
   self->allocated_L_struct = self->A->m / 100;  
   self->allocated_L_struct = self->allocated_L_struct ? self->allocated_L_struct : 1;
-  self->L_struct = calloc(self->allocated_L_struct, sizeof(*self->L_struct));
+  self->L_struct = calloc((size_t) self->allocated_L_struct, sizeof(*self->L_struct));
   
   self->Luby = TP_Luby_create(self->S);
 
+  /* self->cols         = malloc((size_t) self->n * sizeof(*self->cols)); */
+  /* self->rows         = malloc((size_t) self->m * sizeof(*self->rows)); */
+  /* self->distribution = malloc((size_t) (self->nb_threads + 1)  * sizeof(*self->distribution)); */
+  
   pthread_mutex_init(&self->counters_lock, NULL);
 }
 
@@ -717,7 +721,7 @@ TP_solver_read_matrix(TP_solver self)
   self->A        = TP_matrix_create();
   
   if (!strcmp(file_ext, ".rb"))
-    read_rutherford_boeing(self->A, self->exe_parms->matrix_file);
+    TP_read_rutherford_boeing(self->A, self->exe_parms->matrix_file);
   else if (!strcmp(file_ext, ".mtl")) 
     TP_read_mtl_file(self->A, self->exe_parms->matrix_file);
   else 
@@ -766,7 +770,7 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
     if( ++k >= self->allocated_U_struct)
       {
 	self->allocated_U_struct *= 2;
-	self->U_struct = realloc(self->U_struct, self->allocated_U_struct * sizeof(*self->U_struct));
+	self->U_struct = realloc(self->U_struct, (size_t) self->allocated_U_struct * sizeof(*self->U_struct));
       }
   }
   self->n_U_structs = k;
@@ -788,7 +792,7 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
     if( ++k >= self->allocated_L_struct)
       {
 	self->allocated_L_struct *= 2;
-	self->L_struct = realloc(self->L_struct, self->allocated_L_struct * sizeof(*self->L_struct));
+	self->L_struct = realloc(self->L_struct, (size_t) self->allocated_L_struct * sizeof(*self->L_struct));
       }
   }
   self->n_L_structs = k;
@@ -828,8 +832,8 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
   self->n_L_structs = 0;
   self->nnz_L_structs = 0;
   
-  bzero(col_counts, n * sizeof(*col_counts));
-  bzero(row_counts, n * sizeof(*row_counts));
+  bzero(col_counts, (size_t) n * sizeof(*col_counts));
+  bzero(row_counts, (size_t) n * sizeof(*row_counts));
   for ( i = self->done_pivots; i < new_pivots; i++)
     {
       CSC_struct *CSC = &S->CSC[col_perms[i]];
@@ -867,7 +871,7 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
 
       if (self->n_L_structs >= self->allocated_L_struct )  {
 	self->allocated_L_struct *= 2;
-	self->L_struct = realloc(self->L_struct, self->allocated_L_struct * sizeof(*self->L_struct));
+	self->L_struct = realloc(self->L_struct, (size_t) self->allocated_L_struct * sizeof(*self->L_struct));
       }
       self->L_struct[self->n_L_structs].col = i;
       self->L_struct[self->n_L_structs].nb_elem = row_counts[i];
@@ -881,7 +885,7 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
 
       if (self->n_U_structs >= self->allocated_U_struct )  {
 	self->allocated_U_struct *= 2;
-	self->U_struct = realloc(self->U_struct, self->allocated_U_struct * sizeof(*self->U_struct));
+	self->U_struct = realloc(self->U_struct, (size_t) self->allocated_U_struct * sizeof(*self->U_struct));
       }
       self->U_struct[self->n_U_structs].col = i;
       self->U_struct[self->n_U_structs].nb_elem = col_counts[i];
@@ -925,9 +929,9 @@ TP_solver_find_pivot_set(TP_solver self)
 
   if (self->luby_algo) {
     TP_Luby_step init_phase = calloc(1, sizeof(*init_phase));
-    int new_pivots = 0, best_marko, stepl = 0;
+    int new_pivots = 0, best_marko;
 
-    /* TP_verbose_start_timing(&step->timing_extracting_candidates); */
+    TP_verbose_start_timing(&step->timing_extracting_candidates);
     /* TP_verbose_start_timing(&init_phase->timing_first_pass); */
     best_marko = TP_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, 0, self->S->n, 0);
     /* TP_verbose_stop_timing(&init_phase->timing_first_pass); */
@@ -936,8 +940,8 @@ TP_solver_find_pivot_set(TP_solver self)
     /* TP_verbose_start_timing(&init_phase->timing_second_pass); */
     TP_Luby_get_candidates(self->S, self->Luby, (int) exe_parms->marko_tol *  best_marko, 0, self->S->n);
     /* TP_verbose_stop_timing(&init_phase->timing_second_pass); */
-    /* TP_verbose_stop_timing(&step->timing_extracting_candidates); */
-    /* TP_verbose_start_timing(&step->timing_merging_pivots); */
+    TP_verbose_stop_timing(&step->timing_extracting_candidates);
+    TP_verbose_start_timing(&step->timing_merging_pivots);
 
     /* TP_Luby_print_scores(self->Luby, "after assining"); */
     /* while( 1 )  { */
@@ -967,11 +971,12 @@ TP_solver_find_pivot_set(TP_solver self)
     /* print_int_array(&self->row_perm[self->done_pivots], new_pivots, "row pems"); */
     /* printf("\n\n"); */
 
-    /* TP_verbose_stop_timing(&step->timing_merging_pivots); */
 
     /* TP_verbose_start_timing(&init_phase->timing_discarding); */
     TP_solver_get_Luby_pivots(self, self->Luby, new_pivots);
     /* TP_verbose_stop_timing(&init_phase->timing_discarding); */
+
+    TP_verbose_stop_timing(&step->timing_merging_pivots);
 
     step->Luby_init_phase = init_phase;
   } else {
@@ -1059,7 +1064,7 @@ TP_solver_update_matrix(TP_solver self)
       /* 	TP_schur_matrix_memory_check(self->S); */
       /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
       /* 	TP_schur_matrix_check_symetry(self->S); */
-      
+
       /* TP_verbose_start_timing(&step->timing_update_U); */
       /* TP_schur_matrix_update_U(S, U, L, nb_pivots,  &self->row_perm[self->done_pivots], */
       /* 			       self->U_struct, self->n_U_structs, self->nnz_U_structs); */
@@ -1068,18 +1073,24 @@ TP_solver_update_matrix(TP_solver self)
       /*   TP_schur_matrix_memory_check(self->S); */
       /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
       /*   TP_schur_matrix_check_symetry(self->S); */
-      
+
       TP_verbose_start_timing(&step->timing_update_S);
       TP_schur_matrix_update_S(S, L, U, self->U_struct, self->n_U_structs, self->nnz_U_structs, self->invr_row_perm,
 			       nb_pivots, &self->row_perm[self->done_pivots]);
       TP_verbose_stop_timing(&step->timing_update_S);
+
+      TP_verbose_start_timing(&step->timing_update_U);
+      TP_schur_matrix_update_S_rows(S, self->L_struct, self->n_L_structs, self->nnz_L_structs,
+				    self->invr_col_perm, nb_pivots, self->row_perm, self->done_pivots);
+      TP_verbose_stop_timing(&step->timing_update_U);
+
       /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
       /* 	TP_schur_matrix_memory_check(self->S); */
-      /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
-      /* 	TP_schur_matrix_check_symetry(self->S); */
+      if (self->debug & TP_CHECK_SCHUR_SYMETRY )
+      	TP_schur_matrix_check_symetry(self->S);
     }
   self->done_pivots = self->found_pivots;
-   
+  
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL)) {
     TP_schur_matrix_print(S, "S after update");
     TP_matrix_print(L, "L after update");
@@ -1118,7 +1129,7 @@ TP_continue_pivot_search(TP_schur_matrix S,
 
   n_schur = (long) S->n - nb_done_pivots;
   m_schur = (long) S->m - nb_done_pivots;
-  if ( S->nnz > n_schur * m_schur * density_tolerance) {
+  if ( S->nnz > (long) n_schur * m_schur * density_tolerance) {
     printf(" S nnz %ld n %ld m %ld tol %f\n", S->nnz, n_schur, m_schur, density_tolerance); 
     verbose->reason = TP_reason_density;
     retval = 0;
@@ -1208,9 +1219,9 @@ TP_solver_factorize(TP_solver self)
     TP_dense_matrix_factorize(self->S_dense, exe_parms->nb_threads);
     // Handeling the pivots
     memcpy(&self->row_perm[self->done_pivots], self->S_dense->original_rows,
-	   (self->A->m - self->done_pivots) * sizeof(*self->row_perm));
+	   (size_t) (self->A->m - self->done_pivots) * sizeof(*self->row_perm));
     memcpy(&self->col_perm[self->done_pivots], self->S_dense->original_cols,
-	   (self->A->n - self->done_pivots) * sizeof(*self->col_perm));
+	   (size_t) (self->A->n - self->done_pivots) * sizeof(*self->col_perm));
     int i;
     for(i = self->done_pivots; i < needed_pivots; i++) {
       self->invr_row_perm[self->row_perm[i]] = i;

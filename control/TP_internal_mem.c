@@ -110,10 +110,10 @@ TP_internal_mem_CSC_alloc(TP_internal_mem self, CSC_struct *CSC, long size)
       while(current_unused) {
 	if (current_unused->nb_elem >=size ) {
 	  if (CSC->nb_elem)  {
-	    memcpy(&self->val[i][current_unused->offset],CSC->val,  CSC->nb_elem * sizeof(*CSC->val));
-	    memcpy(&self->row[i][current_unused->offset],CSC->row,  CSC->nb_elem * sizeof(*CSC->row));
+	    memcpy(&self->val[i][current_unused->offset],CSC->val, (size_t) CSC->nb_elem * sizeof(*CSC->val));
+	    memcpy(&self->row[i][current_unused->offset],CSC->row, (size_t) CSC->nb_elem * sizeof(*CSC->row));
 	  }
-	  CSC->nb_free = size - CSC->nb_elem;
+	  CSC->nb_free = (int) size - CSC->nb_elem;
 	  CSC->val = &self->val[i][current_unused->offset];
 	  CSC->row = &self->row[i][current_unused->offset];
 	  current_unused->offset  += size;
@@ -131,10 +131,10 @@ TP_internal_mem_CSC_alloc(TP_internal_mem self, CSC_struct *CSC, long size)
     free_space current_unused = self->unused_CSC[i];
     if (current_unused->nb_elem >=size ) {
       if (CSC->nb_elem)  {
-	memcpy(&self->val[i][current_unused->offset], CSC->val,  CSC->nb_elem * sizeof(*CSC->val));
-	memcpy(&self->row[i][current_unused->offset], CSC->row,  CSC->nb_elem * sizeof(*CSC->row));
+	memcpy(&self->val[i][current_unused->offset], CSC->val, (size_t) CSC->nb_elem * sizeof(*CSC->val));
+	memcpy(&self->row[i][current_unused->offset], CSC->row, (size_t) CSC->nb_elem * sizeof(*CSC->row));
       }
-      CSC->nb_free = size - CSC->nb_elem;
+      CSC->nb_free = (int) size - CSC->nb_elem;
       CSC->val = &self->val[i][current_unused->offset];
       CSC->row = &self->row[i][current_unused->offset];
       current_unused->offset  += size;
@@ -159,7 +159,7 @@ TP_internal_mem_CSR_alloc(TP_internal_mem self, CSR_struct *CSR, long size)
       while(current_unused) {
 	if (current_unused->nb_elem >=size ) {
 	  if (CSR->nb_elem)  
-	    memcpy(&self->col[i][current_unused->offset], CSR->col, CSR->nb_elem * sizeof(*CSR->col));
+	    memcpy(&self->col[i][current_unused->offset], CSR->col, (size_t) CSR->nb_elem * sizeof(*CSR->col));
 	  CSR->nb_free = size - CSR->nb_elem;
 	  CSR->col = &self->col[i][current_unused->offset];
 	  current_unused->offset  += size;
@@ -177,7 +177,7 @@ TP_internal_mem_CSR_alloc(TP_internal_mem self, CSR_struct *CSR, long size)
     free_space current_unused = self->unused_CSR[self->nb_CSR - 1];
     if (current_unused->nb_elem >=size ) {
       if (CSR->nb_elem)  
-	memcpy(&self->col[self->nb_CSR - 1][current_unused->offset], CSR->col, CSR->nb_elem * sizeof(*CSR->col));
+	memcpy(&self->col[self->nb_CSR - 1][current_unused->offset], CSR->col, (size_t) CSR->nb_elem * sizeof(*CSR->col));
       CSR->nb_free = size - CSR->nb_elem;
       CSR->col = &self->col[self->nb_CSR - 1][current_unused->offset];
       current_unused->offset  += size;
@@ -187,7 +187,6 @@ TP_internal_mem_CSR_alloc(TP_internal_mem self, CSR_struct *CSR, long size)
     }
   }
 }
-#define TP_internal_mem_CSR_realloc(self, CSR) TP_internal_mem_CSR_alloc(self, CSR, 2*CSR->nb_elem)
 
 void
 TP_internal_mem_destroy(TP_internal_mem self)

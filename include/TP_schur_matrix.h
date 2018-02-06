@@ -19,7 +19,9 @@ struct _TP_schur_matrix {
 
   TP_internal_mem internal_mem;
 
-  long **row_struct;
+  int **data_struct;
+  int *base;
+
   int nb_threads;
   
   int n;
@@ -65,6 +67,10 @@ void TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
 			      TP_U_struct *U_struct, int U_new_n, int U_new_nnz,
 			      int *invr_row_perm, int nb_pivots, int *row_perms);
 
+void TP_schur_matrix_update_S_rows(TP_schur_matrix S, TP_U_struct *L_struct,
+				   int L_new_n, int L_new_nnz, int *invr_col_perm,
+				   int nb_pivots, int *row_perms, int done_pivots);
+  
 void TP_schur_matrix_destroy(TP_schur_matrix self);
 
 TP_dense_matrix  TP_schur_matrix_convert(TP_schur_matrix self, int done_pivots);

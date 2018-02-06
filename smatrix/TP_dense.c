@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <omp.h>
 #include <plasma.h>
 
 #include "TP_matrix.h"
@@ -56,7 +57,7 @@ TP_vector_permute(TP_vector self, int *perms)
   int     n    = self->n;
   double *vect = self->vect, tmp[n];
   
-  memcpy(tmp, vect, n*sizeof(*vect));
+  memcpy(tmp, vect, (size_t) n*sizeof(*vect));
   for(i = 0; i < n; i++) 
     vect[i] = tmp[perms[i]];
 }
@@ -88,7 +89,7 @@ TP_vector_copy(TP_vector src, TP_vector dst)
   if (n_src != n_dst)
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"Vectors are not the same size");
   
-  memcpy(dst->vect, src->vect, n_src*sizeof(*dst->vect));
+  memcpy(dst->vect, src->vect, (size_t) n_src*sizeof(*dst->vect));
 }
 
 void
@@ -126,7 +127,7 @@ TP_dense_matrix_create(int n, int m)
 {
   TP_dense_matrix self = calloc((size_t) 1,  sizeof(*self));
 
-  self->val = calloc((size_t) n*m, sizeof(*self->val));
+  self->val = calloc((size_t) n * m, sizeof(*self->val));
   self->original_rows = malloc((size_t) m * sizeof(*self->original_rows));
   self->original_cols = malloc((size_t) n * sizeof(*self->original_cols));
   self->pivots        = malloc((size_t) m * sizeof(*self->pivots));
@@ -153,7 +154,7 @@ TP_dense_get_row_perms(TP_dense_matrix self)
   int m = self->m, i;
   int *row_perms = malloc((size_t) m * sizeof(*row_perms));
   
-  memcpy(row_perms, self->original_rows, m*sizeof(*row_perms));
+  memcpy(row_perms, self->original_rows, (size_t) m * sizeof(*row_perms));
   for(i = 0; i < m; i++) {
     int tmp = row_perms[i]; 
     /*  plasma is in freaking fortran  */
@@ -206,9 +207,9 @@ TP_dense_2D_create(int n, int m)
   TP_dense_2D self = calloc(1, sizeof(*self));
   self->n = n;
   self->m = m;
-  self->vals = malloc(m * sizeof(*self->vals));
+  self->vals = malloc((size_t) m * sizeof(*self->vals));
   for(int i = 0; i < m; i++)
-    self->vals[i] = calloc(n, sizeof(**self->vals));
+    self->vals[i] = calloc((size_t) n, sizeof(**self->vals));
   
   return self;
 }
