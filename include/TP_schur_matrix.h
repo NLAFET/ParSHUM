@@ -43,9 +43,10 @@ void TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self);
 
 void TP_schur_matrix_print(TP_schur_matrix self, char *mess);
 
-void TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, 
+void TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous_step_pivots,
 			     int *nb_col_singletons, int *nb_row_singletons,
-			     int *col_perm, int *row_perm, 
+			     int *cols, int *rows, int *distributions, 
+			     int nb_done_pivots, int *col_perm, int *row_perm,
 			     int *invr_col_perm, int *invr_row_perm);
 
 void TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U, 

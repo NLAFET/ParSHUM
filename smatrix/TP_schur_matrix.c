@@ -56,37 +56,74 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
 }
 
 void
-TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, 
+TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous_step_pivots,
 			int *nb_col_singletons, int *nb_row_singletons,
-			int *col_perm, int *row_perm, 
+			int *cols, int *rows, int *distributions, 
+			int nb_doane_pivots, int *col_perm, int *row_perm, 
 			int *invr_col_perm, int *invr_row_perm)
 {
-  int n = self->n, m = self->m, i;
+  int n = self->n - done_pivots + previous_step_pivots;
+  int m = self->m - done_pivots + previous_step_pivots;
+  int i, _done_pivots = done_pivots;
+  
   int _nb_col_singletons = 0, _nb_row_singletons = 0;
 
-  for(i = 0; i < m; i++) 
-    if ( self->CSR[i].nb_elem == 1 &&
-	 self->CSC[self->CSR[i].col[0]].nb_elem > 0)
+  for(i = 0; i < m; )  {
+    int row = rows[i];
+
+    if (invr_row_perm[row] != TP_UNUSED_PIVOT) { 
+      rows[i] = rows[--m];
+      continue;
+    }
+    
+    if ( self->CSR[row].nb_elem == 1 &&
+	 self->CSC[self->CSR[row].col[0]].nb_elem > 0)
       {
-	int col = self->CSR[i].col[0];
-	row_perm[done_pivots + _nb_row_singletons] = i;
-	invr_row_perm[i]  = _nb_row_singletons + done_pivots;
+	int col = self->CSR[row].col[0];
+	row_perm[done_pivots + _nb_row_singletons] = row;
 	col_perm[done_pivots +_nb_row_singletons] = col;
-	invr_col_perm[col] = _nb_row_singletons + done_pivots;
 	_nb_row_singletons++;
       }
+    i++;
+  }
   done_pivots += _nb_row_singletons;
+  if (m != self->m - _done_pivots) 
+    TP_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
 
-  for(i = 0; i < n; i++)
-    if ( self->CSC[i].nb_elem == 1 && self->CSR[self->CSC[i].row[0]].nb_elem > 1)
+
+  for(i = 0; i < n; ) {
+    int col = cols[i];
+    
+    if (invr_col_perm[col] != TP_UNUSED_PIVOT )  {
+      cols[i] = cols[--n];
+      continue;
+    }
+
+    if ( self->CSC[col].nb_elem == 1 && self->CSR[self->CSC[col].row[0]].nb_elem > 1)
       {
-	int row = self->CSC[i].row[0];
-	col_perm[done_pivots + _nb_col_singletons] = i;
-	invr_col_perm[i]  = _nb_col_singletons + done_pivots;
+	int row = self->CSC[col].row[0];
+	col_perm[done_pivots + _nb_col_singletons] = col;
+	invr_col_perm[col]  = _nb_col_singletons + done_pivots;
 	row_perm[done_pivots + _nb_col_singletons] = row;
 	invr_row_perm[row] = _nb_col_singletons + done_pivots;
-	_nb_col_singletons++;
+	_nb_col_singletons++; 
       }
+    i++;
+  }
+
+  if (n != self->n - _done_pivots) 
+    TP_warning(__FUNCTION__, __FILE__, __LINE__, "not all the cols are taken out from cols");
+
+  /* If found row singeltons, then update the invr row and col perms
+     after searching for col singeltons, so we do not discard them
+     from cols too early  */
+  for ( i = 0; i < _nb_row_singletons; i++) {
+    int indice = _done_pivots + i;
+    int row = row_perm[indice];
+    int col = col_perm[indice];
+    invr_row_perm[row] = indice;
+    invr_col_perm[col] = indice;
+  }
 
   *nb_col_singletons = _nb_col_singletons;
   *nb_row_singletons = _nb_row_singletons;
@@ -108,9 +145,6 @@ TP_schur_matrix_init_ptr(TP_schur_matrix self, long *col_ptr, int *row_sizes)
   for(i = 0; i < m; i++)
     TP_internal_mem_CSR_alloc(memory, &self->CSR[i], (long) (1 + self->extra_space) * row_sizes[i]);
 
-  /* TODO: PRINT GB */
-  /* if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR)) */
-  /*   TP_print_GB(self, "GB: after initializing pointers"); */
 }
 
 void

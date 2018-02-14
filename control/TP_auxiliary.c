@@ -6,6 +6,8 @@
 
 #include "TP_auxiliary.h"
 
+#define TP_RAND_MAX 32767
+
 void 
 TP_fatal_error(const char *func, char *filename, const int line, const char *msg)
 {
@@ -160,4 +162,17 @@ TP_check_counters(int counter, int *array, int *used,
 	       counter, i, array[i], base);
       TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
     }  
+}
+
+int 
+TP_rand_int(int *seed, int size)
+{
+  *seed = *seed * 1103515245 + 12345;
+  return (*seed /65536) % size;
+}
+
+double
+TP_rand_double(int *seed) 
+{
+  return fabs((double) TP_rand_int(seed, TP_RAND_MAX) / (double) TP_RAND_MAX);
 }

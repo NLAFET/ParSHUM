@@ -45,8 +45,8 @@ TP_Luby_destroy(TP_Luby self)
 }
 
 int
-TP_Luby_get_eligible(TP_schur_matrix matrix,
-		     TP_Luby Luby, double value_tol,
+TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
+		     double value_tol, int *cols,
 		     int first_col, int last_col, 
 		     int max_col_length)
 {
@@ -66,7 +66,7 @@ TP_Luby_get_eligible(TP_schur_matrix matrix,
   /* This requires removing the compuation of the best_marko (could be estimated or computed as best along the potential pivots) */
   for(i = first_col; i < last_col; i++)
     {
-      CSC_struct *CSC = &matrix->CSC[i];
+      CSC_struct *CSC = &matrix->CSC[cols[i]];
       double *vals    = CSC->val;
       double col_max  = CSC->col_max;
       int *rows       = CSC->row;
@@ -96,13 +96,14 @@ TP_Luby_get_eligible(TP_schur_matrix matrix,
 
 void
 TP_Luby_get_candidates(TP_schur_matrix matrix, TP_Luby Luby,
-		       int allowed_marko, int first_col, int last_col)
+		       int allowed_marko, int *cols,
+		       int first_col, int last_col)
 {
   int i, j;
 
   for (i = first_col; i < last_col; i++)
     {
-      CSC_struct *CSC = &matrix->CSC[i];
+      CSC_struct *CSC = &matrix->CSC[cols[i]];
       double *vals    = CSC->val;
       int *rows       = CSC->row;
       int col_degree  = CSC->nb_elem - 1 ;
@@ -133,30 +134,32 @@ TP_Luby_get_candidates(TP_schur_matrix matrix, TP_Luby Luby,
 
 int
 TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
-		     int *col_perm, int *row_perm,
-		     int first_col, int last_col)
+		     int *seed, int *col_perm, int *row_perm, 
+		     int *cols, int first_col, int last_col)
 {
   int i, nb_candidates = 0;
   double *col_max_val = Luby->col_max_val;
   int    *invr_col_perm  = Luby->invr_col_perm;
-  
+  int my_seed = *seed;
+
   for ( i = first_col; i < last_col; i++)
     {
-      CSC_struct *CSC = &matrix->CSC[i];
+      int col = cols[i];
+      CSC_struct *CSC = &matrix->CSC[col];
       int nb_elem     = CSC->nb_eligible;
       if (!nb_elem)
 	continue;
-      int row  = CSC->row[rand() % nb_elem];
-      double score =  (double) rand() / (double) RAND_MAX ;
+      int row  = CSC->row[abs(TP_rand_int(&my_seed, nb_elem))];
+      double score =  TP_rand_double(&my_seed);
 
-      col_max_val[i  ] = score;
-
-      invr_col_perm[i] = 1;
+      col_max_val[col] = score;
+      invr_col_perm[col] = 1;
       
-      col_perm[nb_candidates  ] = i;
+      col_perm[nb_candidates  ] = col;
       row_perm[nb_candidates++] = row;
     }
-
+  
+  *seed = my_seed;
   return nb_candidates;
 }
 
@@ -172,12 +175,12 @@ TP_Luby_first_pass(TP_Luby Luby, TP_schur_matrix matrix,
   for( i = 0; i < nb_candidates; i++)
     {
       int piv_row = row_perm[i];
+      int piv_col = col_perm[i];
       CSR_struct *CSR = &matrix->CSR[piv_row];
       int nb_elem = CSR->nb_elem;
       int *cols = CSR->col;
-      int piv_col = col_perm[i];
       double piv_score = col_max_val[piv_col];
-
+      
       for ( j = 0; j < nb_elem; j++) 
 	{
 	  int col = cols[j];
@@ -220,101 +223,6 @@ TP_Luby_second_pass(TP_schur_matrix matrix, TP_Luby Luby,
   return nb_candidates;
 }
 
-int
-TP_Luby_discard(TP_schur_matrix matrix, TP_Luby Luby, 
-		int nb_eligible_pivots, int *col_perm, int *row_perm)
-{
-  int i; 
-  int *invr_row_perm  = Luby->invr_row_perm;
-  int *invr_col_perm  = Luby->invr_col_perm;
-  int old = nb_eligible_pivots;
-
-  for(i = 0; i < nb_eligible_pivots; ) 
-    {
-      if ( col_perm[i] < 0) {
-	invr_col_perm[-(col_perm[i] + 1)] = -100;
-	invr_row_perm[-(row_perm[i] + 1)] = -100;
-	col_perm[i] = col_perm[--nb_eligible_pivots];
-	row_perm[i] = row_perm[  nb_eligible_pivots];
-      } else {
-	i++;
-      }
-    }
-
-  for( i = nb_eligible_pivots; i < old; 
-i++)
-    {
-      col_perm[i] = -100;
-      row_perm[i] = -100;
-    }    
-
-  /* TODO: move this in the previous loop */
-  /* for(i = 0; i < nb_eligible_pivots; i++)  */
-  /*   { */
-  /*     int row     = row_perm[i]; */
-  /*     int *cols   = matrix->CSR[row].col; */
-  /*     int nb_elem = matrix->CSR[row].nb_elem; */
-
-  /*     for ( j = 0; j < nb_elem; j++)   */
-  /* 	Luby->scores[cols[j]].nb_elem = 0; */
-  /*   } */
-
-  /* for(i = 0; i < nb_eligible_pivots; i++)  */
-  /*   { */
-  /*     int col     = col_perm[i]; */
-  /*     int *rows   = matrix->CSC[col].row; */
-  /*     int nb_elem = matrix->CSC[col].nb_elem; */
-
-  /*     for ( j = 0; j < nb_elem; j++)   */
-  /* 	invr_row_perm[rows[j]] = 1; */
-  /*   } */
-
-  /* for( i = 0 ; i < n; i++)  */
-  /*   { */
-  /*     TP_Luby_score *luby_score = &Luby->scores[i]; */
-  /*     int nb_elem = luby_score->nb_elem; */
-  /*     if (!nb_elem)  */
-  /* 	continue; */
-  /*     int *rows = luby_score->row; */
-  /*     double *scores = luby_score->score; */
-
-  /*     for (j = 0; j < nb_elem; ) */
-  /* 	{ */
-  /* 	  int row = rows[j]; */
-  /* 	  if ( invr_row_perm[row] > -1 )  { */
-  /* 	    scores[j] = scores[--nb_elem]; */
-  /* 	    rows[j] = rows[nb_elem]; */
-  /* 	  } else { */
-  /* 	    j++; */
-  /* 	  } */
-  /* 	} */
-  /*     luby_score->nb_elem = nb_elem; */
-  /*   } */
-
-  /* Luby->step++; */
-  
-  return nb_eligible_pivots;
-}
-
-void
-TP_Luby_print_scores(TP_Luby Luby, char *mess)
-{
-  /* printf("%s\n", mess); */
-  /* printf("Luby's scores by column\n"); */
-  /* for(int i = 0; i < n; i++) */
-  /*   { */
-  /*     TP_Luby_score *luby_score = &Luby->scores[i]; */
-  /*     int *rows    = luby_score->row; */
-  /*     double *scores = luby_score->score; */
-  /*     int nb_elem = luby_score->nb_elem; */
-  /*     printf("================%d======================\n", i); */
-  /*     for(int j = 0; j < nb_elem; j++) */
-  /* 	printf("%d:(%e)  ", rows[j], scores[j]); */
-  /*     printf("\n"); */
-  /*   } */
-
-}
-
 void 
 TP_Luby_check_pivots(TP_Luby Luby, TP_schur_matrix matrix,
 		     int *col_perms, int *row_perms, int nb_pivots)
@@ -351,4 +259,4 @@ TP_Luby_check_pivots(TP_Luby Luby, TP_schur_matrix matrix,
 
   free(col_counts);
   free(row_counts);
-} 
+}

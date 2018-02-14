@@ -8,7 +8,6 @@ typedef struct _TP_verbose *TP_verbose;
 typedef struct _TP_verbose_per_step *TP_verbose_per_step;
 typedef struct _TP_verbose_parms *TP_verbose_parms;
 typedef struct _TP_exe_parms *TP_exe_parms;
-typedef struct _TP_Luby_step *TP_Luby_step; 
 
 struct _TP_verbose_parms {
   char *prog_name;
@@ -36,6 +35,7 @@ struct _TP_exe_parms {
   int nb_candidates_per_block;
   int nb_previous_pivots;
   int max_dense_schur;
+  int luby_algo;
 };
 
 struct _TP_verbose_per_step {
@@ -54,26 +54,9 @@ struct _TP_verbose_per_step {
   long new_nnz;
   long nb_flops;
   int nb_pivots;
-  int nb_Luby_steps;
-
-  TP_Luby_step Luby_init_phase;
-
-  TP_Luby_step Luby_step_first;
-  TP_Luby_step Luby_step_last;
+  int nb_candidates;
 
   TP_verbose_per_step next;
-};
-
-struct _TP_Luby_step {
-  double timing_max;
-  double timing_first_pass;
-  double timing_second_pass;
-  double timing_discarding;
-
-  int nb_candidates;
-  int nb_pivots;
-
-  TP_Luby_step next;
 };
 
 struct _TP_verbose {
@@ -117,6 +100,7 @@ struct _TP_verbose {
   long nnz_L;
   long nnz_U;
   long nnz_S_dense;
+  int computed_norms;
 
   int nb_steps;
 
@@ -141,7 +125,6 @@ void                TP_verbose_destroy_V0(TP_verbose self);
 void                TP_verbose_print_parms_raw(TP_exe_parms exe_parms, TP_parm_type type, FILE *file);
 void                TP_verbose_print_group_run(TP_verbose verbose, TP_parm_type type, void *val,
 					       int current_run, FILE *file);
-void                TP_verbose_update_Luby_step_V0(TP_verbose_per_step step, TP_Luby_step Luby_step);
 
 static inline void
 TP_verbose_timing_start_V0(double *timing)
@@ -169,11 +152,11 @@ TP_verbose_timing_stop_V0(double *timing)
 #define TP_verbose_stop_timing(time)        TP_verbose_timing_stop_V0(time)
 #define TP_verbose_get_step(V)              V->stats_last
 #define TP_verbose_update_pivots(V,n)       V->sparse_pivots += n; V->stats_last->nb_pivots = n
+#define TP_verbose_computed_norms(V)        V->computed_norms = 1
 #define TP_verbose_print(V)                 TP_verbose_print_V0(V)
 #define TP_verbose_update_dense_pivots(V,n) V->dense_pivots = n
 #define TP_verbose_create_dirs(S)           TP_verbose_create_dirs_V0(S)
 #define TP_verbose_draw_graph(V)            TP_verbose_draw_graph_V0(V)
-#define TP_verbose_update_Luby_step(s,l)    TP_verbose_update_Luby_step_V0(s, l)
 /* #elif TP_VERBOSITY == 1  */
 
 #endif
@@ -186,11 +169,11 @@ TP_verbose_timing_stop_V0(double *timing)
 #define TP_verbose_stop_timing(time)        (void) 0
 #define TP_verbose_get_step(V)              NULL
 #define TP_verbose_update_pivots(V,n)       (void) 0
+#define TP_verbose_computed_norms(V)        (void) 0
 #define TP_verbose_print(V)                 (void) 0
 #define TP_verbose_update_dense_pivots(V,n) (void) 0
 #define TP_verbose_create_dirs(S)           (void) 0
 #define TP_verbose_draw_graph(S)            (void) 0
-#define TP_verbose_update_Luby_step(s,l)    (void) 0
 #endif 
 
 #endif // _TP_VERBOSE_H

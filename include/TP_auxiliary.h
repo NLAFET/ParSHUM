@@ -19,6 +19,7 @@ TP_overlaps check_overalping_regions(long r1_start, long r1_end,
 				     long r2_start, long r2_end);
 void    TP_check_counters(int counter, int *array, int *used,
 			  int base, int size, int n);
-
+int    TP_rand_int(int *seed, int size);
+double TP_rand_double(int *seed);
 
 #endif // _TP_AUXILIARY_H 

@@ -58,20 +58,6 @@ TP_verbose_step_start_V0(TP_verbose self)
   return step;
 }
 
-void
-TP_verbose_update_Luby_step_V0(TP_verbose_per_step step, TP_Luby_step Luby_step)
-{
-  if (!step->nb_Luby_steps) 
-    {
-      step->Luby_step_first = step->Luby_step_last = Luby_step;
-    }
-  else
-    {
-      step->Luby_step_last->next = Luby_step;
-      step->Luby_step_last = Luby_step;
-    }
-  step->nb_Luby_steps++;
-}
 
 void
 TP_verbose_print_steps(TP_verbose_per_step self, TP_verbose_parms parms)
@@ -196,43 +182,6 @@ TP_verbose_print_group_run(TP_verbose verbose, TP_parm_type type,
 }
 
 void
-TP_verbose_print_Luby(TP_verbose self)
-{
-  TP_verbose_per_step step = self->stats_first;
-  char filename[2048];
-  FILE *file;
-
-  snprintf(filename, 2048, "%s/data/%s_Luby.dat", self->parms->output_dir, self->parms->outfiles_prefix);
-  file = fopen(filename, "w+");
-
-  fprintf(file,"===================================================================================================================================================<\n");
-  fprintf(file,"| #candidates\t| #pivots\t| candidates\t| scores\t|computing max\t| first passs\t|  second pass\t|  discarding\t| managing pivots |\n");
-  fprintf(file,"===================================================================================================================================================\n");
-  while(step)
-    {
-      TP_Luby_step init_phase = step->Luby_init_phase;
-      TP_Luby_step Luby_step = step->Luby_step_first;
-
-      /* this test is needed because of singletons */
-      if ( init_phase ) {
-	fprintf(file,"| %12d\t| \t\t| %12f\t| %12f\t| 0.000000000\t| 0.000000000\t| 0.000000000\t| 0.000000000\t| %12f\t|\n", 
-		init_phase->nb_candidates, init_phase->timing_first_pass,
-		init_phase->timing_second_pass, init_phase->timing_discarding);
-	while(Luby_step) {
-	  fprintf(file,"| %12d\t| %12d\t| 0.000000000\t| 0.000000000\t| %12f\t| %12f\t| %12f\t| %12f\t| 0.000000000\t|\n",
-		  Luby_step->nb_candidates, Luby_step->nb_pivots,
-		  Luby_step->timing_max, Luby_step->timing_first_pass,
-		  Luby_step->timing_second_pass, Luby_step->timing_discarding);
-	  Luby_step = Luby_step->next;
-	}
-	fprintf(file,"===================================================================================================================================================\n");
-      }
-      step = step->next;
-    }
-  fclose(file);
-}
-
-void
 TP_verbose_print_raw(TP_verbose verbose)
 {
   TP_verbose_per_step step = verbose->stats_first;
@@ -326,8 +275,6 @@ TP_verbose_print_raw(TP_verbose verbose)
       step = step->next;
     }
   fclose(file);
-
-  TP_verbose_print_Luby(verbose);
 }
 
 void
@@ -385,7 +332,7 @@ TP_verbose_print_V0(TP_verbose self)
   else if (self->reason & TP_reason_because)
     fprintf(file,"just because.\n");
 
-  if(self->backward_error)
+  if(self->computed_norms)
   fprintf(file,"[%s] The backward error is (%e) and the forward error is (%e)\n",
  	  prog_name, self->backward_error, self->forward_error);
 

@@ -57,6 +57,12 @@ struct _TP_solver {
   int *cols_count;
   int *random_col;
   int *previous_pivots;
+  int *cols;
+  int *rows;
+  int *distributions;
+  int *seeds;
+  int **tmp;
+  int **tmp2;
 
   int nb_row_singletons;
   int nb_col_singletons;
@@ -72,7 +78,7 @@ struct _TP_solver {
   int allocated_L_struct;  
   int n_L_structs;  
   int nnz_L_structs;  
-  int luby_algo;
+  int previous_step_pivots;
 
   int debug;
 
