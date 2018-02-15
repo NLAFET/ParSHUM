@@ -701,13 +701,9 @@ TP_solver_alloc_internal(TP_solver self)
     /* TODO: Put an argument "determenistic" and call srand before if activated */
     self->seeds[i] = rand();
 
-  self->tmp = malloc((size_t) self->exe_parms->nb_threads * sizeof(*self->tmp));
+  self->workspace = malloc((size_t) self->exe_parms->nb_threads * sizeof(*self->workspace));
   for(i = 0; i < self->exe_parms->nb_threads; i++)
-    self->tmp[i] = malloc((size_t) self->A->n * sizeof(**self->tmp));
-
-  self->tmp2 = malloc((size_t) self->exe_parms->nb_threads * sizeof(*self->tmp2));
-  for(i = 0; i < self->exe_parms->nb_threads; i++)
-    self->tmp2[i] = malloc((size_t) self->A->n * sizeof(**self->tmp2));
+    self->workspace[i] = malloc((size_t) self->A->n * (sizeof(int) + sizeof(double)));
 
   pthread_mutex_init(&self->counters_lock, NULL); 
 }
@@ -829,66 +825,79 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
 void 
 TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
 {
-  int i, j, n = self->A->n, nb_cols = self->A->n - self->done_pivots;
+  int n = self->A->n, nb_cols = self->A->n - self->done_pivots;
+  int nb_threads = self->exe_parms->nb_threads;
+  int distribution_perms[nb_threads+1], distribution_n[nb_threads+1];
   int *col_counts = Luby->invr_col_perm;
   int *row_counts = Luby->invr_row_perm;
   int *row_perms = self->row_perm;
   int *col_perms = self->col_perm;
   int *cols = self->cols;
   int *rows = self->rows;
-
   int *invr_row_perms = self->invr_row_perm;
   int *invr_col_perms = self->invr_col_perm;
   TP_schur_matrix S = self->S;
+  int all_pivots = new_pivots + self->done_pivots;
+  int i, j;
   self->previous_step_pivots = new_pivots;
-
-  new_pivots += self->done_pivots;
-  
-  for( i = self->done_pivots; i < new_pivots; i++)
-    {
-      invr_col_perms[col_perms[i]] = i;
-      invr_row_perms[row_perms[i]] = i;
-    }
-
 
   self->n_U_structs = 0;
   self->nnz_U_structs = 0;
   self->n_L_structs = 0;
   self->nnz_L_structs = 0;
-  
-  bzero(col_counts, (size_t) n * sizeof(*col_counts));
-  bzero(row_counts, (size_t) n * sizeof(*row_counts));
 
-  for ( i = self->done_pivots; i < new_pivots; i++)
+  *distribution_perms = self->done_pivots;
+  for(i = 1; i < nb_threads; i++)
+    distribution_perms[i] = self->done_pivots + (new_pivots / nb_threads) * i;
+  distribution_perms[nb_threads] = all_pivots;
+
+  *distribution_n = 0;
+  for(i = 1; i < nb_threads; i++)
+    distribution_n[i] = (n / nb_threads) * i;
+  distribution_n[nb_threads] = n;
+
+#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n)
+  {
+  int i, j;
+  int me = omp_get_thread_num();
+  int start = distribution_perms[me] ;
+  int end   = distribution_perms[me+1];
+  
+  for( i = start; i < end; i++)
+    {
+      invr_col_perms[col_perms[i]] = i;
+      invr_row_perms[row_perms[i]] = i;
+    }
+  bzero(&col_counts[distribution_n[me]], (size_t) (distribution_n[me+1] - distribution_n[me]) * sizeof(*col_counts));
+  bzero(&row_counts[distribution_n[me]], (size_t) (distribution_n[me+1] - distribution_n[me]) * sizeof(*row_counts));
+  
+  
+#pragma omp barrier
+  for ( i = start; i < end; i++)
     {
       CSC_struct *CSC = &S->CSC[col_perms[i]];
       int *rows = CSC->row; 
       int nb_elem = CSC->nb_elem;
-      for ( j = 0; j < nb_elem; j++)
-	  row_counts[rows[j]]++;
+      for ( j = 0; j < nb_elem; j++) {
+	int row = rows[j];
+#pragma omp atomic
+	row_counts[row]++;
+      }
       CSR_struct *CSR = &S->CSR[row_perms[i]];
       int *cols = CSR->col;
       nb_elem = CSR->nb_elem;
-      for ( j = 0; j < nb_elem; j++)
-	  col_counts[cols[j]]++;
+      for ( j = 0; j < nb_elem; j++) {
+	int col = cols[j];
+#pragma omp atomic
+	col_counts[col]++;
+      }
     }
-  
-  /* DEBUG */
-  /* for(i = 0; i < n; i++) */
-  /*   { */
-  /*     if (invr_row_perms[i] != TP_UNUSED_PIVOT) {  */
-  /* 	if ( row_counts[i] > 1 )  */
-  /* 	  printf("KO on row_counts[%d] with %d elements !!\n", i, row_counts[i]); */
-  /*     } */
+#pragma omp barrier
 
-  /*     if (invr_col_perms[i] != TP_UNUSED_PIVOT) {  */
-  /* 	if ( col_counts[i] > 1 )  */
-  /* 	  printf("KO on col_counts[%d] with %d elements !!\n", i, col_counts[i]); */
-  /*     } */
-  /*   } */
-
+#pragma omp single
+  {
   for( i = 0; i < nb_cols; i++) {
-    int row = rows[i];
+      int row = rows[i];
     if (row_counts[row] && invr_row_perms[row] == TP_UNUSED_PIVOT) {
       self->nnz_L_structs += row_counts[row];
 
@@ -901,7 +910,10 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
       self->n_L_structs++;
     }
   }
+  }
 
+#pragma omp single
+  {
   for( i = 0; i < nb_cols; i++) {
     int col = cols[i];
     if (col_counts[col] && invr_col_perms[col] == TP_UNUSED_PIVOT) {
@@ -916,9 +928,11 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
       self->n_U_structs++;
     }
   }
+  }
+  }
 
-  self->found_pivots = new_pivots;
-  TP_verbose_update_pivots(self->verbose,  new_pivots - self->done_pivots );
+  self->found_pivots = all_pivots;
+  TP_verbose_update_pivots(self->verbose,  new_pivots);
 }
 
 void
@@ -959,17 +973,22 @@ TP_solver_find_pivot_set(TP_solver self)
     int *distributions = self->distributions, best_markos[nb_threads];
     int candidates[nb_threads];
     int i;
+
     *distributions = 0;
     for (i = 1; i < nb_threads; i++) 
       distributions[i] = (nb_cols / nb_threads) * i;
     distributions[nb_threads] = nb_cols;
 
-#pragma omp parallel num_threads(nb_threads) shared(new_pivots, nb_cols, best_marko, distributions, candidates)
+#pragma omp parallel num_threads(nb_threads) shared(nb_cols, best_marko)
     {
     int me = omp_get_thread_num();
+    int *my_col_perms = (int *) self->workspace[me];
+    int *my_row_perms = &my_col_perms[nb_cols];
+    int *global_col_perms = (int *) self->workspace[0];
+    int *global_row_perms = &global_col_perms[nb_cols];
 
     TP_verbose_start_timing(&step->timing_extracting_candidates);
-    /* TP_verbose_start_timing(&init_phase->timing_first_pass); */
+
     best_markos[me] = TP_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->cols,
 					   distributions[me], distributions[me + 1], 0);
 #pragma omp barrier    
@@ -987,7 +1006,7 @@ TP_solver_find_pivot_set(TP_solver self)
 			   self->cols, distributions[me], distributions[me + 1]);
      
     candidates[me] = TP_Luby_assign_score(self->Luby, self->S, &self->seeds[me],
-					  self->tmp[me], self->tmp2[me],
+					  my_col_perms, my_row_perms,
 					  self->cols, distributions[me], distributions[me + 1]);
 #pragma omp barrier    
 #pragma omp single  
@@ -999,75 +1018,60 @@ TP_solver_find_pivot_set(TP_solver self)
 #pragma omp barrier    
 
     if (me) {
-      memcpy(&self->tmp[0][candidates[me - 1]],  self->tmp[me],
+      memcpy(&global_col_perms[candidates[me - 1]],  my_col_perms,
 	     (size_t) (candidates[me] - candidates[me-1]) * sizeof(*self->col_perm));
-      memcpy(&self->tmp2[0][candidates[me - 1]], self->tmp2[me],
+      memcpy(&global_row_perms[candidates[me - 1]], my_row_perms,
 	     (size_t) (candidates[me] - candidates[me-1]) * sizeof(*self->row_perm));
     }
     }
     
-
-    /* print_int_array(&self->col_perm[self->done_pivots], step->nb_candidates, "col_perm"); */
-    /* print_int_array(&self->row_perm[self->done_pivots], step->nb_candidates, "row_perm"); */
-
-    /* print_int_array(self->tmp[0], step->nb_candidates, "col_perm tmp"); */
-    /* print_int_array(self->tmp2[0], step->nb_candidates, "row_perm tmp"); */
-
     TP_verbose_stop_timing(&step->timing_extracting_candidates);
 
     TP_verbose_start_timing(&step->timing_merging_pivots);
-    /* TP_verbose_start_timing(&Luby_step->timing_first_pass); */
     *distributions = 0;
     for (i = 1; i < nb_threads; i++) 
       distributions[i] = (step->nb_candidates / nb_threads) * i;
     distributions[nb_threads] = step->nb_candidates;
-
-#pragma omp parallel num_threads(nb_threads) shared(new_pivots, nb_cols, best_marko, distributions)
+    
+#pragma omp parallel num_threads(nb_threads) shared(nb_cols)
     {
-      int me = omp_get_thread_num();
-      TP_Luby_first_pass(self->Luby, self->S,
-			 &self->tmp [0][distributions[me]],
-			 &self->tmp2[0][distributions[me]],
-			 distributions[me + 1] - distributions[me]);
-      
+    int me = omp_get_thread_num();
+    int my_size = distributions[me + 1] - distributions[me];
+    int *tmp = (int *) self->workspace[0];
+    int *my_col_perms = &tmp[distributions[me]];
+    int *my_row_perms = &tmp[nb_cols + distributions[me]];
+    int *global_col_perms = &self->col_perm[self->done_pivots];
+    int *global_row_perms = &self->row_perm[self->done_pivots];
+
+    TP_Luby_first_pass(self->Luby, self->S, my_col_perms, my_row_perms, my_size);
+    
 #pragma omp barrier    
-      /* TP_verbose_start_timing(&Luby_step->timing_second_pass); */
-      candidates[me] = TP_Luby_second_pass(self->S, self->Luby,
-					   &self->tmp [0][distributions[me]],
-					   &self->tmp2[0][distributions[me]],
-					   distributions[me + 1] - distributions[me]);
-      
+    /* TP_verbose_start_timing(&Luby_step->timing_second_pass); */
+    candidates[me] = TP_Luby_second_pass(self->S, self->Luby, my_col_perms, my_row_perms, my_size);
+    
 #pragma omp barrier    
 #pragma omp single  
-      {
-	for( i = 1; i < nb_threads; i++)
-	  candidates[i] += candidates[i-1];
-      }
+    {
+      for( i = 1; i < nb_threads; i++)
+	candidates[i] += candidates[i-1];
+    }
 #pragma omp barrier    
-      if (me) {
-	memcpy(&self->col_perm[self->done_pivots + candidates[me-1]], &self->tmp[0][distributions[me]],
-	       (size_t) (candidates[me] - candidates[me-1]) * sizeof(*self->col_perm));
-	memcpy(&self->row_perm[self->done_pivots + candidates[me-1]], &self->tmp2[0][distributions[me]],
-	       (size_t) (candidates[me] - candidates[me-1]) * sizeof(*self->row_perm));
-      } else { 
-	memcpy(&self->col_perm[self->done_pivots], self->tmp[0] , (size_t) candidates[me] * sizeof(*self->col_perm));
-	memcpy(&self->row_perm[self->done_pivots], self->tmp2[0], (size_t) candidates[me] * sizeof(*self->row_perm));
-      }
-#pragma omp barrier    
-    }    
+    if (me) {
+      memcpy(&global_col_perms[candidates[me-1]], my_col_perms,
+	     (size_t) (candidates[me] - candidates[me-1]) * sizeof(*my_col_perms));
+      
+      memcpy(&global_row_perms[candidates[me-1]], my_row_perms,
+	     (size_t) (candidates[me] - candidates[me-1]) * sizeof(*self->row_perm));
+    } else { 
+      memcpy(global_col_perms, my_col_perms, (size_t) candidates[me] * sizeof(*my_col_perms));
+      memcpy(global_row_perms, my_row_perms, (size_t) candidates[me] * sizeof(*my_row_perms));
+    }
+    }
     new_pivots = candidates[nb_threads-1];
-    /* printf("found pivots %d\n", new_pivots + self->done_pivots); */
-    /* /\* print_int_array(candidates, nb_threads, "candidates"); *\/ */
-
-    /* print_int_array(self->col_perm, self->A->n, "col_perm"); */
-    /* print_int_array(self->row_perm, self->A->n, "row_perm"); */
-
-    /* TP_verbose_stop_timing(L&uby_step->timing_second_pass); */
-    TP_verbose_stop_timing(&step->timing_merging_pivots);
     
-    /* TP_verbose_start_timing(&init_phase->timing_discarding); */
+    TP_verbose_stop_timing(&step->timing_merging_pivots);
+
     TP_solver_get_Luby_pivots(self, self->Luby, new_pivots);
-    /* TP_verbose_stop_timing(&init_phase->timing_discarding); */
 
   } else {
     

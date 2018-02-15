@@ -61,8 +61,7 @@ struct _TP_solver {
   int *rows;
   int *distributions;
   int *seeds;
-  int **tmp;
-  int **tmp2;
+  void **workspace;
 
   int nb_row_singletons;
   int nb_col_singletons;
