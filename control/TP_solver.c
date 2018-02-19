@@ -704,6 +704,9 @@ TP_solver_alloc_internal(TP_solver self)
   self->workspace = malloc((size_t) self->exe_parms->nb_threads * sizeof(*self->workspace));
   for(i = 0; i < self->exe_parms->nb_threads; i++)
     self->workspace[i] = malloc((size_t) self->A->n * (sizeof(int) + sizeof(double)));
+  
+  self->logical_cols = calloc((size_t) self->A->n, sizeof(*self->logical_cols));
+  self->logical_rows = calloc((size_t) self->A->n, sizeof(*self->logical_rows));
 
   pthread_mutex_init(&self->counters_lock, NULL); 
 }
@@ -825,20 +828,28 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
 void 
 TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
 {
-  int n = self->A->n, nb_cols = self->A->n - self->done_pivots;
+  TP_schur_matrix S = self->S;
+
+  int n = S->n, nb_cols = S->n - self->done_pivots;
+  int all_pivots = new_pivots + self->done_pivots;
+  int i, base = self->step + 1;
   int nb_threads = self->exe_parms->nb_threads;
   int distribution_perms[nb_threads+1], distribution_n[nb_threads+1];
+
+  int *logical_cols = self->logical_cols;
+  int *logical_rows = self->logical_rows;
+
   int *col_counts = Luby->invr_col_perm;
   int *row_counts = Luby->invr_row_perm;
+
   int *row_perms = self->row_perm;
   int *col_perms = self->col_perm;
-  int *cols = self->cols;
-  int *rows = self->rows;
   int *invr_row_perms = self->invr_row_perm;
   int *invr_col_perms = self->invr_col_perm;
-  TP_schur_matrix S = self->S;
-  int all_pivots = new_pivots + self->done_pivots;
-  int i, j;
+
+  int *cols = self->cols;
+  int *rows = self->rows;
+
   self->previous_step_pivots = new_pivots;
 
   self->n_U_structs = 0;
@@ -856,7 +867,7 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
     distribution_n[i] = (n / nb_threads) * i;
   distribution_n[nb_threads] = n;
 
-#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n)
+#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, base)
   {
   int i, j;
   int me = omp_get_thread_num();
@@ -890,6 +901,23 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
 	int col = cols[j];
 #pragma omp atomic
 	col_counts[col]++;
+      }
+    }
+
+
+  for ( i = start; i < end; i++)
+    {
+      CSC_struct *CSC = &S->CSC[col_perms[i]];
+      int *rows = CSC->row; 
+      int nb_elem = CSC->nb_elem;
+      for ( j = 0; j < nb_elem; j++) {
+	logical_rows[rows[j]] = base;
+      }
+      CSR_struct *CSR = &S->CSR[row_perms[i]];
+      int *cols = CSR->col;
+      nb_elem = CSR->nb_elem;
+      for ( j = 0; j < nb_elem; j++) {
+	logical_cols[cols[j]] = base;
       }
     }
 #pragma omp barrier
@@ -930,6 +958,27 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
   }
   }
   }
+  
+  /* int *tmp_cols = calloc( n, sizeof(*tmp_cols)); */
+  /* int *tmp_rows = malloc( n, sizeof(*tmp_rows)); */
+  int nb_tmp_cols = 0, nb_tmp_rows = 0;
+
+  for( i = 0; i < n; i++) 
+    if(logical_cols[i] == base && invr_col_perms[i] == TP_UNUSED_PIVOT) 
+      nb_tmp_cols++;
+
+  for( i = 0; i < n; i++) 
+    if(logical_rows[i] == base && invr_row_perms[i] == TP_UNUSED_PIVOT) 
+      nb_tmp_rows++;
+
+  if( self->n_U_structs == nb_tmp_cols && 
+      self->n_L_structs == nb_tmp_rows )
+    printf(" :D \n");
+  else 
+    printf(" :S \n");
+
+  /* free(tmp_cols); */
+  /* free(tmp_rows); */
 
   self->found_pivots = all_pivots;
   TP_verbose_update_pivots(self->verbose,  new_pivots);
@@ -1170,7 +1219,7 @@ TP_solver_update_matrix(TP_solver self)
 
       TP_verbose_start_timing(&step->timing_update_S);
       TP_schur_matrix_update_S(S, L, U, self->U_struct, self->n_U_structs, self->nnz_U_structs, self->invr_row_perm,
-			       nb_pivots, &self->row_perm[self->done_pivots]);
+			       nb_pivots, &self->row_perm[self->done_pivots], self->workspace);
       TP_verbose_stop_timing(&step->timing_update_S);
 
       TP_verbose_start_timing(&step->timing_update_U);
@@ -1184,6 +1233,7 @@ TP_solver_update_matrix(TP_solver self)
       	TP_schur_matrix_check_symetry(self->S);
     }
   self->done_pivots = self->found_pivots;
+  self->step++;
   
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL)) {
     TP_schur_matrix_print(S, "S after update");

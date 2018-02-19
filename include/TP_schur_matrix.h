@@ -66,7 +66,8 @@ void TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
 
 void TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
 			      TP_U_struct *U_struct, int U_new_n, int U_new_nnz,
-			      int *invr_row_perm, int nb_pivots, int *row_perms);
+			      int *invr_row_perm, int nb_pivots, int *row_perms,
+			      void **workspace);
 
 void TP_schur_matrix_update_S_rows(TP_schur_matrix S, TP_U_struct *L_struct,
 				   int L_new_n, int L_new_nnz, int *invr_col_perm,

@@ -43,17 +43,6 @@ void TP_Luby_first_pass(TP_Luby Luby, TP_schur_matrix matrix,
 int TP_Luby_second_pass(TP_schur_matrix matrix, TP_Luby Luby, 
 			int *col_perm, int *row_perm, int nb_candidates);
 
-/* void TP_Luby_get_max(TP_Luby Luby, TP_schur_matrix matrix, */
-/* 		     int first_col, int last_col); */
-  
-/* int TP_Luby_first_pass(TP_Luby Luby, int *col_perm, int *row_perm); */
-
-/* void TP_Luby_second_pass(TP_schur_matrix matrix, TP_Luby Luby,  */
-/* 			int nb_eligeble_pivots, int *col_perm, int *row_perm); */
-
-/* int TP_Luby_discard(TP_schur_matrix matrix, TP_Luby Luby,  */
-/* 		    int nb_eligible_pivots, int *col_perm, int *row_perm); */
-
 void TP_Luby_check_pivots(TP_Luby Luby, TP_schur_matrix matrix,
 			  int *col_perms, int *row_perm, int nb_pivots);
 

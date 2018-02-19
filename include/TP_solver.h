@@ -61,6 +61,8 @@ struct _TP_solver {
   int *rows;
   int *distributions;
   int *seeds;
+  int *logical_cols;
+  int *logical_rows;
   void **workspace;
 
   int nb_row_singletons;
@@ -80,6 +82,7 @@ struct _TP_solver {
   int previous_step_pivots;
 
   int debug;
+  int step;
 
   TP_exe_parms exe_parms;
   TP_verbose verbose;
