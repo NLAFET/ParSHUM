@@ -591,7 +591,7 @@ TP_schur_matrix_add_to_entry(TP_schur_matrix self, int row, int col, double val)
 
 void
 TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
-			 TP_U_struct *U_struct, int U_new_n, int U_new_nnz,
+			 int *U_struct, int U_new_n, int U_new_nnz,
 			 int *invr_row_perm, int nb_pivots, int *row_perms,
 			 void **workspace)
 {
@@ -631,9 +631,9 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
       i < U_new_n;
       i = __atomic_fetch_add(&pivot, 1, __ATOMIC_SEQ_CST))
     {
-      TP_U_struct U_col_struct = U_struct[i];
-      int col = U_col_struct.col;
-      int U_col_new_old = U_col_struct.nb_elem;
+      /* TP_U_struct U_col_struct = U_struct[i]; */
+      int col = U_struct[i];
+      /* int U_col_new_old = U_col_struct.nb_elem; */
       U_col *U_col = &U->col[col];
       /* double *U_col_vals  = U_col->val; */
       /* int    *U_col_rows  = U_col->row; */
@@ -659,8 +659,8 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
       
       if (S_col_nb_elem + U_col_new != CSC->nb_elem)
       	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong");
-      if ( U_col_new != U_col_new_old) 
-      	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong 2");
+      /* if ( U_col_new != U_col_new_old)  */
+      /* 	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong 2"); */
       
       S_new_nnz -= (long) U_col_new;
       U_new_nnz += (long) U_col_new;
@@ -724,7 +724,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
 
 
 void
-TP_schur_matrix_update_S_rows(TP_schur_matrix S, TP_U_struct *L_struct,
+TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct,
 			      int L_new_n, int L_new_nnz, int *invr_col_perm,
 			      int nb_pivots, int *row_perms, int done_pivots)
 {
@@ -743,9 +743,9 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, TP_U_struct *L_struct,
       i < L_new_n;
       i = __atomic_fetch_add(&pivot, 1, __ATOMIC_SEQ_CST))
     {
-      TP_U_struct L_col_struct = L_struct[i];
-      int row = L_col_struct.col;
-      int L_row_new = L_col_struct.nb_elem;
+      /* TP_U_struct L_col_struct = L_struct[i]; */
+      int row = L_struct[i];
+      /* int L_row_new = L_col_struct.nb_elem; */
 
       CSR_struct *CSR = &S->CSR[row];
 
@@ -764,8 +764,8 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, TP_U_struct *L_struct,
 	}
       }
       
-      if (L_row_new != found)
-      	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Somethign went wrong");
+      if (found + S_row_nb_elem != CSR->nb_elem)
+      	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Somethign went wrong in rows");
       
       for ( k = 0; k < S_row_nb_elem; k++) {
 	int S_col = S_cols[k];
@@ -775,7 +775,7 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, TP_U_struct *L_struct,
       CSR->nb_elem -= found;
       CSR->nb_free += found;
       
-      for ( l = 0; l < L_row_new; l++) {
+      for ( l = 0; l < found; l++) {
         int U_row = row_perms[invr_col_perm[tmp[l]]];
 	int *U_cols   = S->CSR[U_row].col;
 	int U_nb_elem = S->CSR[U_row].nb_elem;

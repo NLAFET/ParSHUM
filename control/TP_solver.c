@@ -835,12 +835,10 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
   int i, base = self->step + 1;
   int nb_threads = self->exe_parms->nb_threads;
   int distribution_perms[nb_threads+1], distribution_n[nb_threads+1];
+  int row_sizes[nb_threads], col_sizes[nb_threads];
 
   int *logical_cols = self->logical_cols;
   int *logical_rows = self->logical_rows;
-
-  int *col_counts = Luby->invr_col_perm;
-  int *row_counts = Luby->invr_row_perm;
 
   int *row_perms = self->row_perm;
   int *col_perms = self->col_perm;
@@ -864,46 +862,26 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
 
   *distribution_n = 0;
   for(i = 1; i < nb_threads; i++)
-    distribution_n[i] = (n / nb_threads) * i;
-  distribution_n[nb_threads] = n;
+    distribution_n[i] = (nb_cols / nb_threads) * i;
+  distribution_n[nb_threads] = nb_cols;
 
-#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, base)
+#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, base, nb_cols, col_sizes, row_sizes)
   {
   int i, j;
   int me = omp_get_thread_num();
   int start = distribution_perms[me] ;
   int end   = distribution_perms[me+1];
+  int *my_col_perms = (int *) self->workspace[me];
+  int *my_row_perms = &my_col_perms[nb_cols];
+  int my_nb_cols = 0, my_nb_rows = 0;
   
   for( i = start; i < end; i++)
     {
       invr_col_perms[col_perms[i]] = i;
       invr_row_perms[row_perms[i]] = i;
     }
-  bzero(&col_counts[distribution_n[me]], (size_t) (distribution_n[me+1] - distribution_n[me]) * sizeof(*col_counts));
-  bzero(&row_counts[distribution_n[me]], (size_t) (distribution_n[me+1] - distribution_n[me]) * sizeof(*row_counts));
-  
-  
-#pragma omp barrier
-  for ( i = start; i < end; i++)
-    {
-      CSC_struct *CSC = &S->CSC[col_perms[i]];
-      int *rows = CSC->row; 
-      int nb_elem = CSC->nb_elem;
-      for ( j = 0; j < nb_elem; j++) {
-	int row = rows[j];
-#pragma omp atomic
-	row_counts[row]++;
-      }
-      CSR_struct *CSR = &S->CSR[row_perms[i]];
-      int *cols = CSR->col;
-      nb_elem = CSR->nb_elem;
-      for ( j = 0; j < nb_elem; j++) {
-	int col = cols[j];
-#pragma omp atomic
-	col_counts[col]++;
-      }
-    }
 
+#pragma omp barrier
 
   for ( i = start; i < end; i++)
     {
@@ -922,63 +900,47 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
     }
 #pragma omp barrier
 
-#pragma omp single
-  {
-  for( i = 0; i < nb_cols; i++) {
-      int row = rows[i];
-    if (row_counts[row] && invr_row_perms[row] == TP_UNUSED_PIVOT) {
-      self->nnz_L_structs += row_counts[row];
+  start = distribution_n[me];
+  end = distribution_n[me+1];
 
-      if (self->n_L_structs >= self->allocated_L_struct )  {
-	self->allocated_L_struct *= 2;
-	self->L_struct = realloc(self->L_struct, (size_t) self->allocated_L_struct * sizeof(*self->L_struct));
-      }
-      self->L_struct[self->n_L_structs].col = row;
-      self->L_struct[self->n_L_structs].nb_elem = row_counts[row];
-      self->n_L_structs++;
-    }
-  }
-  }
-
-#pragma omp single
-  {
-  for( i = 0; i < nb_cols; i++) {
+  for( i = start; i < end; i++)  {
     int col = cols[i];
-    if (col_counts[col] && invr_col_perms[col] == TP_UNUSED_PIVOT) {
-      self->nnz_U_structs += col_counts[col];
+    if(logical_cols[col] == base && invr_col_perms[col] == TP_UNUSED_PIVOT) 
+      my_col_perms[my_nb_cols++] = col;
+  }
 
-      if (self->n_U_structs >= self->allocated_U_struct )  {
-	self->allocated_U_struct *= 2;
-	self->U_struct = realloc(self->U_struct, (size_t) self->allocated_U_struct * sizeof(*self->U_struct));
-      }
-      self->U_struct[self->n_U_structs].col = col;
-      self->U_struct[self->n_U_structs].nb_elem = col_counts[col];
-      self->n_U_structs++;
+  for( i = start; i < end; i++)  {
+    int row = rows[i];
+    if(logical_rows[row] == base && invr_row_perms[row] == TP_UNUSED_PIVOT) 
+      my_row_perms[my_nb_rows++] = row;
+  }
+
+  col_sizes[me] = my_nb_cols;
+  row_sizes[me] = my_nb_rows;
+
+#pragma omp barrier
+#pragma omp single 
+  {
+    for (i = 1; i < nb_threads; i++) {
+      col_sizes[i] += col_sizes[i-1];
+      row_sizes[i] += row_sizes[i-1];
     }
+    self->n_U_structs = col_sizes[nb_threads-1];
+    self->n_L_structs = row_sizes[nb_threads-1];
   }
-  }
+#pragma omp barrier
+  if (me) {
+    memcpy(&col_perms[all_pivots + col_sizes[me-1]], my_col_perms,
+	   (size_t) (col_sizes[me] - col_sizes[me-1]) * sizeof(*col_perms));
+    
+    memcpy(&row_perms[all_pivots + row_sizes[me-1]], my_row_perms,
+	   (size_t) (row_sizes[me] - row_sizes[me-1]) * sizeof(*row_perms));
+  } else { 
+    memcpy(&col_perms[all_pivots], my_col_perms, (size_t) col_sizes[me] * sizeof(*col_perms));
+    memcpy(&row_perms[all_pivots], my_row_perms, (size_t) row_sizes[me] * sizeof(*row_perms));
   }
   
-  /* int *tmp_cols = calloc( n, sizeof(*tmp_cols)); */
-  /* int *tmp_rows = malloc( n, sizeof(*tmp_rows)); */
-  int nb_tmp_cols = 0, nb_tmp_rows = 0;
-
-  for( i = 0; i < n; i++) 
-    if(logical_cols[i] == base && invr_col_perms[i] == TP_UNUSED_PIVOT) 
-      nb_tmp_cols++;
-
-  for( i = 0; i < n; i++) 
-    if(logical_rows[i] == base && invr_row_perms[i] == TP_UNUSED_PIVOT) 
-      nb_tmp_rows++;
-
-  if( self->n_U_structs == nb_tmp_cols && 
-      self->n_L_structs == nb_tmp_rows )
-    printf(" :D \n");
-  else 
-    printf(" :S \n");
-
-  /* free(tmp_cols); */
-  /* free(tmp_rows); */
+  }
 
   self->found_pivots = all_pivots;
   TP_verbose_update_pivots(self->verbose,  new_pivots);
@@ -1121,7 +1083,7 @@ TP_solver_find_pivot_set(TP_solver self)
     TP_verbose_stop_timing(&step->timing_merging_pivots);
 
     TP_solver_get_Luby_pivots(self, self->Luby, new_pivots);
-
+    
   } else {
     
     if (self->debug & TP_CHECK_COUNTERS )
@@ -1218,12 +1180,14 @@ TP_solver_update_matrix(TP_solver self)
       /*   TP_schur_matrix_check_symetry(self->S); */
 
       TP_verbose_start_timing(&step->timing_update_S);
-      TP_schur_matrix_update_S(S, L, U, self->U_struct, self->n_U_structs, self->nnz_U_structs, self->invr_row_perm,
+      TP_schur_matrix_update_S(S, L, U, &self->col_perm[self->found_pivots],
+			       self->n_U_structs, self->nnz_U_structs, self->invr_row_perm,
 			       nb_pivots, &self->row_perm[self->done_pivots], self->workspace);
       TP_verbose_stop_timing(&step->timing_update_S);
 
       TP_verbose_start_timing(&step->timing_update_U);
-      TP_schur_matrix_update_S_rows(S, self->L_struct, self->n_L_structs, self->nnz_L_structs,
+      TP_schur_matrix_update_S_rows(S, &self->row_perm[self->found_pivots],
+				    self->n_L_structs, self->nnz_L_structs,
 				    self->invr_col_perm, nb_pivots, self->row_perm, self->done_pivots);
       TP_verbose_stop_timing(&step->timing_update_U);
 
@@ -1453,7 +1417,6 @@ TP_solver_copmpute_norms(TP_solver self,       TP_vector X,
 
   TP_vector_destroy(tmp);
 }
-
 
 void
 TP_solver_iterative_refinement(TP_solver self, 
