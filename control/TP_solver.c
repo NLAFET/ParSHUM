@@ -831,7 +831,8 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
   TP_schur_matrix S = self->S;
 
   int n = S->n, nb_cols = S->n - self->done_pivots;
-  int all_pivots = new_pivots + self->done_pivots;
+  int done_pivots = self->done_pivots + self->nb_col_singletons + self->nb_row_singletons;
+  int all_pivots = new_pivots + done_pivots;
   int i, base = self->step + 1;
   int nb_threads = self->exe_parms->nb_threads;
   int distribution_perms[nb_threads+1], distribution_n[nb_threads+1];
@@ -848,16 +849,16 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
   int *cols = self->cols;
   int *rows = self->rows;
 
-  self->previous_step_pivots = new_pivots;
+  self->previous_step_pivots = new_pivots + self->nb_col_singletons + self->nb_row_singletons;
 
   self->n_U_structs = 0;
   self->nnz_U_structs = 0;
   self->n_L_structs = 0;
   self->nnz_L_structs = 0;
 
-  *distribution_perms = self->done_pivots;
+  *distribution_perms = done_pivots;
   for(i = 1; i < nb_threads; i++)
-    distribution_perms[i] = self->done_pivots + (new_pivots / nb_threads) * i;
+    distribution_perms[i] = done_pivots + (new_pivots / nb_threads) * i;
   distribution_perms[nb_threads] = all_pivots;
 
   *distribution_n = 0;
@@ -943,7 +944,7 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
   }
 
   self->found_pivots = all_pivots;
-  TP_verbose_update_pivots(self->verbose,  new_pivots);
+  TP_verbose_update_pivots(self->verbose,  self->nb_col_singletons + self->nb_row_singletons + new_pivots);
 }
 
 void
@@ -971,13 +972,13 @@ TP_solver_find_pivot_set(TP_solver self)
   			  self->invr_col_perm, self->invr_row_perm);
   nb_singeltons = self->nb_col_singletons + self->nb_row_singletons;
 
-  if (nb_singeltons){
-    self->found_pivots += nb_singeltons ;
-    self->previous_step_pivots = nb_singeltons;
+  /* if (nb_singeltons){ */
+  /*   self->found_pivots += nb_singeltons ; */
+  /*   self->previous_step_pivots = nb_singeltons; */
 
-    TP_verbose_update_pivots(self->verbose, nb_singeltons);
-    return;
-  }
+    /* TP_verbose_update_pivots(self->verbose, nb_singeltons); */
+    /* return; */
+  /* } */
 
   if (exe_parms->luby_algo) {
     int new_pivots = 0, best_marko, nb_cols = self->S->n - self->done_pivots;
@@ -1000,8 +1001,8 @@ TP_solver_find_pivot_set(TP_solver self)
 
     TP_verbose_start_timing(&step->timing_extracting_candidates);
 
-    best_markos[me] = TP_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->cols,
-					   distributions[me], distributions[me + 1], 0);
+    best_markos[me] = TP_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, 
+					   self->cols, distributions[me], distributions[me + 1], 0);
 #pragma omp barrier    
 #pragma omp single 
     {
@@ -1016,8 +1017,8 @@ TP_solver_find_pivot_set(TP_solver self)
     TP_Luby_get_candidates(self->S, self->Luby,  best_marko,
 			   self->cols, distributions[me], distributions[me + 1]);
      
-    candidates[me] = TP_Luby_assign_score(self->Luby, self->S, &self->seeds[me],
-					  my_col_perms, my_row_perms,
+    candidates[me] = TP_Luby_assign_score(self->Luby, self->S, self->invr_row_perm,
+					  &self->seeds[me], my_col_perms, my_row_perms,
 					  self->cols, distributions[me], distributions[me + 1]);
 #pragma omp barrier    
 #pragma omp single  
@@ -1051,8 +1052,8 @@ TP_solver_find_pivot_set(TP_solver self)
     int *tmp = (int *) self->workspace[0];
     int *my_col_perms = &tmp[distributions[me]];
     int *my_row_perms = &tmp[nb_cols + distributions[me]];
-    int *global_col_perms = &self->col_perm[self->done_pivots];
-    int *global_row_perms = &self->row_perm[self->done_pivots];
+    int *global_col_perms = &self->col_perm[self->done_pivots + self->nb_col_singletons + self->nb_row_singletons];
+    int *global_row_perms = &self->row_perm[self->done_pivots + self->nb_col_singletons + self->nb_row_singletons];
 
     TP_Luby_first_pass(self->Luby, self->S, my_col_perms, my_row_perms, my_size);
     
@@ -1081,7 +1082,7 @@ TP_solver_find_pivot_set(TP_solver self)
     new_pivots = candidates[nb_threads-1];
     
     TP_verbose_stop_timing(&step->timing_merging_pivots);
-
+    
     TP_solver_get_Luby_pivots(self, self->Luby, new_pivots);
     
   } else {
@@ -1126,29 +1127,31 @@ TP_solver_update_matrix(TP_solver self)
   TP_matrix D = self->D;
   TP_U_matrix U = self->U;
   TP_schur_matrix S = self->S;
-  int nb_pivots = self->found_pivots - self->done_pivots;
+  int nb_pivots = self->found_pivots - self->done_pivots - self->nb_row_singletons - self->nb_col_singletons ;
   TP_verbose_per_step step = TP_verbose_get_step(self->verbose);
 
-  if ( self->nb_row_singletons || self->nb_col_singletons)
-    {
+  /* if ( self->nb_row_singletons || self->nb_col_singletons) */
+  /*   { */
       if ( self->nb_row_singletons) {
 	TP_verbose_start_timing(&step->timing_update_LD);
 	TP_schur_matrix_update_LD_singeltons(S, L, D,
 					     &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots],
 					     self->invr_col_perm, self->nb_row_singletons);
 	TP_verbose_stop_timing(&step->timing_update_LD);
+	self->done_pivots += self->nb_row_singletons;
       }
       
       if (self->nb_col_singletons) {
 	TP_verbose_start_timing(&step->timing_update_U);
 	TP_schur_matrix_update_U_singletons(S, U, D, L, self->nb_col_singletons,
-					    &self->col_perm[self->done_pivots + self->nb_row_singletons],
-					    &self->row_perm[self->done_pivots + self->nb_row_singletons]);
-      TP_verbose_stop_timing(&step->timing_update_U);
+					    &self->col_perm[self->done_pivots],
+					    &self->row_perm[self->done_pivots]);
+	self->done_pivots += self->nb_col_singletons;
+	TP_verbose_stop_timing(&step->timing_update_U);
       }
-    }
-  else
-    {
+  /*   } */
+  /* else */
+  /*   { */
       TP_verbose_start_timing(&step->timing_update_LD);
       
       /* if (self->debug & TP_CHECK_PIVOTS ) { */
@@ -1195,7 +1198,7 @@ TP_solver_update_matrix(TP_solver self)
       /* 	TP_schur_matrix_memory_check(self->S); */
       if (self->debug & TP_CHECK_SCHUR_SYMETRY )
       	TP_schur_matrix_check_symetry(self->S);
-    }
+    /* } */
   self->done_pivots = self->found_pivots;
   self->step++;
   

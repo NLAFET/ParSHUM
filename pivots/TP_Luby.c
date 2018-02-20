@@ -46,8 +46,8 @@ TP_Luby_destroy(TP_Luby self)
 
 int
 TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
-		     double value_tol, int *cols,
-		     int first_col, int last_col, 
+		     double value_tol, int *global_invr_col_perms,
+		     int *cols, int first_col, int last_col, 
 		     int max_col_length)
 {
   int best_marko = INT_MAX;
@@ -66,7 +66,12 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
   /* This requires removing the compuation of the best_marko (could be estimated or computed as best along the potential pivots) */
   for(i = first_col; i < last_col; i++)
     {
-      CSC_struct *CSC = &matrix->CSC[cols[i]];
+      int col = cols[i];
+      CSC_struct *CSC = &matrix->CSC[col];
+      if ( global_invr_col_perms[col] != TP_UNUSED_PIVOT) {
+	CSC->nb_eligible = 0;
+	continue;
+      }
       double *vals    = CSC->val;
       double col_max  = CSC->col_max;
       int *rows       = CSC->row;
@@ -134,6 +139,7 @@ TP_Luby_get_candidates(TP_schur_matrix matrix, TP_Luby Luby,
 
 int
 TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
+		     int *global_row_perms,
 		     int *seed, int *col_perm, int *row_perm, 
 		     int *cols, int first_col, int last_col)
 {
@@ -150,6 +156,8 @@ TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
       if (!nb_elem)
 	continue;
       int row  = CSC->row[abs(TP_rand_int(&my_seed, nb_elem))];
+      if (global_row_perms[row] != TP_UNUSED_PIVOT) 
+	continue;
       double score =  TP_rand_double(&my_seed);
 
       col_max_val[col] = score;

@@ -25,7 +25,7 @@ TP_Luby  TP_Luby_create(TP_schur_matrix matrix);
 void TP_Luby_destroy(TP_Luby self);
 
 int TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
- 			 double value_tol, int *cols, 
+ 			 double value_tol, int *global_invr_col_perms, int *cols, 
 			 int first_col, int last_col, 
 			 int max_col_length);
 
@@ -34,6 +34,7 @@ void TP_Luby_get_candidates(TP_schur_matrix matrix, TP_Luby Luby,
 			    int first_col, int last_col);
 
 int TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
+			 int *global_row_perms,
 			 int *seed, int *col_perm, int *row_perm, 
 			 int *cols, int first_col, int last_col);
   
