@@ -830,7 +830,8 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
   TP_schur_matrix S = self->S;
 
   int n = S->n, nb_cols = S->n - self->done_pivots;
-  int done_pivots = self->done_pivots + self->nb_col_singletons + self->nb_row_singletons;
+  int done_pivots = self->done_pivots;
+  new_pivots += self->nb_col_singletons + self->nb_row_singletons;
   int all_pivots = new_pivots + done_pivots;
   int i, base = self->step + 1;
   int nb_threads = self->exe_parms->nb_threads;
@@ -847,8 +848,8 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
 
   int *cols = self->cols;
   int *rows = self->rows;
-
-  self->previous_step_pivots = new_pivots + self->nb_col_singletons + self->nb_row_singletons;
+  
+  self->previous_step_pivots = new_pivots;
 
   self->n_U_structs = 0;
   self->nnz_U_structs = 0;
@@ -1129,7 +1130,7 @@ TP_solver_update_matrix(TP_solver self)
   TP_matrix D = self->D;
   TP_U_matrix U = self->U;
   TP_schur_matrix S = self->S;
-  int nb_pivots = self->found_pivots - self->done_pivots - self->nb_row_singletons - self->nb_col_singletons ;
+  int nb_pivots = self->found_pivots - self->done_pivots;
   TP_verbose_per_step step = TP_verbose_get_step(self->verbose);
 
   /* if ( self->nb_row_singletons || self->nb_col_singletons) */
@@ -1165,9 +1166,9 @@ TP_solver_update_matrix(TP_solver self)
       /* 				     self->found_pivots); */
       /* } */
       
-      TP_schur_matrix_update_LD(S, L, D, &self->row_perm[self->done_pivots],
-				&self->col_perm[self->done_pivots], self->invr_col_perm, nb_pivots,
-                                self->L_struct, self->n_L_structs, self->nnz_L_structs);
+      TP_schur_matrix_update_LD(S, L, U, D, &self->row_perm[self->done_pivots],
+				&self->col_perm[self->done_pivots], nb_pivots,
+                                self->invr_row_perm, self->nb_row_singletons, self->workspace);
       TP_verbose_stop_timing(&step->timing_update_LD);
 
       /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */

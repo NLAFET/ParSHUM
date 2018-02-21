@@ -54,9 +54,10 @@ void TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous
 /* 					 TP_matrix D, TP_matrix L, int nb_pivots, */
 /* 					 int *col_perm, int *row_perm); */
 
-void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_L_matrix L, TP_matrix D,
-			       int *row_perm, int *col_perm, int *invr_col_perm, int nb_pivots,
-			       TP_U_struct *L_struct, int n_L_structs, int nnz_L_structs);
+void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U, TP_matrix D,
+			       int *row_perm, int *col_perm,  int nb_pivots,
+			       int *invr_row_perm, int nb_row_singeltons,
+			       void **workspace);
 
 /* void TP_schur_matrix_update_LD_singeltons(TP_schur_matrix self, TP_matrix L, TP_matrix D, */
 /* 					  int *row_perm, int *col_perm, int *invr_col_perm, int nb_pivots); */
