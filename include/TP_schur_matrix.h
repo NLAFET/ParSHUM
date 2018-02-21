@@ -5,6 +5,7 @@
 
 #include "TP_matrix.h"
 #include "TP_U_matrix.h"
+#include "TP_L_matrix.h"
 #include "TP_dense.h"
 #include "TP_internal_mem.h"
 
@@ -45,26 +46,26 @@ void TP_schur_matrix_print(TP_schur_matrix self, char *mess);
 
 void TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous_step_pivots,
 			     int *nb_col_singletons, int *nb_row_singletons,
-			     int *cols, int *rows, int *distributions, 
+			     int *cols, int *rows, int *distributions,
 			     int nb_done_pivots, int *col_perm, int *row_perm,
 			     int *invr_col_perm, int *invr_row_perm);
 
-void TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U, 
-					 TP_matrix D, TP_matrix L, int nb_pivots,
-					 int *col_perm, int *row_perm);
+/* void TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U,  */
+/* 					 TP_matrix D, TP_matrix L, int nb_pivots, */
+/* 					 int *col_perm, int *row_perm); */
 
-void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_matrix L, TP_matrix D,
+void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_L_matrix L, TP_matrix D,
 			       int *row_perm, int *col_perm, int *invr_col_perm, int nb_pivots,
 			       TP_U_struct *L_struct, int n_L_structs, int nnz_L_structs);
 
-void TP_schur_matrix_update_LD_singeltons(TP_schur_matrix self, TP_matrix L, TP_matrix D,
-					  int *row_perm, int *col_perm, int *invr_col_perm, int nb_pivots);
+/* void TP_schur_matrix_update_LD_singeltons(TP_schur_matrix self, TP_matrix L, TP_matrix D, */
+/* 					  int *row_perm, int *col_perm, int *invr_col_perm, int nb_pivots); */
 
 void TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L, 
 			      int nb_pivots, int *row_perm,
 			      TP_U_struct *U_struct, int U_new_n, int U_new_nnz);
 
-void TP_schur_matrix_update_S(TP_schur_matrix S, TP_matrix L, TP_U_matrix U,
+void TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 			      int *U_struct, int U_new_n, int U_new_nnz,
 			      int *invr_row_perm, int nb_pivots, int *row_perms,
 			      void **workspace);

@@ -6,6 +6,7 @@
 #include "TP_enum.h"
 #include "TP_matrix.h" 
 #include "TP_U_matrix.h" 
+#include "TP_L_matrix.h" 
 #include "TP_Luby.h" 
 #include "TP_schur_matrix.h" 
 #include "TP_dense.h"
@@ -33,7 +34,7 @@ struct _TP_solver {
   TP_matrix   A;
   TP_dense_2D A_debug;
 
-  TP_matrix   L;
+  TP_L_matrix L;
   TP_matrix   D;
   TP_U_matrix U;
   TP_schur_matrix S;
