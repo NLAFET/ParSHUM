@@ -54,27 +54,19 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
   int i, j, unused = max_col_length;
   unused++;
 
-  /* get rid of all init */
+  /* TODO: get rid of all init */
   bzero(Luby->col_max_val, (size_t) Luby->n * sizeof(*Luby->col_max_val));
-  /* bzero(Luby->row_max_val, Luby->m * sizeof(*Luby->row_max_val)); */
-  /* int_array_memset(Luby->col_max_row, -1, Luby->n); */
-  /* int_array_memset(Luby->row_max_col, -1, Luby->m); */
-  /* int_array_memset(Luby->invr_row_perm, -1, Luby->n); */
   int_array_memset(Luby->invr_col_perm, -1, Luby->n);
 
-  /* TODO: redesign so that only columns updated from the prior schur update are scanned  */
-  /* This requires removing the compuation of the best_marko (could be estimated or computed as best along the potential pivots) */
   for(i = first_col; i < last_col; i++)
     {
       int col = cols[i];
       CSC_struct *CSC = &matrix->CSC[col];
       if ( global_invr_col_perms[col] != TP_UNUSED_PIVOT) {
-	CSC->nb_eligible = 0;
+	CSC->nb_numerical_eligible = 0;
 	continue;
       }
-      double *vals    = CSC->val;
-      double col_max  = CSC->col_max;
-      int *rows       = CSC->row;
+      int  *rows    = CSC->row;
       int col_degree  = CSC->nb_elem - 1;
       int col_nb_elem = CSC->nb_elem;
       int nb_eligible = 0;
@@ -82,18 +74,10 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
       for ( j = 0; j < col_nb_elem; j++)
 	{
 	  int row = rows[j];
-	  double val = vals[j];
 	  int current_marko = col_degree * (matrix->CSR[row].nb_elem - 1);
-	  if ( fabs(val) >= value_tol * col_max ) {
-	    rows[j] = rows[nb_eligible];
-	    vals[j] = vals[nb_eligible];
-	    rows[nb_eligible  ] = row;
-	    vals[nb_eligible++] = val;
-	    if ( best_marko > current_marko)
-	      best_marko = current_marko;
-	  }
+	  if ( best_marko > current_marko)
+	    best_marko = current_marko;
 	}
-      CSC->nb_eligible = nb_eligible;
     }
 
   return best_marko;
@@ -112,7 +96,7 @@ TP_Luby_get_candidates(TP_schur_matrix matrix, TP_Luby Luby,
       double *vals    = CSC->val;
       int *rows       = CSC->row;
       int col_degree  = CSC->nb_elem - 1 ;
-      int     nb_elem = CSC->nb_eligible;
+      int     nb_elem = CSC->nb_numerical_eligible;
       /* 
 	 TODO: this loop is not needed, the potential pivot could be 
 	 picked now randomly or chose the entry with best markowitz cost,

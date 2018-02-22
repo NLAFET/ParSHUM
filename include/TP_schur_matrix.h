@@ -40,7 +40,7 @@ TP_schur_matrix TP_schur_matrix_create();
 void TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug,
 			      int nb_threads, double extra_space, double extra_space_inbetween);
 
-void TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self);
+void TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self, double value_tol);
 
 void TP_schur_matrix_print(TP_schur_matrix self, char *mess);
 
@@ -57,7 +57,7 @@ void TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous
 void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U, TP_matrix D,
 			       int *row_perm, int *col_perm,  int nb_pivots,
 			       int *invr_row_perm, int nb_row_singeltons,
-			       void **workspace);
+			       int nb_col_singeltons, void **workspace);
 
 /* void TP_schur_matrix_update_LD_singeltons(TP_schur_matrix self, TP_matrix L, TP_matrix D, */
 /* 					  int *row_perm, int *col_perm, int *invr_col_perm, int nb_pivots); */
@@ -69,7 +69,7 @@ void TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
 void TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 			      int *U_struct, int U_new_n, int U_new_nnz,
 			      int *invr_row_perm, int nb_pivots, int *row_perms,
-			      void **workspace);
+			      void **workspace, double value_tol);
 
 void TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct,
 				   int L_new_n, int L_new_nnz, int *invr_col_perm,

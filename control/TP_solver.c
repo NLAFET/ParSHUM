@@ -531,8 +531,8 @@ TP_solver_run_group(TP_solver solver, TP_parm_type type,
       TP_matrix matrix = TP_matrix_create();
       TP_exe_parms run_exe_parms = malloc(sizeof(*run_exe_parms));
 
-      TP_matrix_copy(A, matrix);
       *run_exe_parms = *exe_parms;
+      TP_matrix_copy(A, matrix);
       
       free(run->exe_parms);
       run->A = matrix;
@@ -642,7 +642,7 @@ TP_solver_alloc_internal(TP_solver self)
       TP_matrix_print(self->A, "A on input");
   TP_schur_matrix_allocate(self->S, self->A->n, self->A->m, self->A->nnz, self->debug,
 			   self->exe_parms->nb_threads, self->exe_parms->extra_space, self->exe_parms->extra_space_inbetween);
-  TP_schur_matrix_copy(self->A, self->S);
+  TP_schur_matrix_copy(self->A, self->S, self->exe_parms->value_tol);
 
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
       TP_schur_matrix_print(self->S, "S on input");
@@ -971,14 +971,6 @@ TP_solver_find_pivot_set(TP_solver self)
   			  self->done_pivots, self->col_perm, self->row_perm,
   			  self->invr_col_perm, self->invr_row_perm);
 
-  /* if (nb_singeltons){ */
-  /*   self->found_pivots += nb_singeltons ; */
-  /*   self->previous_step_pivots = nb_singeltons; */
-
-    /* TP_verbose_update_pivots(self->verbose, nb_singeltons); */
-    /* return; */
-  /* } */
-
   if (exe_parms->luby_algo) {
     int new_pivots = 0, best_marko, nb_cols = self->S->n - self->done_pivots;
     int *distributions = self->distributions, best_markos[nb_threads];
@@ -1057,9 +1049,7 @@ TP_solver_find_pivot_set(TP_solver self)
     TP_Luby_first_pass(self->Luby, self->S, my_col_perms, my_row_perms, my_size);
     
 #pragma omp barrier    
-    /* TP_verbose_start_timing(&Luby_step->timing_second_pass); */
     candidates[me] = TP_Luby_second_pass(self->S, self->Luby, my_col_perms, my_row_perms, my_size);
-    
 #pragma omp barrier    
 #pragma omp single  
     {
@@ -1133,77 +1123,31 @@ TP_solver_update_matrix(TP_solver self)
   int nb_pivots = self->found_pivots - self->done_pivots;
   TP_verbose_per_step step = TP_verbose_get_step(self->verbose);
 
-  /* if ( self->nb_row_singletons || self->nb_col_singletons) */
-  /*   { */
-      /* if ( self->nb_row_singletons) { */
-      /* 	TP_verbose_start_timing(&step->timing_update_LD); */
-      /* 	TP_schur_matrix_update_LD_singeltons(S, L, D, */
-      /* 					     &self->row_perm[self->done_pivots], &self->col_perm[self->done_pivots], */
-      /* 					     self->invr_col_perm, self->nb_row_singletons); */
-      /* 	TP_verbose_stop_timing(&step->timing_update_LD); */
-      /* 	self->done_pivots += self->nb_row_singletons; */
-      /* } */
-      
-      /* if (self->nb_col_singletons) { */
-      /* 	TP_verbose_start_timing(&step->timing_update_U); */
-      /* 	TP_schur_matrix_update_U_singletons(S, U, D, L, self->nb_col_singletons, */
-      /* 					    &self->col_perm[self->done_pivots], */
-      /* 					    &self->row_perm[self->done_pivots]); */
-      /* 	self->done_pivots += self->nb_col_singletons; */
-      /* 	TP_verbose_stop_timing(&step->timing_update_U); */
-      /* } */
-  /*   } */
-  /* else */
-  /*   { */
-      TP_verbose_start_timing(&step->timing_update_LD);
-      
-      /* if (self->debug & TP_CHECK_PIVOTS ) { */
-      /* 	TP_schur_matrix_check_pivots(self->S, */
-      /* 				     self->row_perm, */
-      /* 				     self->col_perm, */
-      /* 				     self->invr_row_perm, */
-      /* 				     self->invr_col_perm, */
-      /* 				     self->found_pivots); */
-      /* } */
-      
-      TP_schur_matrix_update_LD(S, L, U, D, &self->row_perm[self->done_pivots],
-				&self->col_perm[self->done_pivots], nb_pivots,
-                                self->invr_row_perm, self->nb_row_singletons, self->workspace);
-      TP_verbose_stop_timing(&step->timing_update_LD);
+  TP_verbose_start_timing(&step->timing_update_LD);
+  TP_schur_matrix_update_LD(S, L, U, D, &self->row_perm[self->done_pivots],
+			    &self->col_perm[self->done_pivots], nb_pivots,
+			    self->invr_row_perm, self->nb_row_singletons,
+			    self->nb_col_singletons, self->workspace);
+  TP_verbose_stop_timing(&step->timing_update_LD);
+  
+  TP_verbose_start_timing(&step->timing_update_S);
+  TP_schur_matrix_update_S(S, L, U, &self->col_perm[self->found_pivots],
+			   self->n_U_structs, self->nnz_U_structs, self->invr_row_perm,
+			   nb_pivots, &self->row_perm[self->done_pivots], self->workspace,
+			   self->exe_parms->value_tol);
+  TP_verbose_stop_timing(&step->timing_update_S);
+  
+  TP_verbose_start_timing(&step->timing_update_U);
+  TP_schur_matrix_update_S_rows(S, &self->row_perm[self->found_pivots],
+				self->n_L_structs, self->nnz_L_structs,
+				self->invr_col_perm, nb_pivots, self->row_perm, self->done_pivots);
+  TP_verbose_stop_timing(&step->timing_update_U);
 
-      /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
-      /* 	TP_schur_matrix_memory_check(self->S); */
-      /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
-      /* 	TP_schur_matrix_check_symetry(self->S); */
-
-      /* TP_verbose_start_timing(&step->timing_update_U); */
-      /* TP_schur_matrix_update_U(S, U, L, nb_pivots,  &self->row_perm[self->done_pivots], */
-      /* 			       self->U_struct, self->n_U_structs, self->nnz_U_structs); */
-      /* TP_verbose_stop_timing(&step->timing_update_U); */
-      /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
-      /*   TP_schur_matrix_memory_check(self->S); */
-      /* if (self->debug & TP_CHECK_SCHUR_SYMETRY ) */
-      /*   TP_schur_matrix_check_symetry(self->S); */
-
-      TP_verbose_start_timing(&step->timing_update_S);
-      TP_schur_matrix_update_S(S, L, U, &self->col_perm[self->found_pivots],
-			       self->n_U_structs, self->nnz_U_structs, self->invr_row_perm,
-			       nb_pivots, &self->row_perm[self->done_pivots], self->workspace);
-      TP_verbose_stop_timing(&step->timing_update_S);
-
-      TP_verbose_start_timing(&step->timing_update_U);
-      TP_schur_matrix_update_S_rows(S, &self->row_perm[self->found_pivots],
-				    self->n_L_structs, self->nnz_L_structs,
-				    self->invr_col_perm, nb_pivots, self->row_perm, self->done_pivots);
-      TP_verbose_stop_timing(&step->timing_update_U);
-
-      /* if (self->debug & TP_CHECK_SCHUR_MEMORY ) */
-      /* 	TP_schur_matrix_memory_check(self->S); */
-      if (self->debug & TP_CHECK_SCHUR_SYMETRY )
-      	TP_schur_matrix_check_symetry(self->S);
-    /* } */
   self->done_pivots = self->found_pivots;
   self->step++;
+    
+  if (self->debug & TP_CHECK_SCHUR_SYMETRY )
+    TP_schur_matrix_check_symetry(self->S);
 
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL)) {
     TP_schur_matrix_print(S, "S after update");

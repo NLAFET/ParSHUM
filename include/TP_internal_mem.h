@@ -17,6 +17,7 @@ struct _CSC_struct {
   double col_max;
   int    nb_elem;
   int    nb_free;
+  int    nb_numerical_eligible;
   int    nb_eligible;
 
   double *val;

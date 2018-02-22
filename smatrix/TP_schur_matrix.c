@@ -148,7 +148,41 @@ TP_schur_matrix_init_ptr(TP_schur_matrix self, long *col_ptr, int *row_sizes)
 }
 
 void
-TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self)
+TP_CSC_update_col_max(CSC_struct *CSC, double value_tol)
+{
+  int i;
+  int nb_elem = CSC->nb_elem;
+  double max = 0.0;
+  double *vals = CSC->val;
+  int *rows = CSC->row;
+
+  for(i = 0; i < nb_elem; i++)  {
+    double tmp = fabs(vals[i]);
+    if (tmp > max) 
+      max = tmp;
+  }
+  CSC->col_max = max;
+  max *= value_tol;
+
+  for(i = 0; i < nb_elem; ) { 
+    double val = vals[i];
+    if ( fabs(vals[i]) < max )  {
+      int row = rows[i];
+      vals[i] = vals[--nb_elem];
+      vals[nb_elem] = val;
+      rows[i] = rows[nb_elem];
+      rows[nb_elem] = row;
+    } else {
+      i++;
+    }
+  }
+
+  CSC->nb_numerical_eligible = i;
+}
+
+
+void
+TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self, double value_tol)
 {
   int i, j;
   int *row_sizes;
@@ -176,11 +210,10 @@ TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self)
 	     (void *) &A->val[A_col_start],
 	     col_length * sizeof(*A->val));
 
-      self->CSC[i].col_max = get_max_double(CSC_vals, col_length);
-      
       self->CSC[i].nb_elem += col_length; 
       self->CSC[i].nb_free -= col_length; 
 
+      TP_CSC_update_col_max(&self->CSC[i], value_tol);
       // handle the copy  of the column into the CSR structure
       for(j = A_col_start; j < A_col_end; j++)
 	{       
@@ -347,8 +380,8 @@ TP_schur_matrix_update_LD_singeltons(TP_schur_matrix self, TP_matrix L, TP_matri
 
 void
 TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP_matrix D,
-			  int *row_perm, int *col_perm, int nb_pivots,
-			  int *invr_row_perm, int nb_row_singeltons, void **workspace)
+			  int *row_perm, int *col_perm, int nb_pivots, int *invr_row_perm,
+			  int nb_row_singeltons, int nb_col_singeltons, void **workspace)
 {
   int i, pivot = 0, nb_threads = self->nb_threads;
   int n = self->n;
@@ -371,7 +404,7 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
   }
   D->n += nb_pivots;
 
-#pragma omp parallel num_threads(nb_threads) shared(pivot,nb_pivots,L_input_size,D_input_size,n)
+#pragma omp parallel num_threads(nb_threads) shared(pivot,nb_pivots,L_input_size,D_input_size,n,nb_row_singeltons,nb_col_singeltons)
   {
     int me =  omp_get_thread_num();
     long S_nnz = 0;
@@ -399,7 +432,7 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 	L_rows        = L->row;
 	L_vals        = L->val;
 	
-	if ( current_pivot  < nb_row_singeltons )  { 
+	if ( nb_col_singeltons && current_pivot  < (nb_row_singeltons + nb_col_singeltons) )  { 
 
 	  for(i = 0; i < nb_elem; i++)
 	    {
@@ -619,23 +652,9 @@ void
 TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 			 int *U_struct, int U_new_n, int U_new_nnz,
 			 int *invr_row_perm, int nb_pivots, int *row_perms,
-			 void **workspace)
+			 void **workspace, double value_tol)
 {
   int pivot = 0, nb_threads = S->nb_threads;
-  /* int nb_steps = (U_new_n + nb_threads - 1) / nb_threads; */
-  /* int i; */
-
-
-  /* for( i = 0; i < U_new_n; i++) { */
-  /*   int col = U_struct[i].col; */
-  /*   int nb_elem = U_struct[i].nb_elem; */
-  /*   U_col *u_col = &U->col[col]; */
-    
-  /*   u_col->cost = 0; */
-  /*   while(u_col->allocated - u_col->nb_elem  < nb_elem) */
-  /*     TP_U_col_realloc(u_col); */
-  /* } */
-   /* U->nnz += U_new_nnz; */
 
 #pragma omp parallel num_threads(nb_threads) 
   {
@@ -734,7 +753,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
       memcpy(&U_col->row[U_col->nb_elem], U_rows, U_col_new * sizeof(*U_rows));
       U_col->nb_elem += U_col_new;
 
-      CSC->col_max = get_max_double(CSC->val, CSC->nb_elem);
+      TP_CSC_update_col_max(CSC, value_tol);
       int new = base + CSC->nb_elem;
       if (new < base ) {
 	base = 1;
