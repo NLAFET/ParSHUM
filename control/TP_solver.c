@@ -944,7 +944,7 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
   }
 
   self->found_pivots = all_pivots;
-  TP_verbose_update_pivots(self->verbose,  self->nb_col_singletons + self->nb_row_singletons + new_pivots);
+  TP_verbose_update_pivots(self->verbose, new_pivots);
 }
 
 void
@@ -981,7 +981,6 @@ TP_solver_find_pivot_set(TP_solver self)
     for (i = 1; i < nb_threads; i++) 
       distributions[i] = (nb_cols / nb_threads) * i;
     distributions[nb_threads] = nb_cols;
-
 
 #pragma omp parallel num_threads(nb_threads) shared(nb_cols, best_marko)
     {
@@ -1046,6 +1045,7 @@ TP_solver_find_pivot_set(TP_solver self)
 #pragma omp barrier
 #pragma omp single
     {
+      self->Luby->chosen_base += 3;
       for( i = 1; i < nb_threads; i++)
 	candidates[i] += candidates[i-1];
     }
