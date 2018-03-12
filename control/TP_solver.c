@@ -825,13 +825,13 @@ TP_solver_get_pivots(TP_solver self, TP_pivot_set set)
 
 
 void 
-TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
+TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_Luby_pivots)
 {
   TP_schur_matrix S = self->S;
 
   int n = S->n, nb_cols = S->n - self->done_pivots;
   int done_pivots = self->done_pivots;
-  new_pivots += self->nb_col_singletons + self->nb_row_singletons;
+  int new_pivots =  new_Luby_pivots + self->nb_col_singletons + self->nb_row_singletons;
   int all_pivots = new_pivots + done_pivots;
   int i, base = self->step + 1;
   int nb_threads = self->exe_parms->nb_threads;
@@ -856,9 +856,9 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
   self->n_L_structs = 0;
   self->nnz_L_structs = 0;
 
-  *distribution_perms = done_pivots;
+  *distribution_perms = done_pivots + self->nb_col_singletons + self->nb_row_singletons;
   for(i = 1; i < nb_threads; i++)
-    distribution_perms[i] = done_pivots + (new_pivots / nb_threads) * i;
+    distribution_perms[i] = *distribution_perms + (new_Luby_pivots / nb_threads) * i;
   distribution_perms[nb_threads] = all_pivots;
 
   *distribution_n = 0;
@@ -866,7 +866,7 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
     distribution_n[i] = (nb_cols / nb_threads) * i;
   distribution_n[nb_threads] = nb_cols;
 
-#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, base, nb_cols, col_sizes, row_sizes)
+#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, base, nb_cols, col_sizes, row_sizes, n)
   {
   int i, j;
   int me = omp_get_thread_num();
@@ -897,6 +897,47 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_pivots)
       nb_elem = CSR->nb_elem;
       for ( j = 0; j < nb_elem; j++) {
 	logical_cols[cols[j]] = base;
+      }
+    }
+#pragma omp barrier
+#pragma omp single
+  {
+  start = self->done_pivots + self->nb_row_singletons;
+  end   = self->done_pivots + self->nb_row_singletons + self->nb_col_singletons;
+  for ( i = start; i < end; i++)
+    {
+      CSR_struct *CSR = &S->CSR[row_perms[i]];
+      int *cols = CSR->col;
+      int nb_elem = CSR->nb_elem;
+      for ( j = 0; j < nb_elem; j++) {
+	int col = cols[j];
+	int perm = invr_col_perms[col];
+
+	if (perm != TP_UNUSED_PIVOT && perm > end) 
+	  if (col_perms[perm] < n)
+	    col_perms[perm] += n;
+	
+	logical_cols[col] = base;
+      }
+    }      
+  
+  *distribution_perms = self->done_pivots;
+  for(i = 1; i < nb_threads; i++)
+    distribution_perms[i] = *distribution_perms + (self->nb_row_singletons / nb_threads) * i;
+  distribution_perms[nb_threads] = *distribution_perms + self->nb_row_singletons;
+  }
+#pragma omp barrier
+
+  start = distribution_perms[me] ;
+  end   = distribution_perms[me+1];
+
+  for ( i = start; i < end; i++)
+    {
+      CSC_struct *CSC = &S->CSC[col_perms[i]];
+      int *rows = CSC->row; 
+      int nb_elem = CSC->nb_elem;
+      for ( j = 0; j < nb_elem; j++) {
+	logical_rows[rows[j]] = base;
       }
     }
 #pragma omp barrier

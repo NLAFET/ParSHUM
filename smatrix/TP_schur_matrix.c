@@ -393,7 +393,9 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
 
   for(i = 0; i < nb_pivots; i++)  {
-    int nb_elem = self->CSC[col_perm[i]].nb_elem - 1;
+    int col = col_perm[i];
+    col %= n;
+    int nb_elem = self->CSC[col].nb_elem - 1;
     long new_size = L->start[L->n] + nb_elem;
 
     if ( new_size > L->allocated)
@@ -407,6 +409,7 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 #pragma omp parallel num_threads(nb_threads) shared(pivot,nb_pivots,L_input_size,D_input_size,n,nb_row_singeltons,nb_col_singeltons)
   {
     int me =  omp_get_thread_num();
+    int n = self->n;
     long S_nnz = 0;
     int current_pivot;
     int *U_rows = (int *) workspace[me];
@@ -424,15 +427,16 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 	
 	col     = col_perm[current_pivot];
 	row     = row_perm[current_pivot];
-	CSC     = &self->CSC[col];
-	nb_elem = CSC->nb_elem;
-	vals    = CSC->val;
-	rows    = CSC->row;
 	L_current_col = L->start[L_indice];
 	L_rows        = L->row;
 	L_vals        = L->val;
-	
-	if ( nb_col_singeltons && current_pivot  < (nb_row_singeltons + nb_col_singeltons) )  { 
+
+	if ( col < n)  { 
+	  CSC     = &self->CSC[col];
+	  nb_elem = CSC->nb_elem;
+	  vals    = CSC->val;
+	  rows    = CSC->row;
+	  
 
 	  for(i = 0; i < nb_elem; i++)
 	    {
@@ -446,6 +450,13 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 	    }
 	  L->end[L_indice] = L_current_col;	
 	} else { 
+	  col_perm[current_pivot] %= n;
+	  col = col_perm[current_pivot];
+	  CSC     = &self->CSC[col];
+	  nb_elem = CSC->nb_elem;
+	  vals    = CSC->val;
+	  rows    = CSC->row;
+
 	  U_col *U_col = &U->col[col];
 	  int U_col_new = 0;
 	  for(i = 0; i < nb_elem; i++)
@@ -468,7 +479,6 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 	  memcpy(&U_col->val[U_col->nb_elem], U_vals, U_col_new * sizeof(*U_vals));
 	  memcpy(&U_col->row[U_col->nb_elem], U_rows, U_col_new * sizeof(*U_rows));
 	  U_col->nb_elem += U_col_new;
-	  
 	}
 
 	for( i = L->start[L_indice]; i < L->end[L_indice]; i++)
