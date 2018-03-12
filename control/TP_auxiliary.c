@@ -64,10 +64,8 @@ update_counter(int *counter, int *index, int n, int base)
 void 
 check_vlaid_perms(int *perms, int needed_pivots, int nb_pivots)
 {
-  int i, _nb_pivots = 0;
-  int tmp[needed_pivots];
+  int i;
   
-  memset((void *) tmp, 0, (size_t) needed_pivots*sizeof(*tmp));
   for(i = 0; i < needed_pivots; i++) {
     if (perms[i] == TP_UNUSED_PIVOT) {
       continue;
@@ -78,16 +76,20 @@ check_vlaid_perms(int *perms, int needed_pivots, int nb_pivots)
       TP_warning(__FUNCTION__, __FILE__, __LINE__, "one of the pivots is larger then n ");
       continue;
     }      
-    tmp[perms[i]]++;
-    _nb_pivots++;
   }
+}
+
+void 
+check_perms_and_invr_perms(int *perms, int *invr_perms, int nb_pivots, char *name)
+{
+  int i;
+  char mess[2048];
   
-  if (nb_pivots != _nb_pivots) 
-      TP_warning(__FUNCTION__, __FILE__, __LINE__, "found pivots is not equal to nb_pivots");
-     
-  for(i = 0; i < needed_pivots; i++) 
-    if ( tmp[i] > 1) {
-      TP_warning(__FUNCTION__, __FILE__, __LINE__, "found a double pivot");
+  for(i = 0; i < nb_pivots; i++) 
+    if (invr_perms[perms[i]] != i ) {
+      snprintf(mess, 2048, "%s_perm[%d] = %d but invr_%s_perm[%d] = %d",
+	       name, i, perms[i], name, perms[i], invr_perms[perms[i]]);
+      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
     }
 }
 

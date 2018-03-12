@@ -68,12 +68,16 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
       }
       int  *rows    = CSC->row;
       int col_degree  = CSC->nb_elem - 1;
-      int col_nb_elem = CSC->nb_elem;
+      int col_nb_elem = CSC->nb_numerical_eligible;
       int nb_eligible = 0;
       
       for ( j = 0; j < col_nb_elem; j++)
 	{
 	  int row = rows[j];
+	  if (!matrix->CSR[row].nb_elem)  {
+	    printf("KO empty line\n");
+	    continue;
+	  }
 	  int current_marko = col_degree * (matrix->CSR[row].nb_elem - 1);
 	  if ( best_marko > current_marko)
 	    best_marko = current_marko;
@@ -105,6 +109,10 @@ TP_Luby_get_candidates(TP_schur_matrix matrix, TP_Luby Luby,
 
       for (j = 0; j < nb_elem;) {
 	int row = rows[j];
+	if (!matrix->CSR[row].nb_elem) {
+	  printf("KO in get candidates with the row\n");
+	  continue;
+	}
 	int current_marko = col_degree  * (matrix->CSR[row].nb_elem - 1);
 	if ( current_marko > allowed_marko) {
 	  double tmp = vals[j];

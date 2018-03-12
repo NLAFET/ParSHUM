@@ -50,17 +50,10 @@ void TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous
 			     int nb_done_pivots, int *col_perm, int *row_perm,
 			     int *invr_col_perm, int *invr_row_perm);
 
-/* void TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U,  */
-/* 					 TP_matrix D, TP_matrix L, int nb_pivots, */
-/* 					 int *col_perm, int *row_perm); */
-
 void TP_schur_matrix_update_LD(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U, TP_matrix D,
 			       int *row_perm, int *col_perm,  int nb_pivots,
 			       int *invr_row_perm, int nb_row_singeltons,
 			       int nb_col_singeltons, void **workspace);
-
-/* void TP_schur_matrix_update_LD_singeltons(TP_schur_matrix self, TP_matrix L, TP_matrix D, */
-/* 					  int *row_perm, int *col_perm, int *invr_col_perm, int nb_pivots); */
 
 void TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L, 
 			      int nb_pivots, int *row_perm,
@@ -89,8 +82,6 @@ void  TP_schur_matrix_check_pivots(TP_schur_matrix self,
 void  TP_schur_matrix_memory_check(TP_schur_matrix self);
 
 void  TP_schur_matrix_check_symetry(TP_schur_matrix self);
-void  TP_print_GB(TP_schur_matrix self, char *mess);
-/* void  TP_print_single_GB(free_space self, char *mess); */
 void  TP_check_current_counters(TP_schur_matrix self,
 				int *col_perm, int *row_perm, int nb_perms, 
 				int *col_count, int *row_count, int base);

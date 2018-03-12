@@ -1015,7 +1015,6 @@ TP_schur_check_doubles(TP_schur_matrix self)
 	  }
       }
     }
-
 }
 
 void
@@ -1024,23 +1023,24 @@ TP_schur_matrix_check_pivots(TP_schur_matrix self,
 			     int *invr_row_perms, int *invr_col_perms,
 			     int nb_pivots)
 {
-  int  i, j, k, n = self->n, m = self->m;
+  int  i, j, n = self->n, m = self->m;
   int needed_pivots = self->n < self->m ? self->n : self->m;
   char mess[2048];
-  print_int_array(col_perms, n, "col_perms");
-  print_int_array(row_perms, n, "row_perms");
-  print_int_array(invr_col_perms, n, "invr_col_perms");
-  print_int_array(invr_row_perms, n, "invr_row_perms");
-
+  /* print_int_array(col_perms, n, "col_perms"); */
+  /* print_int_array(row_perms, n, "row_perms"); */
+  /* print_int_array(invr_col_perms, n, "invr_col_perms"); */
+  /* print_int_array(invr_row_perms, n, "invr_row_perms"); */
+  
   check_vlaid_perms(row_perms,      needed_pivots, nb_pivots);
   check_vlaid_perms(col_perms,      needed_pivots, nb_pivots);
-  /* check_vlaid_perms(invr_row_perms, needed_pivots, nb_pivots); */
-  /* check_vlaid_perms(invr_row_perms, needed_pivots, nb_pivots); */
-
+  check_vlaid_perms(invr_row_perms, needed_pivots, nb_pivots);
+  check_vlaid_perms(invr_row_perms, needed_pivots, nb_pivots);
+  check_perms_and_invr_perms(col_perms, invr_col_perms, nb_pivots, "col");
+  check_perms_and_invr_perms(row_perms, invr_row_perms, nb_pivots, "row");
+  
   for( i = 0; i < nb_pivots; i++)
     {
       int row = row_perms[i], col = col_perms[i];
-      
       if ( self->CSC[col].nb_elem ) {
 	snprintf(mess, 2048, "column %d is a pivot, but not empty in S with nb_elem %d and nb_free %d",
 		 col, self->CSC[col].nb_elem, self->CSC[col].nb_free);
@@ -1062,8 +1062,7 @@ TP_schur_matrix_check_pivots(TP_schur_matrix self,
       for ( j = 0; j < nb_elem; j++) 
 	{
 	  int row = rows[j];
-	  for(k = 0; k < nb_pivots; k++)
-	    if ( row_perms[k] == row ) {
+	    if ( invr_row_perms[row] != TP_UNUSED_PIVOT ) {
 	      snprintf(mess, 2048, "in col %d, %d is present, but %d is a row pivot\n", i, row, row);
 	      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	    }
@@ -1078,11 +1077,10 @@ TP_schur_matrix_check_pivots(TP_schur_matrix self,
       for ( j = 0; j < nb_elem; j++) 
 	{
 	  int col = cols[j];
-	  for(k = 0; k < nb_pivots; k++)
-	    if ( col_perms[k] == col ) {
-	      snprintf(mess, 2048, "in row %d, %d is present, but %d is a row pivot\n", i, col, col);
-	      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-	    }
+	  if ( invr_col_perms[col] != TP_UNUSED_PIVOT ) {
+	    snprintf(mess, 2048, "in row %d, %d is present, but %d is a col pivot\n", i, col, col);
+	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	  }
 	}
     }
 }
@@ -1315,8 +1313,36 @@ TP_schur_matrix_check_symetry(TP_schur_matrix self)
 	  }
 	  
 	  if (!found) {
-	    snprintf(mess, 2048, "In CSC in col %d row %d exists, but in CSR in row %d,  col %d does not exist",
+	    snprintf(mess, 2048, "In CSC in col %d row %d exists, but in CSR in row %d, col %d does not exist",
 		     col, row, row, col);
+	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	  }
+	} /* for I */
+    }
+
+  for(row = 0; row < n; row++)
+    {
+      CSR_struct *CSR = &self->CSR[row];
+      int *cols   = CSR->col;
+      int row_nb_elem = CSR->nb_elem;
+      
+      for(i = 0; i < row_nb_elem; i++)
+	{
+	  col = cols[i];
+	  CSC_struct *CSC = &self->CSC[col];
+	  int col_nb_elem = CSC->nb_elem;
+	  int *rows = CSC->row;
+	  int found = 0;
+	  for(j = 0; j < col_nb_elem; j++) {
+	    if(rows[j] == row) {
+	      found = 1;
+	      break;
+	    }
+	  }
+	  
+	  if (!found) {
+	    snprintf(mess, 2048, "In CSR in row %d col %d exists, but in CSC in col %d, row %d does not exist",
+		     row, col, col, row);
 	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	  }
 	} /* for I */

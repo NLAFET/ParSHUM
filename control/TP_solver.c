@@ -1001,6 +1001,7 @@ TP_solver_find_pivot_set(TP_solver self)
     for(i = 1; i < nb_threads; i++)
       best_marko = best_marko > best_markos[i] ? best_markos[i] : best_marko;
     best_marko = !best_marko ? 1 : best_marko;
+    printf("best marko = %d\n", best_marko);
     best_marko *= exe_parms->marko_tol;
     }
 #pragma omp barrier    
@@ -1017,6 +1018,7 @@ TP_solver_find_pivot_set(TP_solver self)
       for( i = 1; i < nb_threads; i++)
 	candidates[i] += candidates[i-1];
       step->nb_candidates = candidates[nb_threads-1];
+      printf("#candidates = %d\n", step->nb_candidates);
     } 
 #pragma omp barrier    
 
@@ -1149,6 +1151,11 @@ TP_solver_update_matrix(TP_solver self)
   if (self->debug & TP_CHECK_SCHUR_SYMETRY )
     TP_schur_matrix_check_symetry(self->S);
 
+  if (self->debug &  TP_CHECK_PIVOTS)
+    TP_schur_matrix_check_pivots(self->S, self->row_perm, self->col_perm, 
+				 self->invr_row_perm, self->invr_col_perm,
+				 self->done_pivots);
+  
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL)) {
     TP_schur_matrix_print(S, "S after update");
     TP_L_matrix_print(L, "L after update");
@@ -1158,9 +1165,6 @@ TP_solver_update_matrix(TP_solver self)
   
   if (self->debug & TP_CHECK_SCHUR_DOUBLES) { 
     TP_schur_check_doubles(S);
-  }
-  if (self->debug & TP_CHECK_SCHUR_SYMETRY ) {
-    TP_schur_matrix_check_symetry(self->S);
   }
 }
 
