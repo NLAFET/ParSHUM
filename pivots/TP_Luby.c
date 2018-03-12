@@ -24,6 +24,7 @@ TP_Luby_create(TP_schur_matrix matrix)
 
   self->invr_col_perm = malloc((size_t) n * sizeof(*self->invr_col_perm));
   self->invr_row_perm = malloc((size_t) n * sizeof(*self->invr_row_perm));
+  self->position      = malloc((size_t) n * sizeof(*self->position));
 
   /* srand(brrr); */ 
  
@@ -40,6 +41,7 @@ TP_Luby_destroy(TP_Luby self)
 
   free(self->invr_col_perm);
   free(self->invr_row_perm);
+  free(self->position);
 
   free(self);
 }
@@ -53,11 +55,7 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
   int best_marko = INT_MAX;
   int i, j, unused = max_col_length;
   unused++;
-
-  /* TODO: get rid of all init */
-  bzero(Luby->col_max_val, (size_t) Luby->n * sizeof(*Luby->col_max_val));
-  int_array_memset(Luby->invr_col_perm, -1, Luby->n);
-
+  
   for(i = first_col; i < last_col; i++)
     {
       int col = cols[i];
@@ -66,24 +64,31 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
 	CSC->nb_numerical_eligible = 0;
 	continue;
       }
-      int  *rows    = CSC->row;
+      int *rows    = CSC->row;
       int col_degree  = CSC->nb_elem - 1;
       int col_nb_elem = CSC->nb_numerical_eligible;
       int nb_eligible = 0;
-      
+      int best_position  = -1;
+      int col_best_row = INT_MAX;
+	
+
       for ( j = 0; j < col_nb_elem; j++)
 	{
 	  int row = rows[j];
-	  if (!matrix->CSR[row].nb_elem)  {
-	    printf("KO empty line\n");
-	    continue;
+	  int row_degree = matrix->CSR[row].nb_elem - 1;
+	  if ( col_best_row > row_degree)  {
+	    col_best_row = row_degree;
+	    best_position = j;
 	  }
-	  int current_marko = col_degree * (matrix->CSR[row].nb_elem - 1);
-	  if ( best_marko > current_marko)
-	    best_marko = current_marko;
 	}
+      if (col_best_row != INT_MAX) {
+	int col_best_marko = col_best_row * col_degree;
+	if(col_best_marko < best_marko)
+	  best_marko = col_best_marko;
+      }
+      Luby->position[col] = best_position;
     }
-
+  
   return best_marko;
 }
 
@@ -131,25 +136,29 @@ TP_Luby_get_candidates(TP_schur_matrix matrix, TP_Luby Luby,
 
 int
 TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
-		     int *global_row_perms,
+		     int *global_invr_row_perms, int allowed_marko,
 		     int *seed, int *col_perm, int *row_perm, 
 		     int *cols, int first_col, int last_col)
 {
   int i, nb_candidates = 0;
   double *col_max_val = Luby->col_max_val;
   int    *invr_col_perm  = Luby->invr_col_perm;
+  int    *positions = Luby->position;
   int my_seed = *seed;
 
   for ( i = first_col; i < last_col; i++)
     {
       int col = cols[i];
       CSC_struct *CSC = &matrix->CSC[col];
-      int nb_elem     = CSC->nb_eligible;
-      if (!nb_elem)
+
+      if (positions[col] < 0)
+      	continue;
+      /* int row  = CSC->row[abs(TP_rand_int(&my_seed, nb_elem))]; */
+      int row  = CSC->row[positions[col]];
+      if (global_invr_row_perms[row] != TP_UNUSED_PIVOT) 
 	continue;
-      int row  = CSC->row[abs(TP_rand_int(&my_seed, nb_elem))];
-      if (global_row_perms[row] != TP_UNUSED_PIVOT) 
-	continue;
+      if ( (matrix->CSR[row].nb_elem - 1) * (CSC->nb_elem - 1) > allowed_marko)
+      	continue;
       double score =  TP_rand_double(&my_seed);
 
       col_max_val[col] = score;

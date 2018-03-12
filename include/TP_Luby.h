@@ -15,6 +15,7 @@ struct _TP_Luby_ {
 
   int *invr_col_perm;
   int *invr_row_perm;
+  int *position;
   
   int m;
   int n;
@@ -34,7 +35,7 @@ void TP_Luby_get_candidates(TP_schur_matrix matrix, TP_Luby Luby,
 			    int first_col, int last_col);
 
 int TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
-			 int *global_row_perms,
+			 int *global_row_perms, int allowed_marko,
 			 int *seed, int *col_perm, int *row_perm, 
 			 int *cols, int first_col, int last_col);
   
