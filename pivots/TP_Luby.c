@@ -12,19 +12,13 @@ TP_Luby
 TP_Luby_create(TP_schur_matrix matrix)
 {
   TP_Luby self = calloc(1, sizeof(*self));
-  int n = matrix->n, m = matrix->m;
+  int n = matrix->n;
 
   self->n = n;
-  self->m = m;
   
-  self->col_max_val = malloc((size_t) n * sizeof(*self->col_max_val));
-  self->col_max_row = malloc((size_t) n * sizeof(*self->col_max_row));
-  self->row_max_val = malloc((size_t) m * sizeof(*self->row_max_val));
-  self->row_max_col = malloc((size_t) m * sizeof(*self->row_max_col));
-
-  self->invr_col_perm = malloc((size_t) n * sizeof(*self->invr_col_perm));
-  self->invr_row_perm = malloc((size_t) n * sizeof(*self->invr_row_perm));
-  self->position      = malloc((size_t) n * sizeof(*self->position));
+  self->score    = calloc((size_t) n,  sizeof(*self->score));
+  self->chosen   = calloc((size_t) n, sizeof(*self->chosen));
+  self->position = calloc((size_t) n, sizeof(*self->position));
 
   /* srand(brrr); */ 
  
@@ -34,13 +28,8 @@ TP_Luby_create(TP_schur_matrix matrix)
 void
 TP_Luby_destroy(TP_Luby self)
 {
-  free(self->col_max_val);
-  free(self->col_max_row);
-  free(self->row_max_val);
-  free(self->row_max_col);
-
-  free(self->invr_col_perm);
-  free(self->invr_row_perm);
+  free(self->score);
+  free(self->chosen);
   free(self->position);
 
   free(self);
@@ -54,6 +43,8 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
 {
   int best_marko = INT_MAX;
   int i, j, unused = max_col_length;
+  int *chosen = Luby->chosen, *position = Luby->position;
+  int yes = Luby->chosen_base + 1;
   unused++;
   
   for(i = first_col; i < last_col; i++)
@@ -67,10 +58,8 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
       int *rows    = CSC->row;
       int col_degree  = CSC->nb_elem - 1;
       int col_nb_elem = CSC->nb_numerical_eligible;
-      int nb_eligible = 0;
       int best_position  = -1;
       int col_best_row = INT_MAX;
-	
 
       for ( j = 0; j < col_nb_elem; j++)
 	{
@@ -81,57 +70,17 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
 	    best_position = j;
 	  }
 	}
-      if (col_best_row != INT_MAX) {
+
+      if (best_position != -1) {
 	int col_best_marko = col_best_row * col_degree;
 	if(col_best_marko < best_marko)
 	  best_marko = col_best_marko;
+	position[col] = best_position;
+	chosen[col] = yes;
       }
-      Luby->position[col] = best_position;
     }
   
   return best_marko;
-}
-
-void
-TP_Luby_get_candidates(TP_schur_matrix matrix, TP_Luby Luby,
-		       int allowed_marko, int *cols,
-		       int first_col, int last_col)
-{
-  int i, j;
-
-  for (i = first_col; i < last_col; i++)
-    {
-      CSC_struct *CSC = &matrix->CSC[cols[i]];
-      double *vals    = CSC->val;
-      int *rows       = CSC->row;
-      int col_degree  = CSC->nb_elem - 1 ;
-      int     nb_elem = CSC->nb_numerical_eligible;
-      /* 
-	 TODO: this loop is not needed, the potential pivot could be 
-	 picked now randomly or chose the entry with best markowitz cost,
-	 or a combination of the strategies.
-      */
-
-      for (j = 0; j < nb_elem;) {
-	int row = rows[j];
-	if (!matrix->CSR[row].nb_elem) {
-	  printf("KO in get candidates with the row\n");
-	  continue;
-	}
-	int current_marko = col_degree  * (matrix->CSR[row].nb_elem - 1);
-	if ( current_marko > allowed_marko) {
-	  double tmp = vals[j];
-	  rows[j] = rows[--nb_elem];
-	  rows[nb_elem] = row;
-	  vals[j] = vals[  nb_elem];
-	  vals[nb_elem] = tmp;
-	} else {
-	  j++;
-	}
-      }
-
-      CSC->nb_eligible = nb_elem;
-    }
 }
 
 int
@@ -141,9 +90,9 @@ TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
 		     int *cols, int first_col, int last_col)
 {
   int i, nb_candidates = 0;
-  double *col_max_val = Luby->col_max_val;
-  int    *invr_col_perm  = Luby->invr_col_perm;
-  int    *positions = Luby->position;
+  int *chosen = Luby->chosen, *positions = Luby->position;
+  double *scores = Luby->score;
+  int yes = Luby->chosen_base + 1, potential_pivot = Luby->chosen_base + 2;
   int my_seed = *seed;
 
   for ( i = first_col; i < last_col; i++)
@@ -151,18 +100,16 @@ TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
       int col = cols[i];
       CSC_struct *CSC = &matrix->CSC[col];
 
-      if (positions[col] < 0)
+      if (chosen[col] != yes)
       	continue;
-      /* int row  = CSC->row[abs(TP_rand_int(&my_seed, nb_elem))]; */
       int row  = CSC->row[positions[col]];
-      if (global_invr_row_perms[row] != TP_UNUSED_PIVOT) 
-	continue;
-      if ( (matrix->CSR[row].nb_elem - 1) * (CSC->nb_elem - 1) > allowed_marko)
+      if (global_invr_row_perms[row] != TP_UNUSED_PIVOT ||
+	  (matrix->CSR[row].nb_elem - 1) * (CSC->nb_elem - 1) > allowed_marko)
       	continue;
       double score =  TP_rand_double(&my_seed);
 
-      col_max_val[col] = score;
-      invr_col_perm[col] = 1;
+      scores[col] = score;
+      chosen[col] = potential_pivot;
       
       col_perm[nb_candidates  ] = col;
       row_perm[nb_candidates++] = row;
@@ -177,9 +124,9 @@ TP_Luby_first_pass(TP_Luby Luby, TP_schur_matrix matrix,
 		   int *col_perm, int *row_perm, int nb_candidates)
 {
   int i, j;
-  /* TODO: rename col_max_val to score */
-  double *col_max_val     = Luby->col_max_val;
-  int    *invr_col_perm   = Luby->invr_col_perm;
+  int *chosen = Luby->chosen;
+  double *scores = Luby->score;
+  int potential_pivot = Luby->chosen_base + 2, discarded_pivot = Luby->chosen_base + 3;
 
   for( i = 0; i < nb_candidates; i++)
     {
@@ -188,20 +135,20 @@ TP_Luby_first_pass(TP_Luby Luby, TP_schur_matrix matrix,
       CSR_struct *CSR = &matrix->CSR[piv_row];
       int nb_elem = CSR->nb_elem;
       int *cols = CSR->col;
-      double piv_score = col_max_val[piv_col];
+      double piv_score = scores[piv_col];
       
       for ( j = 0; j < nb_elem; j++) 
 	{
 	  int col = cols[j];
-	  if ( invr_col_perm[col] == 1 || invr_col_perm[col] == 2  ) {
-	    if ( piv_score > col_max_val[col] ) { 
-	      invr_col_perm[col] = 2;
-	    } else if ( piv_score < col_max_val[col] )  {
-	      invr_col_perm[piv_col] = 2;
+	  if ( chosen[col] == potential_pivot || chosen[col] == discarded_pivot  ) {
+	    if ( piv_score > scores[col] ) { 
+	      chosen[col] = discarded_pivot;
+	    } else if ( piv_score < scores[col] )  {
+	      chosen[piv_col] = discarded_pivot;
 	    } else if  (piv_col > col)  {
-	      invr_col_perm[piv_col] = 2;
+	      chosen[piv_col] = discarded_pivot;
 	    } else if  (piv_col < col)  {
-	      invr_col_perm[col] = 2;
+	      chosen[col] = discarded_pivot;
 	    }
 	  }
 	}
@@ -213,14 +160,14 @@ TP_Luby_second_pass(TP_schur_matrix matrix, TP_Luby Luby,
 		    int *col_perm, int *row_perm, int nb_candidates)
 {
   int i;
-  int *invr_col_perm   = Luby->invr_col_perm;
+  int *chosen = Luby->chosen;
+  int discarded_pivot = Luby->chosen_base + 3;
 
   for( i = 0; i < nb_candidates; )
     {
       int col = col_perm[i];
 
-      if (invr_col_perm[col] == 2 )  {
-	invr_col_perm[col] = -100;
+      if (chosen[col] == discarded_pivot )  {
 	col_perm[i] = col_perm[--nb_candidates];
 	row_perm[i] = row_perm[  nb_candidates];
 	col_perm[nb_candidates] = TP_UNUSED_PIVOT;
@@ -239,6 +186,7 @@ TP_Luby_check_pivots(TP_Luby Luby, TP_schur_matrix matrix,
   int i, j, n = Luby->n;
   int *col_counts = calloc((size_t) n, sizeof(*col_counts));
   int *row_counts = calloc((size_t) n, sizeof(*row_counts));
+  char mess[2048];
 
   for ( i = 0; i < nb_pivots; i++)
     {
@@ -257,12 +205,14 @@ TP_Luby_check_pivots(TP_Luby Luby, TP_schur_matrix matrix,
   for ( i = 0; i < nb_pivots; i++)
     {
       if (col_counts[col_perms[i]] != 1) {
-	printf("%d is suppose to be a pivot but row_count = %d\n",  col_perms[i], col_counts[col_perms[i]]);
-	GDB_BREAK;
+	snprintf(mess, 2048, "%d is suppose to be a pivot but row_count = %d\n",
+		 col_perms[i], col_counts[col_perms[i]]);
+	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
       if (row_counts[row_perms[i]] != 1)  {
-	printf("%d is suppose to be a pivot but col_count = %d\n",  row_perms[i], row_counts[row_perms[i]]);
-	GDB_BREAK;
+	snprintf(mess, 2048, "%d is suppose to be a pivot but col_count = %d\n",
+		 row_perms[i], row_counts[row_perms[i]]);
+	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
     }
 

@@ -982,9 +982,6 @@ TP_solver_find_pivot_set(TP_solver self)
       distributions[i] = (nb_cols / nb_threads) * i;
     distributions[nb_threads] = nb_cols;
 
-    bzero(self->Luby->col_max_val, (size_t) self->Luby->n * sizeof(*self->Luby->col_max_val));
-    int_array_memset(self->Luby->invr_col_perm, -1, self->Luby->n);
-    int_array_memset(self->Luby->position, -1, self->Luby->n);
 
 #pragma omp parallel num_threads(nb_threads) shared(nb_cols, best_marko)
     {

@@ -8,16 +8,12 @@ typedef struct _TP_Luby_ *TP_Luby;
 
 struct _TP_Luby_ {
   
-  double *col_max_val;
-  int    *col_max_row;
-  double *row_max_val;
-  int    *row_max_col;
+  double *score;
+  int    *chosen;
 
-  int *invr_col_perm;
-  int *invr_row_perm;
   int *position;
   
-  int m;
+  int chosen_base;
   int n;
 };
  
