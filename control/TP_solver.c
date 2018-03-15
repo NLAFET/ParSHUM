@@ -13,6 +13,7 @@
 #include "TP_dense.h" 
 #include "TP_schur_matrix.h" 
 #include "TP_pivot_list.h" 
+#include "TP_paje.h"
 #include "TP_auxiliary.h"
 #include "TP_solver.h" 
 
@@ -24,7 +25,7 @@ const char *usageStrign[] = {
   "            [--check_TP_with_plasma_perm] [--check_dense_with_TP_perm] [--print_each_step] [--check_GC]",
   "            [--group_run value_tol|marko_tol|schur_density|nb_candidates|min_pivots|nb_threads init inc nb_steps]",
   "            [--counters_size #double_counters] [--check_counters] [--check_schur_doubles] [--max_dense_schur size]",
-  "            [--luby_algorithm]", 
+  "            [--luby_algorithm] [--trace]", 
   NULL,
 };
 
@@ -333,8 +334,10 @@ TP_solver_parse_args(TP_solver self, int argc, char **argv)
 	TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "max_dense_schur should be at least 1");
       self->exe_parms->max_dense_schur = tmp;
       continue;
-    }  if (!strcmp(argv[i], "--luby_algorithm")) {
+    } else if (!strcmp(argv[i], "--luby_algorithm")) {
       self->exe_parms->luby_algo = 1;
+    } else if (!strcmp(argv[i], "--trace")) {
+      self->exe_parms->trace = 1;
     } else if (!strcmp(argv[i], "--help")) {
       int j = 0;
       while( usageStrign[j] !=  NULL)
@@ -640,7 +643,7 @@ TP_solver_alloc_internal(TP_solver self)
 
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
       TP_matrix_print(self->A, "A on input");
-  TP_schur_matrix_allocate(self->S, self->A->n, self->A->m, self->A->nnz, self->debug,
+  TP_schur_matrix_allocate(self->S, self->A->n, self->A->m, self->A->nnz, self->debug, self->verbose,
 			   self->exe_parms->nb_threads, self->exe_parms->extra_space, self->exe_parms->extra_space_inbetween);
   TP_schur_matrix_copy(self->A, self->S, self->exe_parms->value_tol);
 
@@ -706,7 +709,7 @@ TP_solver_alloc_internal(TP_solver self)
   
   self->logical_cols = calloc((size_t) self->A->n, sizeof(*self->logical_cols));
   self->logical_rows = calloc((size_t) self->A->n, sizeof(*self->logical_rows));
-
+  
   pthread_mutex_init(&self->counters_lock, NULL); 
 }
 
@@ -717,8 +720,11 @@ TP_solver_init(TP_solver self)
   self->verbose->m = self->A->m;
   self->verbose->nnz_input = self->verbose->nnz_final = self->A->nnz;
   self->verbose->Luby = self->exe_parms->luby_algo;
-
+  
   self->verbose->parms->outfiles_prefix = get_outfile_prefix(self->exe_parms, TP_parm_none);
+
+  if (self->exe_parms->trace) 
+    self->verbose->paje = TP_paje_create(self->exe_parms->nb_threads);
 
   if (!is_plasma_init) {
     plasma_init(1);
@@ -828,6 +834,7 @@ void
 TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_Luby_pivots)
 {
   TP_schur_matrix S = self->S;
+  TP_verbose verbose = self->verbose;
 
   int n = S->n, nb_cols = S->n - self->done_pivots;
   int done_pivots = self->done_pivots;
@@ -866,8 +873,9 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_Luby_pivots)
     distribution_n[i] = (nb_cols / nb_threads) * i;
   distribution_n[nb_threads] = nb_cols;
 
-#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, base, nb_cols, col_sizes, row_sizes, n)
+#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, base, nb_cols, col_sizes, row_sizes, n, verbose)
   {
+  TP_verbose_trace_start_event(verbose, TP_GETTING_PIVOTS);
   int i, j;
   int me = omp_get_thread_num();
   int start = distribution_perms[me] ;
@@ -981,7 +989,7 @@ TP_solver_get_Luby_pivots(TP_solver self, TP_Luby Luby, int new_Luby_pivots)
     memcpy(&col_perms[all_pivots], my_col_perms, (size_t) col_sizes[me] * sizeof(*col_perms));
     memcpy(&row_perms[all_pivots], my_row_perms, (size_t) row_sizes[me] * sizeof(*row_perms));
   }
-  
+  TP_verbose_trace_stop_event(verbose);
   }
 
   self->found_pivots = all_pivots;
@@ -1004,13 +1012,16 @@ TP_solver_find_pivot_set(TP_solver self)
   TP_pivot_list list;
   TP_exe_parms exe_parms = self->exe_parms;
   TP_verbose_per_step step = TP_verbose_get_step(self->verbose);
+  TP_verbose verbose = self->verbose;
   int nb_threads = self->exe_parms->nb_threads;
     
+  TP_verbose_trace_start_event(verbose, TP_GET_SINGELTONS);
   TP_schur_get_singletons(self->S, self->done_pivots, self->previous_step_pivots,
   			  &self->nb_col_singletons, &self->nb_row_singletons,
 			  self->cols, self->rows, self->distributions,
   			  self->done_pivots, self->col_perm, self->row_perm,
   			  self->invr_col_perm, self->invr_row_perm);
+  TP_verbose_trace_stop_event(verbose);
 
   if (exe_parms->luby_algo) {
     int new_pivots = 0, best_marko, nb_cols = self->S->n - self->done_pivots;
@@ -1025,6 +1036,7 @@ TP_solver_find_pivot_set(TP_solver self)
 
 #pragma omp parallel num_threads(nb_threads) shared(nb_cols, best_marko)
     {
+    TP_verbose_trace_start_event(verbose, TP_GET_ELIGEBLE);
     int me = omp_get_thread_num();
     int *my_col_perms = (int *) self->workspace[me];
     int *my_row_perms = &my_col_perms[nb_cols];
@@ -1034,19 +1046,24 @@ TP_solver_find_pivot_set(TP_solver self)
     TP_verbose_start_timing(&step->timing_extracting_candidates);
     
     best_markos[me] = TP_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, self->cols, distributions[me], distributions[me + 1], 0);
+    TP_verbose_trace_stop_event(verbose);
 #pragma omp barrier    
 #pragma omp single 
     {
+    TP_verbose_trace_start_event(verbose, TP_AUXILIARY);
     best_marko = *best_markos;
     for(i = 1; i < nb_threads; i++)
       best_marko = best_marko > best_markos[i] ? best_markos[i] : best_marko;
     best_marko = !best_marko ? 1 : best_marko;
     best_marko *= exe_parms->marko_tol;
+    TP_verbose_trace_stop_event(verbose);
     }
 #pragma omp barrier    
-
+    TP_verbose_trace_start_event(verbose, TP_ASSIGN_SCORE);
     candidates[me] = TP_Luby_assign_score(self->Luby, self->S, self->invr_row_perm, best_marko, &self->seeds[me], my_col_perms, my_row_perms, self->cols, distributions[me], distributions[me + 1]);
+    TP_verbose_trace_stop_event(verbose);
 #pragma omp barrier
+    TP_verbose_trace_start_event(verbose, TP_AUXILIARY);
 #pragma omp single
     {
       for( i = 1; i < nb_threads; i++)
@@ -1059,6 +1076,7 @@ TP_solver_find_pivot_set(TP_solver self)
       memcpy(&global_col_perms[candidates[me - 1]],  my_col_perms, (size_t) (candidates[me] - candidates[me-1]) * sizeof(*self->col_perm));
       memcpy(&global_row_perms[candidates[me - 1]], my_row_perms, (size_t) (candidates[me] - candidates[me-1]) * sizeof(*self->row_perm));
     }
+    TP_verbose_trace_stop_event(verbose);
     }
     
     TP_verbose_stop_timing(&step->timing_extracting_candidates);
@@ -1071,6 +1089,7 @@ TP_solver_find_pivot_set(TP_solver self)
     
 #pragma omp parallel num_threads(nb_threads) shared(nb_cols)
     {
+    TP_verbose_trace_start_event(verbose, TP_FIRST_PASS);
     int me = omp_get_thread_num();
     int my_size = distributions[me + 1] - distributions[me];
     int *tmp = (int *) self->workspace[0];
@@ -1080,10 +1099,14 @@ TP_solver_find_pivot_set(TP_solver self)
     int *global_row_perms = &self->row_perm[self->done_pivots + self->nb_col_singletons + self->nb_row_singletons];
 
     TP_Luby_first_pass(self->Luby, self->S, my_col_perms, my_row_perms, my_size);
+    TP_verbose_trace_stop_event(verbose);
 
 #pragma omp barrier
+    TP_verbose_trace_start_event(verbose, TP_DISCARDING_PIVOTS);
     candidates[me] = TP_Luby_second_pass(self->S, self->Luby, my_col_perms, my_row_perms, my_size);
+    TP_verbose_trace_stop_event(verbose);
 #pragma omp barrier
+    TP_verbose_trace_start_event(verbose, TP_AUXILIARY);
 #pragma omp single
     {
       self->Luby->chosen_base += 3;
@@ -1099,6 +1122,7 @@ TP_solver_find_pivot_set(TP_solver self)
       memcpy(global_col_perms, my_col_perms, (size_t) candidates[me] * sizeof(*my_col_perms));
       memcpy(global_row_perms, my_row_perms, (size_t) candidates[me] * sizeof(*my_row_perms));
     }
+    TP_verbose_trace_stop_event(verbose);
     }
     new_pivots = candidates[nb_threads-1];
     
@@ -1288,6 +1312,7 @@ TP_solver_factorize(TP_solver self)
     return;
   
   TP_verbose_start_timing(&verbose->timing_convert_schur);
+  TP_verbose_trace_start_event(verbose, TP_CONVERT_MATRIX);
   if ( self->debug & TP_CHECK_DENSE_W_TP_PERM )  {
     self->A_debug = TP_dense_2D_permute(TP_dense_2D_convert_sparse(self->A), 
 					self->row_perm, self->col_perm);
@@ -1300,9 +1325,11 @@ TP_solver_factorize(TP_solver self)
     if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL)) 
       TP_dense_matrix_print(self->S_dense, "dense schur after conversion");
   }
+  TP_verbose_trace_stop_event(verbose);
   TP_verbose_stop_timing(&verbose->timing_convert_schur);
 
   TP_verbose_start_timing(&verbose->timing_facto_dense);
+  TP_verbose_trace_start_event(verbose, TP_DENSE_FACTORIZATION);
   if (self->debug & TP_CHECK_DENSE_W_TP_PERM)  {
     TP_dense_2D_facto(self->A_debug);
   } else {
@@ -1325,6 +1352,7 @@ TP_solver_factorize(TP_solver self)
     verbose->nnz_S_dense = self->S_dense->n * self->S_dense->m;
   }
 
+  TP_verbose_trace_stop_event(verbose);
   TP_verbose_stop_timing(&verbose->timing_facto_dense);
   TP_verbose_stop_timing(&verbose->timing_facto);
 }
@@ -1446,6 +1474,7 @@ TP_solver_finalize(TP_solver self)
     plasma_finalize();
     is_plasma_init = 0;
   }
+  
   TP_verbose_print(self->verbose);
   TP_verbose_draw_graph(self->verbose);
 }

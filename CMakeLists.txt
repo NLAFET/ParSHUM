@@ -58,6 +58,8 @@ target_compile_options(Tournament_Pivoting PUBLIC ${PLASMA_CFLAGS_OTHER})
 # Test driver: tp_test
 add_executable(tp_test ${PROJECT_SOURCE_DIR}/test/test.c)
 add_executable(rewrite ${PROJECT_SOURCE_DIR}/test/rewrite.c)
+add_executable(test_paje ${PROJECT_SOURCE_DIR}/test/test_paje.c)
 
 target_link_libraries(tp_test Tournament_Pivoting)
 target_link_libraries(rewrite Tournament_Pivoting)
+target_link_libraries(test_paje Tournament_Pivoting)

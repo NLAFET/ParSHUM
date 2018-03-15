@@ -18,7 +18,7 @@ TP_schur_matrix_create()
 }
 
 void
-TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug, 
+TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug, TP_verbose verbose, 
 			 int nb_threads, double extra_space, double extra_space_inbetween)
 {
   int i;
@@ -26,6 +26,7 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
   self->nb_threads = nb_threads;
   self->n = n;
   self->m = m;
+  self->verbose = verbose;
 
   self->CSC = calloc( (size_t) n, sizeof(*self->CSC));
   self->CSR = calloc( (size_t) m, sizeof(*self->CSR));
@@ -50,9 +51,6 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
   self->col_locks = malloc((size_t) m * sizeof(*self->col_locks));
   for( i = 0; i < m; i++)
     omp_init_lock(&self->col_locks[i]);
-  
-  if ( self->debug & (TP_DEBUG_GOSSIP_GIRL | TP_DEBUG_GARBAGE_COLLECTOR))
-    TP_print_GB(self, "GB: after allocating");
 }
 
 void
@@ -383,6 +381,8 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 			  int *row_perm, int *col_perm, int nb_pivots, int *invr_row_perm,
 			  int nb_row_singeltons, int nb_col_singeltons, void **workspace)
 {
+  TP_verbose verbose = self->verbose;
+  TP_verbose_trace_start_event(verbose, TP_AUXILIARY);
   int i, pivot = 0, nb_threads = self->nb_threads;
   int n = self->n;
 
@@ -405,9 +405,11 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
     L->nnz += nb_elem;
   }
   D->n += nb_pivots;
+  TP_verbose_trace_stop_event(verbose);
 
-#pragma omp parallel num_threads(nb_threads) shared(pivot,nb_pivots,L_input_size,D_input_size,n,nb_row_singeltons,nb_col_singeltons)
+#pragma omp parallel num_threads(nb_threads) shared(pivot,nb_pivots,L_input_size,D_input_size,n,nb_row_singeltons,nb_col_singeltons,verbose)
   {
+    TP_verbose_trace_start_event(verbose, TP_UPDATE_L);
     int me =  omp_get_thread_num();
     int n = self->n;
     long S_nnz = 0;
@@ -492,6 +494,7 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
     
 #pragma omp atomic
     self->nnz   -= S_nnz;
+    TP_verbose_trace_stop_event(verbose);
   }
 }
 
@@ -664,10 +667,12 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 			 int *invr_row_perm, int nb_pivots, int *row_perms,
 			 void **workspace, double value_tol)
 {
+  TP_verbose verbose = S->verbose;
   int pivot = 0, nb_threads = S->nb_threads;
 
-#pragma omp parallel num_threads(nb_threads) 
+#pragma omp parallel num_threads(nb_threads) shared(pivot, verbose)
   {
+  TP_verbose_trace_start_event(verbose, TP_UPDATE_S_COLS);
   int me =  omp_get_thread_num();
   int n = S->n;
   int  i, k, l;
@@ -777,6 +782,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
   S->nnz += S_new_nnz;
 #pragma omp atomic 
   U->nnz += U_new_nnz;
+  TP_verbose_trace_stop_event(verbose);
   } // omp
 }
 
@@ -788,10 +794,11 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct,
 			      int nb_pivots, int *row_perms, int done_pivots)
 {
   int pivot = 0, nb_threads = S->nb_threads;
-  /* int nb_steps = (L_new_n + nb_threads - 1) / nb_threads; */
+  TP_verbose verbose = S->verbose;
 
-#pragma omp parallel num_threads(nb_threads) shared(pivot)
+#pragma omp parallel num_threads(nb_threads) shared(pivot,verbose)
   {
+  TP_verbose_trace_start_event(verbose, TP_UPDATE_S_COLS);
   int me = omp_get_thread_num();
   int i, k, l;
   int *schur_col_struct = S->data_struct[me];
@@ -868,6 +875,7 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct,
       }
     } // for
   S->base[me] = base;
+  TP_verbose_trace_stop_event(verbose);
   } // omp
   
   for( int i = done_pivots; i < done_pivots + nb_pivots; i++)  {

@@ -400,7 +400,7 @@ create_pivots_data(char *filename, TP_verbose verbose)
   fclose(file);
 }
 
-
+ 
 void
 TP_verbose_create_dirs_V0(char *dir) 
 {
@@ -419,6 +419,11 @@ TP_verbose_create_dirs_V0(char *dir)
   *new_dir = '\0';
   strcat(new_dir, dir);
   strcat(new_dir, "/fig");
+  mkdir(new_dir, 0755);
+
+  *new_dir = '\0';
+  strcat(new_dir, dir);
+  strcat(new_dir, "/trace");
   mkdir(new_dir, 0755);
 
   free(new_dir);
@@ -453,10 +458,26 @@ TP_verbose_draw_graph_V0(TP_verbose verbose)
   create_pivots_data(data_file, verbose);
 
   TP_verbose_print_raw(verbose);
+
+  if (verbose->exe_parms->trace) 
+    TP_paje_create_file(verbose->paje, output_dir, parms->outfiles_prefix);
 }
 
+void
+TP_verbose_trace_start_event_V0(TP_verbose self, int id)
+{
+  if (self->exe_parms->trace)
+    TP_paje_start_event(self->paje, id);
+}
 
-void 
+void
+TP_verbose_trace_stop_event_V0(TP_verbose self)
+{
+  if (self->exe_parms->trace)
+    TP_paje_stop_event(self->paje);
+}
+
+void
 TP_verbose_destroy_V0(TP_verbose self)
 {
   TP_verbose_per_step step = self->stats_first;
@@ -474,6 +495,8 @@ TP_verbose_destroy_V0(TP_verbose self)
   if (parms->user_out_file)
     fclose(parms->out_file);
   free(parms->outfiles_prefix);
+  if (self->exe_parms->trace)
+    TP_paje_destroy(self->paje);
 
   free(parms);
   free(self);

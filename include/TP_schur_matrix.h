@@ -7,6 +7,7 @@
 #include "TP_U_matrix.h"
 #include "TP_L_matrix.h"
 #include "TP_dense.h"
+#include "TP_verbose.h"
 #include "TP_internal_mem.h"
 
 typedef struct _TP_schur_matrix *TP_schur_matrix;
@@ -19,6 +20,7 @@ struct _TP_schur_matrix {
   omp_lock_t *col_locks;
 
   TP_internal_mem internal_mem;
+  TP_verbose verbose;
 
   int **data_struct;
   int *base;
@@ -37,7 +39,7 @@ struct _TP_schur_matrix {
 
 TP_schur_matrix TP_schur_matrix_create();
 
-void TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug,
+void TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug, TP_verbose verbose, 
 			      int nb_threads, double extra_space, double extra_space_inbetween);
 
 void TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self, double value_tol);

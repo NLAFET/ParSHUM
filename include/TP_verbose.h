@@ -3,6 +3,7 @@
 
 #include <sys/time.h>
 #include "TP_matrix.h"
+#include "TP_paje.h"
 
 typedef struct _TP_verbose *TP_verbose;
 typedef struct _TP_verbose_per_step *TP_verbose_per_step;
@@ -36,6 +37,7 @@ struct _TP_exe_parms {
   int nb_previous_pivots;
   int max_dense_schur;
   int luby_algo;
+  int trace;
 };
 
 struct _TP_verbose_per_step {
@@ -111,6 +113,8 @@ struct _TP_verbose {
   TP_verbose_per_step stats_first;
   TP_verbose_per_step stats_last;
 
+  TP_paje paje;
+
   TP_verbose_parms parms;
   TP_exe_parms exe_parms;
 };
@@ -125,6 +129,8 @@ void                TP_verbose_destroy_V0(TP_verbose self);
 void                TP_verbose_print_parms_raw(TP_exe_parms exe_parms, TP_parm_type type, FILE *file);
 void                TP_verbose_print_group_run(TP_verbose verbose, TP_parm_type type, void *val,
 					       int current_run, FILE *file);
+void                TP_verbose_trace_start_event_V0(TP_verbose self, int id);
+void                TP_verbose_trace_stop_event_V0(TP_verbose self);
 
 static inline void
 TP_verbose_timing_start_V0(double *timing)
@@ -157,6 +163,8 @@ TP_verbose_timing_stop_V0(double *timing)
 #define TP_verbose_update_dense_pivots(V,n) V->dense_pivots = n
 #define TP_verbose_create_dirs(S)           TP_verbose_create_dirs_V0(S)
 #define TP_verbose_draw_graph(V)            TP_verbose_draw_graph_V0(V)
+#define TP_verbose_trace_start_event(V,id)  TP_verbose_trace_start_event_V0(V,id)
+#define TP_verbose_trace_stop_event(V)      TP_verbose_trace_stop_event_V0(V)
 /* #elif TP_VERBOSITY == 1  */
 
 #endif
@@ -174,6 +182,8 @@ TP_verbose_timing_stop_V0(double *timing)
 #define TP_verbose_update_dense_pivots(V,n) (void) 0
 #define TP_verbose_create_dirs(S)           (void) 0
 #define TP_verbose_draw_graph(S)            (void) 0
+#define TP_verbose_trace_start_event(V,id)  (void) 0
+#define TP_verbose_trace_stop_event(V)      (void) 0
 #endif 
 
 #endif // _TP_VERBOSE_H
