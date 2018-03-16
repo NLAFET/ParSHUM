@@ -495,7 +495,7 @@ TP_verbose_destroy_V0(TP_verbose self)
   if (parms->user_out_file)
     fclose(parms->out_file);
   free(parms->outfiles_prefix);
-  if (self->exe_parms->trace)
+  if (self->exe_parms->trace && self->paje)
     TP_paje_destroy(self->paje);
 
   free(parms);
