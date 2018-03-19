@@ -1034,7 +1034,7 @@ TP_solver_find_pivot_set(TP_solver self)
       distributions[i] = (nb_cols / nb_threads) * i;
     distributions[nb_threads] = nb_cols;
 
-#pragma omp parallel num_threads(nb_threads) shared(nb_cols, best_marko)
+#pragma omp parallel num_threads(nb_threads) shared(nb_cols, best_marko, distributions)
     {
     TP_verbose_trace_start_event(verbose, TP_GET_ELIGEBLE);
     int me = omp_get_thread_num();
@@ -1045,7 +1045,7 @@ TP_solver_find_pivot_set(TP_solver self)
 
     TP_verbose_start_timing(&step->timing_extracting_candidates);
     
-    best_markos[me] = TP_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, self->cols, distributions[me], distributions[me + 1], 0);
+    best_markos[me] = TP_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, self->invr_row_perm, self->cols, distributions[me], distributions[me + 1], 0);
     TP_verbose_trace_stop_event(verbose);
 #pragma omp barrier    
 #pragma omp single 
@@ -1060,7 +1060,7 @@ TP_solver_find_pivot_set(TP_solver self)
     }
 #pragma omp barrier    
     TP_verbose_trace_start_event(verbose, TP_ASSIGN_SCORE);
-    candidates[me] = TP_Luby_assign_score(self->Luby, self->S, self->invr_row_perm, best_marko, &self->seeds[me], my_col_perms, my_row_perms, self->cols, distributions[me], distributions[me + 1]);
+    candidates[me] = TP_Luby_assign_score(self->Luby, self->S, best_marko, &self->seeds[me], my_col_perms, my_row_perms, self->cols, distributions[me], distributions[me + 1]);
     TP_verbose_trace_stop_event(verbose);
 #pragma omp barrier
     TP_verbose_trace_start_event(verbose, TP_AUXILIARY);

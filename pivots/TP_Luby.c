@@ -37,7 +37,7 @@ TP_Luby_destroy(TP_Luby self)
 
 int
 TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
-		     double value_tol, int *global_invr_col_perms,
+		     double value_tol, int *global_invr_col_perms, int *global_invr_row_perms,
 		     int *cols, int first_col, int last_col, 
 		     int max_col_length)
 {
@@ -64,6 +64,10 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
       for ( j = 0; j < col_nb_elem; j++)
 	{
 	  int row = rows[j];
+	  if (global_invr_row_perms[row] != TP_UNUSED_PIVOT ) 
+	    continue;
+	  if ( matrix->CSR[row].nb_elem <= 0) 
+	    printf("KOKO with %d on step %d \n", matrix->CSR[row].nb_elem, Luby->chosen_base / 3);
 	  int row_degree = matrix->CSR[row].nb_elem - 1;
 	  if ( col_best_row > row_degree)  {
 	    col_best_row = row_degree;
@@ -85,8 +89,8 @@ TP_Luby_get_eligible(TP_schur_matrix matrix, TP_Luby Luby,
 
 int
 TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
-		     int *global_invr_row_perms, int allowed_marko,
-		     int *seed, int *col_perm, int *row_perm, 
+		     int allowed_marko, int *seed,
+		     int *col_perm, int *row_perm, 
 		     int *cols, int first_col, int last_col)
 {
   int i, nb_candidates = 0;
@@ -103,8 +107,7 @@ TP_Luby_assign_score(TP_Luby Luby, TP_schur_matrix matrix,
       if (chosen[col] != yes)
       	continue;
       int row  = CSC->row[positions[col]];
-      if (global_invr_row_perms[row] != TP_UNUSED_PIVOT ||
-	  (matrix->CSR[row].nb_elem - 1) * (CSC->nb_elem - 1) > allowed_marko)
+      if  ( (matrix->CSR[row].nb_elem - 1) * (CSC->nb_elem - 1) > allowed_marko)
       	continue;
       double score =  TP_rand_double(&my_seed);
 
