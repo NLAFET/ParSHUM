@@ -52,7 +52,7 @@ TP_solver_create()
   self->exe_parms->nb_previous_pivots      = 5;
   self->exe_parms->min_pivot_per_steps     = 20;
   self->exe_parms->density_tolerance       = 0.2;
-  self->exe_parms->max_dense_schur         = 20000;
+  self->exe_parms->max_dense_schur         = 10000;
   
   self->verbose = TP_verbose_create(self->exe_parms);
   return self;

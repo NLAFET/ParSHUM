@@ -49,6 +49,7 @@ TP_read_mtl_file(TP_matrix self, const char*filename)
   FILE *file;
   int *_rows, _n, last_col;
   long _nnz, i, *_col_ptr;
+  char mess[2048];
   double *_vals;
 
   file = fopen(filename, "r");
@@ -66,9 +67,10 @@ TP_read_mtl_file(TP_matrix self, const char*filename)
   for( i = 0; i < _nnz; i++)
     {
       int tmp_col;
-      if (fscanf(file, "%d %d %lf", &tmp_col, &_rows[i], &_vals[i]) != 3)
-	TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"error while reading the matrix file");
-
+      if (fscanf(file, "%d %d %lf", &tmp_col, &_rows[i], &_vals[i]) != 3) {
+	snprintf(mess, 2048, "error while reading the matrix file on line %ld ", i);
+	TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, mess);
+      }
       tmp_col--; _rows[i]--;
 
       if(tmp_col == last_col + 1) {
