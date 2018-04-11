@@ -1,3 +1,4 @@
+
 cmake_minimum_required(VERSION 2.8)
 project(Tournament_Pivoting C)
 
@@ -24,7 +25,7 @@ include_directories(include)
 pkg_check_modules(Plasma REQUIRED plasma )
 
 # Verbosity
-set(TP_VERBOSITY 1 CACHE STRING "Controls the verbosity. Default is 0.")
+set(TP_VERBOSITY 1 CACHE STRING "Controls the verbosity. Default is 1.")
 
 if (TP_VERBOSITY GREATER 0)
   add_definitions(-DTP_VERBOSITY=${TP_VERBOSITY})
