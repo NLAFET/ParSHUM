@@ -383,8 +383,7 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 {
   TP_verbose verbose = self->verbose;
   TP_verbose_trace_start_event(verbose, TP_AUXILIARY);
-  int i, pivot = 0, nb_threads = self->nb_threads;
-  int n = self->n;
+  int pivot = 0, nb_threads = self->nb_threads;
 
   int L_input_size = L->n;
   int D_input_size = D->n;
@@ -392,27 +391,29 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
   if ( D->n + nb_pivots > D->allocated ) 
     TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
 
-  for(i = 0; i < nb_pivots; i++)  {
-    int col = col_perm[i];
-    col %= n;
-    int nb_elem = self->CSC[col].nb_elem - 1;
-    long new_size = L->start[L->n] + nb_elem;
+  /* for(i = 0; i < nb_pivots; i++)  { */
+  /*   int col = col_perm[i]; */
+  /*   col %= n; */
+  /*   int nb_elem = self->CSC[col].nb_elem - 1; */
+  /*   long new_size = L->start[L->n] + nb_elem; */
 
-    if ( new_size > L->allocated)
-      TP_L_matrix_realloc(L);
+  /*   if ( new_size > L->allocated) */
+  /*     TP_L_matrix_realloc(L); */
 
-    L->start[++L->n] = new_size;
-    L->nnz += nb_elem;
-  }
+  /*   L->start[++L->n] = new_size; */
+  /*   L->nnz += nb_elem; */
+  /* } */
   D->n += nb_pivots;
+  L->n += nb_pivots;
   TP_verbose_trace_stop_event(verbose);
 
-#pragma omp parallel num_threads(nb_threads) shared(pivot,nb_pivots,L_input_size,D_input_size,n,nb_row_singeltons,nb_col_singeltons,verbose)
+#pragma omp parallel num_threads(nb_threads) shared(pivot,nb_pivots,L_input_size,D_input_size,nb_row_singeltons,nb_col_singeltons,verbose)
   {
     TP_verbose_trace_start_event(verbose, TP_UPDATE_L);
     int me =  omp_get_thread_num();
     int n = self->n;
     long S_nnz = 0;
+    long L_nnz = 0;
     int current_pivot;
     int *U_rows = (int *) workspace[me];
     int *tmp = &U_rows[n];
@@ -422,59 +423,59 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 	current_pivot = __atomic_fetch_add(&pivot, 1, __ATOMIC_SEQ_CST))
       {
 	CSC_struct *CSC;
-	int i, nb_elem, L_current_col, row, col;
+	int i, nb_elem, row, col;
 	int L_indice = L_input_size + current_pivot;
-	int *rows, *L_rows;
+	int *rows;
 	double *vals, *L_vals, pivot_val = NAN;
 	
 	col     = col_perm[current_pivot];
 	row     = row_perm[current_pivot];
-	L_current_col = L->start[L_indice];
-	L_rows        = L->row;
-	L_vals        = L->val;
 
 	if ( col < n)  { 
 	  CSC     = &self->CSC[col];
+	  L->col[L_indice] = *CSC;
 	  nb_elem = CSC->nb_elem;
 	  vals    = CSC->val;
 	  rows    = CSC->row;
-	  
+	  S_nnz += nb_elem;
 
 	  for(i = 0; i < nb_elem; i++)
-	    {
-	      if ( rows[i] != row) {
-		L_rows[L_current_col] = rows[i];
-		L_vals[L_current_col] = vals[i];
-		L_current_col++;
-	      } else {
-		D->val[D_input_size + current_pivot] = pivot_val = vals[i];
-	      }
+	    if ( rows[i] == row) {
+	      D->val[D_input_size + current_pivot] = pivot_val = vals[i];
+	      vals[i] = vals[--L->col[L_indice].nb_elem];
+	      rows[i] = rows[  L->col[L_indice].nb_elem];
+	      nb_elem--;
+	      break;
 	    }
-	  L->end[L_indice] = L_current_col;	
 	} else { 
 	  col_perm[current_pivot] %= n;
 	  col = col_perm[current_pivot];
 	  CSC     = &self->CSC[col];
+	  L->col[L_indice] = *CSC;
 	  nb_elem = CSC->nb_elem;
 	  vals    = CSC->val;
 	  rows    = CSC->row;
+	  S_nnz += nb_elem;
 
 	  U_col *U_col = &U->col[col];
 	  int U_col_new = 0;
-	  for(i = 0; i < nb_elem; i++)
+	  for(i = 0; i < nb_elem; )
 	    {
 	      int tmp_row = rows[i];
 	      if ( tmp_row == row) {
 		D->val[D_input_size + current_pivot] = pivot_val = vals[i];
-	      } else if ( invr_row_perm[tmp_row] == TP_UNUSED_PIVOT ) {
-		L_rows[L_current_col] = tmp_row;
-		L_vals[L_current_col++] = vals[i];
-	      } else {
+		vals[i] = vals[--nb_elem];
+		rows[i] = rows[  nb_elem];
+	      } else if ( invr_row_perm[tmp_row] != TP_UNUSED_PIVOT ) {
 		U_rows[U_col_new] = tmp_row;
 		U_vals[U_col_new++] = vals[i];
+		vals[i] = vals[--nb_elem];
+		rows[i] = rows[  nb_elem];
+	      } else {
+		i++;
 	      }
 	    }
-	  L->end[L_indice] = L_current_col;	
+	  L->col[L_indice].nb_elem = nb_elem;
 
 	  while(U_col->allocated - U_col->nb_elem  < U_col_new)
 	    TP_U_col_realloc(U_col);
@@ -483,17 +484,20 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 	  U_col->nb_elem += U_col_new;
 	}
 
-	for( i = L->start[L_indice]; i < L->end[L_indice]; i++)
+	L_vals = L->col[L_indice].val;
+	L_nnz += nb_elem;
+	for( i = 0; i < nb_elem; i++)
 	  L_vals[i] /= pivot_val;
 	
 	/* TODO: recycle the col's memory */
 	CSC->nb_elem = 0;
 	CSC->nb_free = 0;
-	S_nnz += nb_elem;
       }
     
 #pragma omp atomic
-    self->nnz   -= S_nnz;
+    self->nnz -= S_nnz;
+#pragma omp atomic
+    L->nnz     += L_nnz;
     TP_verbose_trace_stop_event(verbose);
   }
 }
@@ -684,11 +688,6 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
   long S_new_nnz = 0;
   long U_new_nnz = 0;
 
-  long *L_start  = L->start;
-  long *L_end    = L->end;
-  int  *L_rows   = L->row;
-  double *L_vals = L->val;
-
   for(i = __atomic_fetch_add(&pivot, 1, __ATOMIC_SEQ_CST);
       i < U_new_n;
       i = __atomic_fetch_add(&pivot, 1, __ATOMIC_SEQ_CST))
@@ -735,10 +734,12 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 	
       for ( l = 0; l < U_col_new; l++) {
         int L_col  = invr_row_perm[U_rows[l]];
+	CSC_struct *L_CSC = &L->col[L_col];
         double U_val = U_vals[l];
-	long L_col_start = L_start[L_col];
-	long L_col_end   = L_end[L_col];
-	int L_nb_elem = (int) L_col_end - L_col_start; 
+
+	int    *L_rows = L_CSC->row;
+	double *L_vals = L_CSC->val;
+	int  L_nb_elem = L_CSC->nb_elem; 
 
 	while (CSC->nb_free < L_nb_elem) { 
 	    TP_internal_mem_CSC_realloc(S->internal_mem, CSC);
@@ -746,7 +747,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 	    S_rows         = CSC->row;
 	}
 
-        for ( k = L_col_start; k < L_col_end; k++) {
+        for ( k = 0; k < L_nb_elem; k++) {
           int row = L_rows[k];
           double val = -U_val * L_vals[k];
 	  int indice = schur_row_struct[row] - base;

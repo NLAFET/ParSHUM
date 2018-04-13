@@ -650,7 +650,7 @@ TP_solver_alloc_internal(TP_solver self)
   if (self->debug & (TP_DEBUG_VERBOSE_EACH_STEP | TP_DEBUG_GOSSIP_GIRL))
       TP_schur_matrix_print(self->S, "S on input");
   TP_matrix_allocate(self->D, self->A->n, 0, 0, 1.0, TP_Diag_matrix);
-  self->L = TP_L_matrix_create(self->A->n, ((self->A->nnz - self->A->n) / 2 ) * total_extra_space);
+  self->L = TP_L_matrix_create(self->A->n);
   self->U = TP_U_matrix_create(self->A, total_extra_space);
   
   self->row_perm      = malloc((size_t) needed_pivots * sizeof(*self->invr_row_perm));
