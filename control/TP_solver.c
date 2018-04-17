@@ -1411,15 +1411,15 @@ TP_solver_copmpute_norms(TP_solver self,       TP_vector X,
   if (self->verbose->reason & TP_reason_dense_too_large)
     return;
   double x_norm, A_norm, b_norm;
-  TP_vector tmp = TP_vector_create(X->n);
+  TP_vector r = TP_vector_create(X->n), tmp = TP_vector_create(X->n);
 
   TP_vector_add(X, 1.00, X_computed, -1.00, tmp);
   self->verbose->forward_error = TP_vector_2norm(tmp) / TP_vector_2norm(X);
   
-  /* || Ax - b || */
-  TP_matrix_SpMV(self->A, X_computed, tmp);
-  TP_vector_add(tmp, 1.00, rhs, -1.00, tmp);
-  self->verbose->backward_error = TP_vector_2norm(tmp);
+  /* || r = Ax - b || */
+  TP_matrix_SpMV(self->A, X_computed, r);
+  TP_vector_add(r, 1.00, rhs, -1.00, r);
+  self->verbose->backward_error = TP_vector_2norm(r);
 
   A_norm  = TP_matrix_get_norm(self->A);
   x_norm  = TP_vector_2norm(X_computed);
@@ -1428,6 +1428,7 @@ TP_solver_copmpute_norms(TP_solver self,       TP_vector X,
   self->verbose->backward_error /= A_norm * x_norm + b_norm;
 
   TP_vector_destroy(tmp);
+  TP_vector_destroy(r);
 }
 
 void

@@ -666,6 +666,41 @@ TP_schur_matrix_add_to_entry(TP_schur_matrix self, int row, int col, double val)
 }
 
 void
+TP_CSC_update_col_max_array(CSC_struct *CSC, double *vals, int *rows, 
+			    int nb_elem, double value_tol)
+{
+  int i, nb_eligeble = 0, nb_ineligible = nb_elem; 
+  int *CSC_rows = CSC->row;
+  double *CSC_vals = CSC->val;
+  double max = 0.0;
+  
+  for( i = 0; i < nb_elem; i++) {
+    double tmp = fabs(vals[i]);
+    if (tmp > max) 
+      max = tmp;
+  }
+  
+  CSC->col_max = max;
+  max *= value_tol;
+
+  for(i = 0; i < nb_elem; i++) { 
+    double val = vals[i];
+    if ( fabs(val) >= max )  {
+      CSC_rows[nb_eligeble  ] = rows[i];
+      CSC_vals[nb_eligeble++] = val;
+    } else {
+      CSC_rows[--nb_ineligible] = rows[i];
+      CSC_vals[  nb_ineligible] = val;
+    }
+  }
+
+  CSC->nb_numerical_eligible = nb_eligeble;
+  CSC->nb_elem  = nb_elem;
+  CSC->nb_free -= nb_elem;
+};
+
+
+void
 TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 			 int *U_struct, int U_new_n, int U_new_nnz,
 			 int *invr_row_perm, int nb_pivots, int *row_perms,
@@ -681,10 +716,11 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
   int n = S->n;
   int  i, k, l;
   int *schur_row_struct = S->data_struct[me];
-  int *U_rows = (int *) workspace[me];
-  int *tmp = &U_rows[n];
-  double *U_vals = (double *) tmp;
   int base = S->base[me];
+  int *tmp_rows = (int *) workspace[me];
+  int *tmp = &tmp_rows[n];
+  double *tmp_vals = (double *) tmp;
+
   long S_new_nnz = 0;
   long U_new_nnz = 0;
 
@@ -692,47 +728,42 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
       i < U_new_n;
       i = __atomic_fetch_add(&pivot, 1, __ATOMIC_SEQ_CST))
     {
-      /* TP_U_struct U_col_struct = U_struct[i]; */
       int col = U_struct[i];
-      /* int U_col_new_old = U_col_struct.nb_elem; */
       U_col *U_col = &U->col[col];
-      /* double *U_col_vals  = U_col->val; */
-      /* int    *U_col_rows  = U_col->row; */
-      int U_col_new = 0;
 
       CSC_struct *CSC = &S->CSC[col];
       int S_col_nb_elem      = CSC->nb_elem;
+      int U_nb_elem          = n;
+      int S_nb_elem          = 0;
       int *S_rows            = CSC->row;
+      int *U_rows;
       double *S_vals         = CSC->val;
-      
-      /* constructing schur_row_struct and discovering the vals of U  */
-      for ( k = 0; k < S_col_nb_elem; ) {
+      double *U_vals;
+
+      for ( k = 0; k < S_col_nb_elem; k++) {
 	int S_row = S_rows[k];
 	if (invr_row_perm[S_row] != TP_UNUSED_PIVOT ) {
-	  U_rows[U_col_new  ] = S_row;
-	  U_vals[U_col_new++] = S_vals[k];
-	  S_rows[k] = S_rows[--S_col_nb_elem];
-	  S_vals[k] = S_vals[  S_col_nb_elem];
+	  tmp_rows[--U_nb_elem] = S_row;
+	  tmp_vals[  U_nb_elem] = S_vals[k];
 	} else { 
-	  schur_row_struct[S_row] = base + k++;
+	  tmp_rows[S_nb_elem] = S_row;
+	  tmp_vals[S_nb_elem] = S_vals[k];
+	  schur_row_struct[S_row] = base + S_nb_elem++;
 	}
       }
-      
-      if (S_col_nb_elem + U_col_new != CSC->nb_elem)
-      	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong");
-      /* if ( U_col_new != U_col_new_old)  */
-      /* 	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong 2"); */
-      
-      S_new_nnz -= (long) U_col_new;
-      U_new_nnz += (long) U_col_new;
 
-      /* UPDATE ALL THE POINTERS AND STRUCTURES  */
-      CSC->nb_elem -= U_col_new;
-      CSC->nb_free += U_col_new;
-      /* U_vals = U->col[col].val + U->col[col].nb_elem - U_col_new; */
-      /* U_rows = U->col[col].row + U->col[col].nb_elem - U_col_new; */
+      U_vals = &tmp_vals[U_nb_elem];
+      U_rows = &tmp_rows[U_nb_elem];
+      S_vals = tmp_vals;
+      S_rows = tmp_rows;
+      U_nb_elem = n - U_nb_elem; 
+
+      if (S_col_nb_elem != ( U_nb_elem + S_nb_elem ))
+      	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong");
+      
+      U_new_nnz += (long) U_nb_elem;
 	
-      for ( l = 0; l < U_col_new; l++) {
+      for ( l = 0; l < U_nb_elem; l++) {
         int L_col  = invr_row_perm[U_rows[l]];
 	CSC_struct *L_CSC = &L->col[L_col];
         double U_val = U_vals[l];
@@ -741,12 +772,6 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 	double *L_vals = L_CSC->val;
 	int  L_nb_elem = L_CSC->nb_elem; 
 
-	while (CSC->nb_free < L_nb_elem) { 
-	    TP_internal_mem_CSC_realloc(S->internal_mem, CSC);
-	    S_vals         = CSC->val;
-	    S_rows         = CSC->row;
-	}
-
         for ( k = 0; k < L_nb_elem; k++) {
           int row = L_rows[k];
           double val = -U_val * L_vals[k];
@@ -754,23 +779,29 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
           if ( indice  >= 0 )  {
             S_vals[indice] += val;
           } else {
-	    S_vals[CSC->nb_elem] = val;
-	    S_rows[CSC->nb_elem] = row;
-	    CSC->nb_free--;
-            schur_row_struct[row] = base + CSC->nb_elem++;
-	    S_new_nnz++;
+	    S_vals[S_nb_elem] = val;
+	    S_rows[S_nb_elem] = row;
+            schur_row_struct[row] = base + S_nb_elem++;
           }
         }
       }
 
-      while(U_col->allocated - U_col->nb_elem  < U_col_new)
+      while(U_col->allocated - U_col->nb_elem  < U_nb_elem)
 	TP_U_col_realloc(U_col);
-      memcpy(&U_col->val[U_col->nb_elem], U_vals, U_col_new * sizeof(*U_vals));
-      memcpy(&U_col->row[U_col->nb_elem], U_rows, U_col_new * sizeof(*U_rows));
-      U_col->nb_elem += U_col_new;
+      memcpy(&U_col->val[U_col->nb_elem], U_vals, U_nb_elem * sizeof(*U_vals));
+      memcpy(&U_col->row[U_col->nb_elem], U_rows, U_nb_elem * sizeof(*U_rows));
 
-      TP_CSC_update_col_max(CSC, value_tol);
-      int new = base + CSC->nb_elem;
+      U_col->nb_elem += U_nb_elem;
+      S_new_nnz += (long) S_nb_elem - (long) CSC->nb_elem;
+
+      CSC->nb_free += CSC->nb_elem;
+      CSC->nb_elem = 0;
+      while( CSC->nb_free < S_nb_elem  )
+	TP_internal_mem_CSC_realloc(S->internal_mem, CSC);
+      
+      TP_CSC_update_col_max_array(CSC, S_vals, S_rows, S_nb_elem, value_tol);
+
+      int new = base + S_nb_elem;
       if (new < base ) {
 	base = 1;
 	bzero((void *) schur_row_struct, (size_t) S->n * sizeof(*schur_row_struct));
@@ -786,7 +817,6 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
   TP_verbose_trace_stop_event(verbose);
   } // omp
 }
-
 
 
 void
