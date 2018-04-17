@@ -1196,7 +1196,8 @@ TP_solver_update_matrix(TP_solver self)
   TP_verbose_start_timing(&step->timing_update_U);
   TP_schur_matrix_update_S_rows(S, &self->row_perm[self->found_pivots],
 				self->n_L_structs, self->nnz_L_structs,
-				self->invr_col_perm, nb_pivots, self->row_perm, self->done_pivots);
+				self->invr_col_perm, nb_pivots, self->row_perm,
+				self->done_pivots, self->workspace);
   TP_verbose_stop_timing(&step->timing_update_U);
 
   self->done_pivots = self->found_pivots;

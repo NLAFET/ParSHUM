@@ -739,6 +739,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
       int *U_rows;
       double *S_vals         = CSC->val;
       double *U_vals;
+      long needed_size;
 
       for ( k = 0; k < S_col_nb_elem; k++) {
 	int S_row = S_rows[k];
@@ -796,8 +797,13 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 
       CSC->nb_free += CSC->nb_elem;
       CSC->nb_elem = 0;
-      while( CSC->nb_free < S_nb_elem  )
-	TP_internal_mem_CSC_realloc(S->internal_mem, CSC);
+      needed_size = (long) CSC->nb_free;
+
+      if (needed_size < (long) S_nb_elem)  {
+	while( needed_size < (long) S_nb_elem  )
+	  needed_size *= 2;
+	TP_internal_mem_CSC_alloc(S->internal_mem, CSC, needed_size);
+      }
       
       TP_CSC_update_col_max_array(CSC, S_vals, S_rows, S_nb_elem, value_tol);
 
@@ -820,87 +826,86 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 
 
 void
-TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct,
-			      int L_new_n, int L_new_nnz, int *invr_col_perm,
-			      int nb_pivots, int *row_perms, int done_pivots)
+TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct, int L_new_n,
+			      int L_new_nnz, int *invr_col_perm, int nb_pivots,
+			      int *row_perms, int done_pivots, void **workspace)
 {
   int pivot = 0, nb_threads = S->nb_threads;
   TP_verbose verbose = S->verbose;
 
 #pragma omp parallel num_threads(nb_threads) shared(pivot,verbose)
   {
-  TP_verbose_trace_start_event(verbose, TP_UPDATE_S_COLS);
+  TP_verbose_trace_start_event(verbose, TP_UPDATE_S_ROWS);
   int me = omp_get_thread_num();
   int i, k, l;
-  int *schur_col_struct = S->data_struct[me];
+  int *schur_row_struct = S->data_struct[me];
   int base = S->base[me];
-  int tmp[nb_pivots];
 
   for(i = __atomic_fetch_add(&pivot, 1, __ATOMIC_SEQ_CST);
       i < L_new_n;
       i = __atomic_fetch_add(&pivot, 1, __ATOMIC_SEQ_CST))
     {
-      /* TP_U_struct L_col_struct = L_struct[i]; */
       int row = L_struct[i];
-      /* int L_row_new = L_col_struct.nb_elem; */
 
       CSR_struct *CSR = &S->CSR[row];
-
+      int n = S->n;
+      int *tmp = workspace[me];
       int S_row_nb_elem = CSR->nb_elem;
       int *S_cols       = CSR->col;
-      int found = 0;
+      int *L_cols;
+      int S_nb_elem = 0 , L_nb_elem = n ;
+      long needed_size;
 
       /* constructing schur_row_struct and discovering the vals of U  */
-      for (k = 0; k < S_row_nb_elem; ) {
+      for (k = 0; k < S_row_nb_elem; k++) {
 	int S_col = S_cols[k];
 	if (invr_col_perm[S_col] != TP_UNUSED_PIVOT ) {
-	  tmp[found++] = S_col;
-	  S_cols[k] = S_cols[--S_row_nb_elem];
+	  tmp[--L_nb_elem] = S_col;
 	} else {
-	  k++;
+	  tmp[S_nb_elem] = S_col;
+	  schur_row_struct[S_col] = base + S_nb_elem++;
 	}
       }
+      L_cols = &tmp[L_nb_elem];
+      S_cols = tmp;
+      L_nb_elem = n - L_nb_elem;
       
-      if (found + S_row_nb_elem != CSR->nb_elem)
-      	TP_warning(__FUNCTION__, __FILE__, __LINE__,"Somethign went wrong in rows");
-      
-      for ( k = 0; k < S_row_nb_elem; k++) {
-	int S_col = S_cols[k];
-	schur_col_struct[S_col] = base + k;
-      }
-      
-      CSR->nb_elem -= found;
-      CSR->nb_free += found;
-      
-      for ( l = 0; l < found; l++) {
-        int U_row = row_perms[invr_col_perm[tmp[l]]];
+      for ( l = 0; l < L_nb_elem; l++) {
+        int U_row = row_perms[invr_col_perm[L_cols[l]]];
 	int *U_cols   = S->CSR[U_row].col;
 	int U_nb_elem = S->CSR[U_row].nb_elem;
 	
-	while (CSR->nb_free < U_nb_elem) { 
-	  TP_internal_mem_CSR_realloc(S->internal_mem, CSR);
-	  S_cols = CSR->col;
-	}
-	
         for ( k = 0; k < U_nb_elem; k++) {
           int col = U_cols[k];
-	  int indice = schur_col_struct[col] - base;
+	  int indice = schur_row_struct[col] - base;
 
 	  if (invr_col_perm[col] != TP_UNUSED_PIVOT) {
 	    continue;
 	  }
 
           if ( indice  < 0 )  {
-	    S_cols[CSR->nb_elem] = col;
-	    CSR->nb_free--;
-            schur_col_struct[col] = base + CSR->nb_elem++;
+	    S_cols[S_nb_elem] = col;
+            schur_row_struct[col] = base + S_nb_elem++;
           }
         }
       }
+      CSR->nb_free += CSR->nb_elem;
+      CSR->nb_elem = 0;
+      needed_size = (long) CSR->nb_free;
+      
+      if (needed_size < (long) S_nb_elem)  {
+	while( needed_size < (long) S_nb_elem  )
+	  needed_size *= 2;
+	TP_internal_mem_CSR_alloc(S->internal_mem, CSR, needed_size);
+      }
+      memcpy(CSR->col, S_cols, S_nb_elem * sizeof(*S_cols));
+      CSR->nb_free -= S_nb_elem;
+      CSR->nb_elem += S_nb_elem;
+  
       int new = base + CSR->nb_elem;
       if (new < base ) {
 	base = 1;
-	bzero((void *) schur_col_struct, (size_t) S->n * sizeof(*schur_col_struct));
+	bzero((void *) schur_row_struct, (size_t) S->n * sizeof(*schur_row_struct));
       } else {
 	base = new;
       }
@@ -908,8 +913,10 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct,
   S->base[me] = base;
   TP_verbose_trace_stop_event(verbose);
   } // omp
-  
-  for( int i = done_pivots; i < done_pivots + nb_pivots; i++)  {
+
+  int start = done_pivots, end = done_pivots + nb_pivots;
+#pragma omp parallel for num_threads(nb_threads) shared(start, end)
+  for(int i = start; i < end; i++)  {
     S->CSR[row_perms[i]].nb_free += S->CSR[row_perms[i]].nb_elem;
     S->CSR[row_perms[i]].nb_elem = 0;
   }
