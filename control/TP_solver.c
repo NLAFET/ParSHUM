@@ -1188,8 +1188,8 @@ TP_solver_update_matrix(TP_solver self)
   
   TP_verbose_start_timing(&step->timing_update_S);
   TP_schur_matrix_update_S(S, L, U, &self->col_perm[self->found_pivots],
-			   self->n_U_structs, self->nnz_U_structs, self->invr_row_perm,
-			   nb_pivots, &self->row_perm[self->done_pivots], self->workspace,
+			   self->n_U_structs, self->invr_row_perm, nb_pivots,
+			   &self->row_perm[self->done_pivots], self->workspace,
 			   self->exe_parms->value_tol);
   TP_verbose_stop_timing(&step->timing_update_S);
   

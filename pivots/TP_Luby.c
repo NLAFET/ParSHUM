@@ -19,8 +19,6 @@ TP_Luby_create(TP_schur_matrix matrix)
   self->score    = calloc((size_t) n,  sizeof(*self->score));
   self->chosen   = calloc((size_t) n, sizeof(*self->chosen));
   self->position = calloc((size_t) n, sizeof(*self->position));
-
-  /* srand(brrr); */ 
  
   return self;
 }
@@ -157,13 +155,14 @@ TP_Luby_first_pass(TP_Luby Luby, TP_schur_matrix matrix,
 	}
     }
 }
-
+ 
 int
 TP_Luby_second_pass(TP_schur_matrix matrix, TP_Luby Luby, 
 		    int *col_perm, int *row_perm, int nb_candidates)
 {
   int i;
   int *chosen = Luby->chosen;
+  int *positions = Luby->position;
   int discarded_pivot = Luby->chosen_base + 3;
 
   for( i = 0; i < nb_candidates; )
@@ -176,9 +175,23 @@ TP_Luby_second_pass(TP_schur_matrix matrix, TP_Luby Luby,
 	col_perm[nb_candidates] = TP_UNUSED_PIVOT;
 	row_perm[nb_candidates] = TP_UNUSED_PIVOT;
       } else  {
+	int position1 = positions[col];
+	CSC_struct *CSC = &matrix->CSC[col];
+	double *val = CSC->val;
+	int    *row = CSC->row;
+	int position2 = CSC->nb_elem - 1;
+	int tmp_row;
+	double tmp_val;
+	tmp_row = row[position1];
+	tmp_val = val[position1];
+	row[position1] = row[position2];
+	val[position1] = val[position2];
+	row[position2] = tmp_row;
+	val[position2] = tmp_val;
 	i++;
       }
     }
+
   return nb_candidates;
 }
 
