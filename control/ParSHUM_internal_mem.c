@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "TP_internal_mem.h"
+#include "ParSHUM_internal_mem.h"
 
 typedef struct _free_space  *free_space;
 
@@ -11,7 +11,7 @@ struct _free_space {
   free_space previous;
 };
 
-struct _TP_internal_mem {
+struct _ParSHUM_internal_mem {
   double **val;
   int    **row;
   int    **col;
@@ -27,10 +27,10 @@ struct _TP_internal_mem {
 };
 
 
-TP_internal_mem
-TP_internal_mem_create(long nnz)
+ParSHUM_internal_mem
+ParSHUM_internal_mem_create(long nnz)
 {
-  TP_internal_mem self = calloc(1, sizeof(*self));
+  ParSHUM_internal_mem self = calloc(1, sizeof(*self));
 
   self->init_size   = nnz;
   self->nb_CSC      = 1;
@@ -59,7 +59,7 @@ TP_internal_mem_create(long nnz)
 
 /* TODO: nutex  and concurent execution */
 void
-TP_internal_mem_realloc_CSC(TP_internal_mem self)
+ParSHUM_internal_mem_realloc_CSC(ParSHUM_internal_mem self)
 {
   int i;
   long size = self->init_size;
@@ -80,7 +80,7 @@ TP_internal_mem_realloc_CSC(TP_internal_mem self)
 
 /* TODO: mutex  and concurent execution */
 void
-TP_internal_mem_realloc_CSR(TP_internal_mem self)
+ParSHUM_internal_mem_realloc_CSR(ParSHUM_internal_mem self)
 {
   int i;
   long size = self->init_size;
@@ -98,7 +98,7 @@ TP_internal_mem_realloc_CSR(TP_internal_mem self)
 }
 
 void
-TP_internal_mem_CSC_alloc(TP_internal_mem self, CSC_struct *CSC, long size)
+ParSHUM_internal_mem_CSC_alloc(ParSHUM_internal_mem self, CSC_struct *CSC, long size)
 {
   omp_set_lock(&self->CSC_lock);
   int i, nb = self->nb_CSC; 
@@ -127,7 +127,7 @@ TP_internal_mem_CSC_alloc(TP_internal_mem self, CSC_struct *CSC, long size)
 
   /* if there is no spaace then we reallocate */
   while (1) {
-    TP_internal_mem_realloc_CSC(self);
+    ParSHUM_internal_mem_realloc_CSC(self);
     free_space current_unused = self->unused_CSC[i];
     if (current_unused->nb_elem >=size ) {
       if (CSC->nb_elem)  {
@@ -147,7 +147,7 @@ TP_internal_mem_CSC_alloc(TP_internal_mem self, CSC_struct *CSC, long size)
 }
 
 void
-TP_internal_mem_CSR_alloc(TP_internal_mem self, CSR_struct *CSR, long size)
+ParSHUM_internal_mem_CSR_alloc(ParSHUM_internal_mem self, CSR_struct *CSR, long size)
 {
   omp_set_lock(&self->CSR_lock);
   int i, nb = self->nb_CSR; 
@@ -173,7 +173,7 @@ TP_internal_mem_CSR_alloc(TP_internal_mem self, CSR_struct *CSR, long size)
 
   /* if there is no spaace then we reallocate */
   while (1) {
-    TP_internal_mem_realloc_CSR(self);
+    ParSHUM_internal_mem_realloc_CSR(self);
     free_space current_unused = self->unused_CSR[self->nb_CSR - 1];
     if (current_unused->nb_elem >=size ) {
       if (CSR->nb_elem)  
@@ -189,7 +189,7 @@ TP_internal_mem_CSR_alloc(TP_internal_mem self, CSR_struct *CSR, long size)
 }
 
 void
-TP_internal_mem_destroy(TP_internal_mem self)
+ParSHUM_internal_mem_destroy(ParSHUM_internal_mem self)
 {
   int i, nb_CSC = self->nb_CSC, nb_CSR = self->nb_CSR;
 

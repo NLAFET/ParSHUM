@@ -5,14 +5,14 @@
 #include <limits.h> 
 #include <omp.h>
 
-#include "TP_auxiliary.h"
+#include "ParSHUM_auxiliary.h"
 
-#include "TP_pivot_list.h"
+#include "ParSHUM_pivot_list.h"
 
 
 void
-get_candidates(TP_schur_matrix matrix,
-	       TP_pivot_candidates candidates,
+get_candidates(ParSHUM_schur_matrix matrix,
+	       ParSHUM_pivot_candidates candidates,
 	       double value_tol,
 	       int first_col, int last_col, 
 	       int max_col_length)
@@ -55,43 +55,43 @@ get_candidates(TP_schur_matrix matrix,
 
 
 void
-create_init_set(TP_solver solver, 
-		TP_schur_matrix matrix,
-		TP_pivot_list list,
+create_init_set(ParSHUM_solver solver, 
+		ParSHUM_schur_matrix matrix,
+		ParSHUM_pivot_list list,
 		int *random_col, 
-		TP_pivot_candidates candidates,
+		ParSHUM_pivot_candidates candidates,
 		int max_marko, int start, int end)
 {
   int i;
-  TP_pivot_set set = TP_pivot_set_create(solver, matrix->n, matrix->m);
+  ParSHUM_pivot_set set = ParSHUM_pivot_set_create(solver, matrix->n, matrix->m);
   
   for( i = start; i < end; i++) 
     {
       int col = random_col[i];
 
       if ( candidates->marko[col]  <=  max_marko) {
-	TP_pivot_cell cell = TP_pivot_cell_create(candidates->row[col], col, candidates->marko[col]);
+	ParSHUM_pivot_cell cell = ParSHUM_pivot_cell_create(candidates->row[col], col, candidates->marko[col]);
 	if ( (add_cell_to_sorted_set(set, cell, matrix)) ) 
-	  TP_pivot_cell_destroy(cell);
+	  ParSHUM_pivot_cell_destroy(cell);
       }
     }
 
   if( set->nb_elem) 
 #pragma omp critical
     {
-      TP_pivot_list_insert_set(list, set);
+      ParSHUM_pivot_list_insert_set(list, set);
     }
   else 
-    TP_pivot_set_destroy(set, solver);
+    ParSHUM_pivot_set_destroy(set, solver);
 }
 
-TP_pivot_list
-get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col, 
-                    TP_pivot_candidates candidates, int nb_threads,
+ParSHUM_pivot_list
+get_possible_pivots(ParSHUM_solver solver, ParSHUM_schur_matrix matrix, int *random_col, 
+                    ParSHUM_pivot_candidates candidates, int nb_threads,
 		    double value_tol, double marko_tol,
 		    int nb_candidates_per_block)
 {
-  TP_pivot_list self = TP_pivot_list_create();
+  ParSHUM_pivot_list self = ParSHUM_pivot_list_create();
   int i, candidates_per_set = 0;
   int n = matrix->n, best_marko;
   int max_col_length = (int)  ( matrix->nnz / (matrix->n - solver->done_pivots) );
@@ -153,17 +153,17 @@ get_possible_pivots(TP_solver solver, TP_schur_matrix matrix, int *random_col,
 
 
 
-TP_pivot_list 
-merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix, TP_solver solver)
+ParSHUM_pivot_list 
+merge_pivot_sets(ParSHUM_pivot_list self, ParSHUM_schur_matrix matrix, ParSHUM_solver solver)
 {
-  TP_pivot_list merged_list;
+  ParSHUM_pivot_list merged_list;
 #pragma omp parallel shared(self, merged_list) num_threads(solver->exe_parms->nb_threads)
   {
 #pragma omp single
     {
       while (self->nb_elem > 1)
 	{
-	  merged_list = TP_pivot_list_create();
+	  merged_list = ParSHUM_pivot_list_create();
 	  int i;
 	  int nb_merges = (self->nb_elem + 1) / 2;
 	  
@@ -171,7 +171,7 @@ merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix, TP_solver solver)
 	    {
 #pragma omp task shared(self, merged_list)
               {
-		TP_pivot_set merged_set;
+		ParSHUM_pivot_set merged_set;
 		
 #pragma omp critical
 		{
@@ -181,12 +181,12 @@ merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix, TP_solver solver)
 		
 #pragma omp critical
 		{
-		  TP_pivot_list_insert_set(merged_list, merged_set);
+		  ParSHUM_pivot_list_insert_set(merged_list, merged_set);
 		}
 	      }// task
 	    }// for 
 #pragma omp taskwait
-	  TP_pivot_list_destroy(self, solver);
+	  ParSHUM_pivot_list_destroy(self, solver);
 	  self = merged_list;
 	}// while
     } // single
@@ -196,10 +196,10 @@ merge_pivot_sets(TP_pivot_list self, TP_schur_matrix matrix, TP_solver solver)
 }
 
 
-TP_pivot_cell
-add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix matrix)
+ParSHUM_pivot_cell
+add_cell_to_sorted_set(ParSHUM_pivot_set set, ParSHUM_pivot_cell cell, ParSHUM_schur_matrix matrix)
 {
-  TP_pivot_cell merged = set->cells;
+  ParSHUM_pivot_cell merged = set->cells;
   int base = set->base;
   if( set->cols_count[cell->col] >= base ||
       set->rows_count[cell->row] >= base )
@@ -218,7 +218,7 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
 	else
 	  merged = merged->next;
       }
-    TP_pivot_cell tmp = merged->next;
+    ParSHUM_pivot_cell tmp = merged->next;
     merged->next = cell;
     cell->next   = tmp;
   }
@@ -230,14 +230,14 @@ add_cell_to_sorted_set(TP_pivot_set set, TP_pivot_cell cell, TP_schur_matrix mat
   return NULL;
 }
 
-TP_pivot_cell
-get_independent_cells(TP_pivot_cell cell, int *cols_count, int *rows_count, int base)
+ParSHUM_pivot_cell
+get_independent_cells(ParSHUM_pivot_cell cell, int *cols_count, int *rows_count, int base)
 {
-  TP_pivot_cell first = NULL, last;
+  ParSHUM_pivot_cell first = NULL, last;
 
   while (cell)
     {
-      TP_pivot_cell tmp = cell->next;
+      ParSHUM_pivot_cell tmp = cell->next;
       if( cols_count[cell->col] >= base ||
 	  rows_count[cell->row] >= base )
 	{
@@ -259,47 +259,10 @@ get_independent_cells(TP_pivot_cell cell, int *cols_count, int *rows_count, int 
   return first;
 }
 
-/* TP_pivot_cell */
-/* TP_cells_merge(TP_pivot_cell first, TP_pivot_cell second) */
-/* { */
-/*   if (!first && !second)  */
-/*     return NULL; */
-/*   if (!first)  */
-/*     return second; */
-/*   if(!second) */
-/*     return first; */
-
-/*   while ( second )  */
-/*     { */
-/*       TP_pivot_cell cell = second; */
-/*       TP_pivot_cell cell1, cell2; */
-/*       second = second->next; */
-
-/*       if ( first->marko > cell->marko) { */
-/* 	cell->next = first; */
-/* 	first = cell; */
-/* 	continue; */
-/*       } */
-/*       cell1 = first; */
-/*       cell2 = first->next; */
-/*       while ( cell2 ) */
-/* 	{ */
-/* 	  if( cell2->marko > cell->marko ) */
-/* 	    break; */
-/* 	  cell1 = cell2; */
-/* 	  cell2 = cell2->next; */
-/* 	}  */
-/*       cell1->next = cell; */
-/*       cell->next = cell2; */
-/*     } */
-
-/*   return first; */
-/* } */
-
-TP_pivot_cell
-TP_cells_merge(TP_pivot_cell first, TP_pivot_cell second)
+ParSHUM_pivot_cell
+ParSHUM_cells_merge(ParSHUM_pivot_cell first, ParSHUM_pivot_cell second)
 {
-  TP_pivot_cell res, cells;
+  ParSHUM_pivot_cell res, cells;
   if (!first && !second) 
     return NULL;
   if (!first) 
@@ -341,7 +304,7 @@ TP_cells_merge(TP_pivot_cell first, TP_pivot_cell second)
 }
 
 int
-update_both(TP_pivot_cell cell, TP_schur_matrix matrix, int *cols_count, int *rows_count, int base)
+update_both(ParSHUM_pivot_cell cell, ParSHUM_schur_matrix matrix, int *cols_count, int *rows_count, int base)
 {
   int cells = 0;
   while ( cell)
@@ -354,17 +317,17 @@ update_both(TP_pivot_cell cell, TP_schur_matrix matrix, int *cols_count, int *ro
   return cells;
 }
 
-TP_pivot_set
-merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix, TP_solver solver)
+ParSHUM_pivot_set
+merge_to_larger_set(ParSHUM_pivot_set self, ParSHUM_schur_matrix matrix, ParSHUM_solver solver)
 {
-  TP_pivot_set large, small;
-  TP_pivot_cell cells_to_merge;
+  ParSHUM_pivot_set large, small;
+  ParSHUM_pivot_cell cells_to_merge;
 
   if (!self || !self->next )
     return self;
 
   if (self->next->next) 
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"there are more than two sets to merge, the sets following the second set will be ignored");
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"there are more than two sets to merge, the sets following the second set will be ignored");
     
   if (self->nb_elem >= self->next->nb_elem) {
     large = self;
@@ -379,19 +342,9 @@ merge_to_larger_set(TP_pivot_set self, TP_schur_matrix matrix, TP_solver solver)
 
   cells_to_merge = get_independent_cells(cells_to_merge, large->cols_count, large->rows_count, large->base);
   large->nb_elem += update_both(cells_to_merge, matrix, large->cols_count, large->rows_count, large->base);
-  large->cells = TP_cells_merge(large->cells, cells_to_merge);
+  large->cells = ParSHUM_cells_merge(large->cells, cells_to_merge);
 
-  /* while(cells_to_merge) */
-  /*   { */
-  /*     TP_pivot_cell cell = cells_to_merge; */
-  /*     cells_to_merge = cells_to_merge->next; */
-  /*     cell->next = NULL; */
-
-  /*     if ( (add_cell_to_sorted_set(large, cell, matrix)) ) */
-  /* 	TP_pivot_cell_destroy(cell); */
-  /*   } */
-
-  TP_pivot_set_destroy(small, solver);
+  ParSHUM_pivot_set_destroy(small, solver);
   large->next = NULL;
   return large;
 }

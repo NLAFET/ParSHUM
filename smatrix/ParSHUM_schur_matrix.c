@@ -5,21 +5,22 @@
 #include <strings.h>
 #include <math.h>
 #include <omp.h>
-#include "TP_auxiliary.h"
-#include "TP_schur_matrix.h"
+#include "ParSHUM_auxiliary.h"
+#include "ParSHUM_schur_matrix.h"
 
 
-TP_schur_matrix
-TP_schur_matrix_create()
+ParSHUM_schur_matrix
+ParSHUM_schur_matrix_create()
 {
-  TP_schur_matrix self = calloc((size_t) 1, sizeof(*self));
+  ParSHUM_schur_matrix self = calloc((size_t) 1, sizeof(*self));
 
   return self;
 }
 
 void
-TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug, TP_verbose verbose, 
-			 int nb_threads, double extra_space, double extra_space_inbetween)
+ParSHUM_schur_matrix_allocate(ParSHUM_schur_matrix self, int n, int m, long nnz, int debug,
+			      ParSHUM_verbose verbose, int nb_threads, double extra_space,
+			      double extra_space_inbetween)
 {
   int i;
 
@@ -33,7 +34,7 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
 
   self->extra_space = extra_space_inbetween;
 
-  self->internal_mem = TP_internal_mem_create((long) nnz * (1 + extra_space + extra_space_inbetween));
+  self->internal_mem = ParSHUM_internal_mem_create((long) nnz * (1 + extra_space + extra_space_inbetween));
 
   self->nnz   = 0;
   self->debug = debug;
@@ -54,11 +55,10 @@ TP_schur_matrix_allocate(TP_schur_matrix self, int n, int m, long nnz, int debug
 }
 
 void
-TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous_step_pivots,
-			int *nb_col_singletons, int *nb_row_singletons,
-			int *cols, int *rows, int *distributions, 
-			int nb_doane_pivots, int *col_perm, int *row_perm, 
-			int *invr_col_perm, int *invr_row_perm)
+ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int previous_step_pivots,
+			     int *nb_col_singletons, int *nb_row_singletons, int *cols, int *rows,
+			     int *distributions, int nb_doane_pivots, int *col_perm, int *row_perm, 
+			     int *invr_col_perm, int *invr_row_perm)
 {
   int n = self->n - done_pivots + previous_step_pivots;
   int m = self->m - done_pivots + previous_step_pivots;
@@ -69,7 +69,7 @@ TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous_step
   for(i = 0; i < m; )  {
     int row = rows[i];
 
-    if (invr_row_perm[row] != TP_UNUSED_PIVOT) { 
+    if (invr_row_perm[row] != ParSHUM_UNUSED_PIVOT) { 
       rows[i] = rows[--m];
       continue;
     }
@@ -86,13 +86,13 @@ TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous_step
   }
   done_pivots += _nb_row_singletons;
   if (m != self->m - _done_pivots) 
-    TP_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
 
 
   for(i = 0; i < n; ) {
     int col = cols[i];
     
-    if (invr_col_perm[col] != TP_UNUSED_PIVOT )  {
+    if (invr_col_perm[col] != ParSHUM_UNUSED_PIVOT )  {
       cols[i] = cols[--n];
       continue;
     }
@@ -110,7 +110,7 @@ TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous_step
   }
 
   if (n != self->n - _done_pivots) 
-    TP_warning(__FUNCTION__, __FILE__, __LINE__, "not all the cols are taken out from cols");
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the cols are taken out from cols");
 
   /* If found row singeltons, then update the invr row and col perms
      after searching for col singeltons, so we do not discard them
@@ -128,25 +128,26 @@ TP_schur_get_singletons(TP_schur_matrix self, int done_pivots, int previous_step
 }
 
 void 
-TP_schur_matrix_init_ptr(TP_schur_matrix self, long *col_ptr, int *row_sizes)
+ParSHUM_schur_matrix_init_ptr(ParSHUM_schur_matrix self, long *col_ptr, int *row_sizes)
 {
   int i;
   int n = self->n;
   int m = self->m;
-  TP_internal_mem memory = self->internal_mem;
+  ParSHUM_internal_mem memory = self->internal_mem;
 
   // handeling the CSC part
   for(i = 0; i < n; i++)
-    TP_internal_mem_CSC_alloc(memory, &self->CSC[i], (long) (1 + self->extra_space) * (col_ptr[i+1] - col_ptr[i])); 
+    ParSHUM_internal_mem_CSC_alloc(memory, &self->CSC[i],
+				   (long) (1 + self->extra_space) * (col_ptr[i+1] - col_ptr[i])); 
   
   // handeling the CSR part
   for(i = 0; i < m; i++)
-    TP_internal_mem_CSR_alloc(memory, &self->CSR[i], (long) (1 + self->extra_space) * row_sizes[i]);
-
+    ParSHUM_internal_mem_CSR_alloc(memory, &self->CSR[i],
+				   (long) (1 + self->extra_space) * row_sizes[i]);
 }
 
 void
-TP_CSC_update_col_max(CSC_struct *CSC, double value_tol)
+ParSHUM_CSC_update_col_max(CSC_struct *CSC, double value_tol)
 {
   int i;
   int nb_elem = CSC->nb_elem;
@@ -180,14 +181,14 @@ TP_CSC_update_col_max(CSC_struct *CSC, double value_tol)
 
 
 void
-TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self, double value_tol)
+ParSHUM_schur_matrix_copy(ParSHUM_matrix A, ParSHUM_schur_matrix self, double value_tol)
 {
   int i, j;
   int *row_sizes;
   int n = self->n;
   
-  row_sizes = TP_matrix_rows_sizes(A);
-  TP_schur_matrix_init_ptr(self, A->col_ptr, row_sizes);
+  row_sizes = ParSHUM_matrix_rows_sizes(A);
+  ParSHUM_schur_matrix_init_ptr(self, A->col_ptr, row_sizes);
   free(row_sizes);
   self->nnz = A->nnz;
 
@@ -211,7 +212,8 @@ TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self, double value_tol)
       self->CSC[i].nb_elem += col_length; 
       self->CSC[i].nb_free -= col_length; 
 
-      TP_CSC_update_col_max(&self->CSC[i], value_tol);
+      ParSHUM_CSC_update_col_max(&self->CSC[i], value_tol);
+
       // handle the copy  of the column into the CSR structure
       for(j = A_col_start; j < A_col_end; j++)
 	{       
@@ -226,7 +228,7 @@ TP_schur_matrix_copy(TP_matrix A, TP_schur_matrix self, double value_tol)
 }
 
 void
-delete_entry_from_CSR(TP_schur_matrix self, int col, int row)
+delete_entry_from_CSR(ParSHUM_schur_matrix self, int col, int row)
 {
   CSR_struct *CSR;
   int i, nb_elem, found, *cols;
@@ -237,9 +239,9 @@ delete_entry_from_CSR(TP_schur_matrix self, int col, int row)
   found = 0;
 
   if(nb_elem < 1) {
-    TP_warning(__FUNCTION__, __FILE__, __LINE__,"tring to delete an entry in CSR with zero elems");
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__,"tring to delete an entry in CSR with zero elems");
     if(cols[0] == col) 
-    TP_warning(__FUNCTION__, __FILE__, __LINE__,"even better, the entry is there!");
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__,"even better, the entry is there!");
   }
 
   /* TODO: this is stupid, we should somehow mark the unused enteris, not move all the memory */
@@ -251,7 +253,7 @@ delete_entry_from_CSR(TP_schur_matrix self, int col, int row)
     }
 
   if ( !found )
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"tring to delete an non existing entry in CSR");
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"tring to delete an non existing entry in CSR");
 
   CSR->nb_elem--;
   CSR->nb_free++;
@@ -259,7 +261,7 @@ delete_entry_from_CSR(TP_schur_matrix self, int col, int row)
 }
 
 double
-delete_entry_from_CSC(TP_schur_matrix self, int col, int row)
+delete_entry_from_CSC(ParSHUM_schur_matrix self, int col, int row)
 {
   CSC_struct *CSC;
   int i, nb_elem, found, *rows;
@@ -279,7 +281,7 @@ delete_entry_from_CSC(TP_schur_matrix self, int col, int row)
     }
 
   if ( !found ) 
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"tring to delete an non existing entry in CSC");
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"tring to delete an non existing entry in CSC");
   
   CSC->nb_elem--;
   CSC->nb_free++;
@@ -290,15 +292,15 @@ delete_entry_from_CSC(TP_schur_matrix self, int col, int row)
 }
 
 inline double
-delete_entry(TP_schur_matrix self, int col, int row)
+delete_entry(ParSHUM_schur_matrix self, int col, int row)
 {
   delete_entry_from_CSR(self, col, row);
   return delete_entry_from_CSC(self, col, row);
 }
 
 void
-TP_schur_matrix_update_LD_singeltons(TP_schur_matrix self, TP_matrix L, TP_matrix D,
-				     int *row_perm, int *col_perm, int *invr_col_perm, int nb_pivots)
+ParSHUM_schur_matrix_update_LD_singeltons(ParSHUM_schur_matrix self, ParSHUM_matrix L, ParSHUM_matrix D,
+					  int *row_perm, int *col_perm, int *invr_col_perm, int nb_pivots)
 {
   int pivot, nb_threads = self->nb_threads;
   int nb_steps = (nb_pivots +  nb_threads - 1 ) / nb_threads, step; 
@@ -307,13 +309,13 @@ TP_schur_matrix_update_LD_singeltons(TP_schur_matrix self, TP_matrix L, TP_matri
   int D_input_size = D->n;
   
   if ( D->n + nb_pivots > D->allocated ) 
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
 
   for(pivot = 0; pivot < nb_pivots; pivot++)  {
     int nb_elem = self->CSC[col_perm[pivot]].nb_elem - 1;
     int new_col_ptr = L->col_ptr[L->n] + nb_elem;
     if ( new_col_ptr > L->allocated)
-      TP_matrix_realloc(L);
+      ParSHUM_matrix_realloc(L);
 
     L->n++;
     L->col_ptr[L->n] = new_col_ptr;
@@ -377,9 +379,9 @@ TP_schur_matrix_update_LD_singeltons(TP_schur_matrix self, TP_matrix L, TP_matri
 
 
 void
-TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP_matrix D,
-			  int *row_perm, int *col_perm, int nb_pivots, int *invr_row_perm,
-			  int nb_row_singeltons, int nb_col_singeltons, void **workspace)
+ParSHUM_schur_matrix_update_LD(ParSHUM_schur_matrix self, ParSHUM_L_matrix L, ParSHUM_U_matrix U, ParSHUM_matrix D,
+			       int *row_perm, int *col_perm, int nb_pivots, int *invr_row_perm,
+			       int nb_row_singeltons, int nb_col_singeltons, void **workspace)
 {
   int nb_threads = self->nb_threads;
   long S_nnz = 0;
@@ -389,17 +391,16 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
   int D_input_size = D->n;
   
   if ( D->n + nb_pivots > D->allocated ) 
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
 
   D->n += nb_pivots;
   L->n += nb_pivots;
 
 #pragma omp parallel for num_threads(nb_threads) shared(nb_pivots,L_input_size,D_input_size,nb_row_singeltons) reduction(+:S_nnz) reduction(+:L_nnz)
     for( int current_pivot = 0; current_pivot < nb_pivots; current_pivot++) {
-      /* TODO: TP_verbose_trace_start_event(verbose, TP_UPDATE_L); */
+      /* TODO: ParSHUM_verbose_trace_start_event(verbose, ParSHUM_UPDATE_L); */
       int me =  omp_get_thread_num();
       int n = self->n;
-      /* int current_pivot; */
       int *U_rows = (int *) workspace[me];
       int *tmp = &U_rows[n];
       double *U_vals = (double *) tmp;
@@ -450,7 +451,7 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 	for(i = 0; i < nb_elem; )
 	  {
 	    int tmp_row = rows[i];
-	    if ( invr_row_perm[tmp_row] != TP_UNUSED_PIVOT ) {
+	    if ( invr_row_perm[tmp_row] != ParSHUM_UNUSED_PIVOT ) {
 	      U_rows[U_col_new] = tmp_row;
 	      U_vals[U_col_new++] = vals[i];
 	      vals[i] = vals[--nb_elem];
@@ -462,7 +463,7 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
 	L->col[L_indice].nb_elem = nb_elem;
 	
 	while(U_col->allocated - U_col->nb_elem  < U_col_new)
-	  TP_U_col_realloc(U_col);
+	  ParSHUM_U_col_realloc(U_col);
 	memcpy(&U_col->val[U_col->nb_elem], U_vals, U_col_new * sizeof(*U_vals));
 	  memcpy(&U_col->row[U_col->nb_elem], U_rows, U_col_new * sizeof(*U_rows));
 	  U_col->nb_elem += U_col_new;
@@ -479,20 +480,20 @@ TP_schur_matrix_update_LD(TP_schur_matrix self, TP_L_matrix L, TP_U_matrix U, TP
       CSC->nb_elem = 0;
       CSC->nb_free = 0;
     }
-    /* TODO: TP_verbose_trace_stop_event(verbose); */
+    /* TODO: ParSHUM_verbose_trace_stop_event(verbose); */
     self->nnz -= S_nnz;
-    L->nnz -= S_nnz;
+    L->nnz += S_nnz;
 }
 
 void
-TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U, 
-				    TP_matrix D, TP_matrix L, int nb_pivots,
-				    int *col_perm, int *row_perm)
+ParSHUM_schur_matrix_update_U_singletons(ParSHUM_schur_matrix S, ParSHUM_U_matrix U, 
+					 ParSHUM_matrix D, ParSHUM_matrix L, int nb_pivots,
+					 int *col_perm, int *row_perm)
 {
   int nb_threads = S->nb_threads, d, sthg = L->col_ptr[L->n];
   int nb_steps = ( nb_pivots + nb_threads -1 ) / nb_threads, step;
   if ( D->n + nb_pivots > D->allocated ) 
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not enought memory in D matrix. this should never happen, so something went wrong");
  
   for ( d = 0; d < nb_pivots; d++) {
     L->n++;
@@ -520,10 +521,10 @@ TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U,
 
 	  if (CSC->nb_elem != 1) { 
 	    printf("nb_elem = %d\n", CSC->nb_elem);
-	    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "The pivot is not row singelton");
+	    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "The pivot is not row singelton");
 	  }
 	  if (CSC->row[0] != row) 
-	    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "The pivot is not the same as before");
+	    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "The pivot is not the same as before");
 	  D_indice = __atomic_fetch_add(&D->n, 1, __ATOMIC_SEQ_CST);
 	  D->val[D_indice] = CSC->val[0];
 
@@ -542,7 +543,7 @@ TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U,
 	      
 	      omp_set_lock(&u_col->lock);
 	      if (u_col->nb_elem == u_col->allocated) 
-		TP_U_col_realloc(u_col);
+		ParSHUM_U_col_realloc(u_col);
 	      u_col->row[u_col->nb_elem] = row;
 	      u_col->val[u_col->nb_elem] = val;
 	      u_col->nb_elem++;
@@ -563,9 +564,9 @@ TP_schur_matrix_update_U_singletons(TP_schur_matrix S, TP_U_matrix U,
 }
 
 void
-TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L, 
-			 int nb_pivots, int *row_perm,
-			 TP_U_struct *U_struct, int U_new_n, int U_new_nnz)
+ParSHUM_schur_matrix_update_U(ParSHUM_schur_matrix S, ParSHUM_U_matrix U,
+			      ParSHUM_matrix L, int nb_pivots, int *row_perm,
+			      ParSHUM_U_struct *U_struct, int U_new_n, int U_new_nnz)
 {
   int pivot, i, j;
   int nb_threads = S->nb_threads;
@@ -595,7 +596,7 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
     
     u_col->cost = 0;
     while(u_col->allocated - u_col->nb_elem  < nb_elem)
-      TP_U_col_realloc(u_col);
+      ParSHUM_U_col_realloc(u_col);
   }
   U->nnz += U_new_nnz;
   
@@ -629,7 +630,7 @@ TP_schur_matrix_update_U(TP_schur_matrix S, TP_U_matrix U, TP_matrix L,
 }
 
 void
-TP_schur_matrix_add_to_entry(TP_schur_matrix self, int row, int col, double val)
+ParSHUM_schur_matrix_add_to_entry(ParSHUM_schur_matrix self, int row, int col, double val)
 {
   CSC_struct *CSC = &self->CSC[col];
   int i;
@@ -644,12 +645,12 @@ TP_schur_matrix_add_to_entry(TP_schur_matrix self, int row, int col, double val)
       return;
     }
 
-  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "entry not found");
+  ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "entry not found");
 }
 
 void
-TP_CSC_update_col_max_array(CSC_struct *CSC, double *vals, int *rows, 
-			    int nb_elem, double value_tol)
+ParSHUM_CSC_update_col_max_array(CSC_struct *CSC, double *vals, int *rows, 
+				 int nb_elem, double value_tol)
 {
   int i, nb_eligeble = 0, nb_ineligible = nb_elem; 
   int *CSC_rows = CSC->row;
@@ -681,17 +682,15 @@ TP_CSC_update_col_max_array(CSC_struct *CSC, double *vals, int *rows,
   CSC->nb_free -= nb_elem;
 };
 
-
 void
-TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
-			 int *U_struct, int U_new_n, int *invr_row_perm,
-			 int nb_pivots, int *row_perms, void **workspace,
-			 double value_tol)
+ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHUM_U_matrix U,
+			      int *U_struct, int U_new_n, int *invr_row_perm, int nb_pivots,
+			      int *row_perms, void **workspace, double value_tol)
 {
   int nb_threads = S->nb_threads;
   long S_new_nnz = 0;
   long U_new_nnz = 0;
-
+  
 #pragma omp  parallel for num_threads(nb_threads) reduction(+:S_new_nnz) reduction(+:U_new_nnz)
   for ( int i = 0; i < U_new_n; i++) {
   int me =  omp_get_thread_num();
@@ -718,7 +717,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
   
   for ( k = 0; k < S_col_nb_elem; k++) {
     int S_row = S_rows[k];
-    if (invr_row_perm[S_row] != TP_UNUSED_PIVOT ) {
+    if (invr_row_perm[S_row] != ParSHUM_UNUSED_PIVOT ) {
       tmp_rows[--U_nb_elem] = S_row;
       tmp_vals[  U_nb_elem] = S_vals[k];
     } else { 
@@ -735,7 +734,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
   U_nb_elem = n - U_nb_elem; 
   
   if (S_col_nb_elem != ( U_nb_elem + S_nb_elem ))
-    TP_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong");
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong");
   
   U_new_nnz += (long) U_nb_elem;
 	
@@ -763,7 +762,7 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
   }
   
   while(U_col->allocated - U_col->nb_elem  < U_nb_elem)
-    TP_U_col_realloc(U_col);
+    ParSHUM_U_col_realloc(U_col);
   memcpy(&U_col->val[U_col->nb_elem], U_vals, U_nb_elem * sizeof(*U_vals));
   memcpy(&U_col->row[U_col->nb_elem], U_rows, U_nb_elem * sizeof(*U_rows));
   
@@ -777,10 +776,10 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
   if (needed_size < (long) S_nb_elem)  {
     while( needed_size < (long) S_nb_elem  )
       needed_size *= 2;
-    TP_internal_mem_CSC_alloc(S->internal_mem, CSC, needed_size);
+    ParSHUM_internal_mem_CSC_alloc(S->internal_mem, CSC, needed_size);
   }
   
-  TP_CSC_update_col_max_array(CSC, S_vals, S_rows, S_nb_elem, value_tol);
+  ParSHUM_CSC_update_col_max_array(CSC, S_vals, S_rows, S_nb_elem, value_tol);
   
   int new = base + S_nb_elem;
   if (new < base ) {
@@ -798,9 +797,9 @@ TP_schur_matrix_update_S(TP_schur_matrix S, TP_L_matrix L, TP_U_matrix U,
 
 
 void
-TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct, int L_new_n,
-			      int L_new_nnz, int *invr_col_perm, int nb_pivots,
-			      int *row_perms, int done_pivots, void **workspace)
+ParSHUM_schur_matrix_update_S_rows(ParSHUM_schur_matrix S, int *L_struct, int L_new_n,
+				   int L_new_nnz, int *invr_col_perm, int nb_pivots,
+				   int *row_perms, int done_pivots, void **workspace)
 {
   int nb_threads = S->nb_threads;
 
@@ -825,7 +824,7 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct, int L_new_n,
   /* constructing schur_row_struct and discovering the vals of U  */
   for (k = 0; k < S_row_nb_elem; k++) {
     int S_col = S_cols[k];
-    if (invr_col_perm[S_col] != TP_UNUSED_PIVOT ) {
+    if (invr_col_perm[S_col] != ParSHUM_UNUSED_PIVOT ) {
       tmp[--L_nb_elem] = S_col;
     } else {
       tmp[S_nb_elem] = S_col;
@@ -845,7 +844,7 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct, int L_new_n,
       int col = U_cols[k];
       int indice = schur_row_struct[col] - base;
       
-      if (invr_col_perm[col] != TP_UNUSED_PIVOT) {
+      if (invr_col_perm[col] != ParSHUM_UNUSED_PIVOT) {
 	continue;
       }
       
@@ -862,7 +861,7 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct, int L_new_n,
   if (needed_size < (long) S_nb_elem)  {
     while( needed_size < (long) S_nb_elem  )
       needed_size *= 2;
-    TP_internal_mem_CSR_alloc(S->internal_mem, CSR, needed_size);
+    ParSHUM_internal_mem_CSR_alloc(S->internal_mem, CSR, needed_size);
   }
   memcpy(CSR->col, S_cols, S_nb_elem * sizeof(*S_cols));
   CSR->nb_free -= S_nb_elem;
@@ -887,17 +886,17 @@ TP_schur_matrix_update_S_rows(TP_schur_matrix S, int *L_struct, int L_new_n,
   }
 }
 
-TP_dense_matrix 
-TP_schur_matrix_convert(TP_schur_matrix S, int done_pivots)
+ParSHUM_dense_matrix 
+ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int done_pivots)
 {
-  TP_dense_matrix self; 
+  ParSHUM_dense_matrix self; 
   int col, k, i;
   int n = S->n;
   int m = S->m;
   int n_schur = n - done_pivots;
   int m_schur = m - done_pivots;
   int invr_row[m];
-  self = TP_dense_matrix_create(n_schur, m_schur);
+  self = ParSHUM_dense_matrix_create(n_schur, m_schur);
   
   for(i = 0, k=0; i < m; i++)
     {
@@ -930,7 +929,7 @@ TP_schur_matrix_convert(TP_schur_matrix S, int done_pivots)
 
 
 void
-TP_schur_matrix_print(TP_schur_matrix self, char *mess)
+ParSHUM_schur_matrix_print(ParSHUM_schur_matrix self, char *mess)
 {
   int n = self->n;
   int m = self->m;
@@ -965,14 +964,14 @@ TP_schur_matrix_print(TP_schur_matrix self, char *mess)
 }
 
 void
-TP_schur_matrix_destroy(TP_schur_matrix self)
+ParSHUM_schur_matrix_destroy(ParSHUM_schur_matrix self)
 {
   int i;
   
   free(self->CSC);
   free(self->CSR);
 
-  TP_internal_mem_destroy(self->internal_mem);
+  ParSHUM_internal_mem_destroy(self->internal_mem);
 
   for( i = 0; i < self->nb_threads; i++)
     free(self->data_struct[i]);
@@ -997,7 +996,7 @@ TP_schur_matrix_destroy(TP_schur_matrix self)
 /* ********************************************************************************************* */
 /* ********************************************************************************************* */
 void
-TP_schur_check_doubles(TP_schur_matrix self)
+ParSHUM_schur_check_doubles(ParSHUM_schur_matrix self)
 {
   int col, row, i, j, n = self->n, m = self->m;
   char mess[2048];
@@ -1014,7 +1013,7 @@ TP_schur_check_doubles(TP_schur_matrix self)
 	  if (rows[j] == row) {
 	    snprintf(mess, 2048, "in column %d, row %d is ducplicated on positions %d and %d",
 		     col, row, i, j);
-	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	  }
       }
     }
@@ -1031,14 +1030,14 @@ TP_schur_check_doubles(TP_schur_matrix self)
 	  if (cols[j] == col) {
 	    snprintf(mess, 2048, "in row %d, col %d is ducplicated on positions %d and %d",
 		     row, col, i, j);
-	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	  }
       }
     }
 }
 
 void
-TP_schur_matrix_check_pivots(TP_schur_matrix self,
+ParSHUM_schur_matrix_check_pivots(ParSHUM_schur_matrix self,
 			     int *row_perms, int *col_perms,
 			     int *invr_row_perms, int *invr_col_perms,
 			     int nb_pivots)
@@ -1064,13 +1063,13 @@ TP_schur_matrix_check_pivots(TP_schur_matrix self,
       if ( self->CSC[col].nb_elem ) {
 	snprintf(mess, 2048, "column %d is a pivot, but not empty in S with nb_elem %d and nb_free %d",
 		 col, self->CSC[col].nb_elem, self->CSC[col].nb_free);
-	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
       
       if ( self->CSR[row].nb_elem ) {
 	snprintf(mess, 2048, "row %d is a pivot, but not empty in S with nb_elem %d and nb_free %d",
 		 row, self->CSR[row].nb_elem, self->CSR[row].nb_free);
-	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
     }
 
@@ -1082,9 +1081,9 @@ TP_schur_matrix_check_pivots(TP_schur_matrix self,
       for ( j = 0; j < nb_elem; j++) 
 	{
 	  int row = rows[j];
-	    if ( invr_row_perms[row] != TP_UNUSED_PIVOT ) {
+	    if ( invr_row_perms[row] != ParSHUM_UNUSED_PIVOT ) {
 	      snprintf(mess, 2048, "in col %d, %d is present, but %d is a row pivot\n", i, row, row);
-	      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	    }
 	}
     }
@@ -1097,16 +1096,16 @@ TP_schur_matrix_check_pivots(TP_schur_matrix self,
       for ( j = 0; j < nb_elem; j++) 
 	{
 	  int col = cols[j];
-	  if ( invr_col_perms[col] != TP_UNUSED_PIVOT ) {
+	  if ( invr_col_perms[col] != ParSHUM_UNUSED_PIVOT ) {
 	    snprintf(mess, 2048, "in row %d, %d is present, but %d is a col pivot\n", i, col, col);
-	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	  }
 	}
     }
 }
 
 void
-TP_schur_matrix_memory_check(TP_schur_matrix self)
+ParSHUM_schur_matrix_memory_check(ParSHUM_schur_matrix self)
 {
   int i, n = self->n, m = self->m;
   char mess[2048];
@@ -1114,13 +1113,13 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
   for ( i = 0; i < n; i++)
     if (self->CSC[i].nb_free < 0 )  {
       snprintf(mess, 2048, "error on the column %d  with nb_free %d\n", i, self->CSC[i].nb_free);
-      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
     }
   
   for ( i = 0; i < m; i++)
     if (self->CSR[i].nb_free < 0 ) {
       snprintf(mess, 2048, "error on the row %d with nb_free %d\n", i, self->CSR[i].nb_free);
-      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
     }
 
   /* TODO: rewrtie this */
@@ -1138,21 +1137,21 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
   /* 	  long free_begin = unused_CSC->offset, free_end = unused_CSC->offset + unused_CSC->nb_elem; */
   /* 	  int print = 0; */
 	  
-  /* 	  TP_overlaps overlaped = check_overalping_regions(free_begin, free_end, CSC_begin, CSC_end); */
+  /* 	  ParSHUM_overlaps overlaped = check_overalping_regions(free_begin, free_end, CSC_begin, CSC_end); */
   /* 	  switch (overlaped) { */
-  /* 	  case (TP_overlap_none) : */
+  /* 	  case (ParSHUM_overlap_none) : */
   /* 	    break; */
-  /* 	  case (TP_overlap_begin) : */
+  /* 	  case (ParSHUM_overlap_begin) : */
   /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlaping in the begining of the col (col start %ld end %ld, free starts on %ld ends on %ld).", */
   /* 		     current_unused, i, CSC_begin, CSC_end, free_begin, free_end); */
   /* 	    print = 1; */
   /* 	    break; */
-  /* 	  case (TP_overlap_end) : */
+  /* 	  case (ParSHUM_overlap_end) : */
   /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlaping in the end of the col (col start %ld end %ld, free starts on %ld ends on %ld).", */
   /* 		     current_unused, i, CSC_begin, CSC_end, free_begin, free_end); */
   /* 	    print = 1; */
   /* 	    break; */
-  /* 	  case (TP_overlap_total) : */
+  /* 	  case (ParSHUM_overlap_total) : */
   /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlapping (col starts at %ld and ends on %ld; free starts on %ld and ends on %ld).", */
   /* 		     current_unused, i, CSC_begin, CSC_end, free_begin, free_end); */
   /* 	    print = 1; */
@@ -1161,7 +1160,7 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
   /* 	     break; */
   /* 	  } */
   /* 	  if (print) */
-  /* 	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
+  /* 	    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
   /* 	  current_unused++; */
   /* 	  unused_CSC = unused_CSC->next; */
   /* 	} */
@@ -1176,11 +1175,11 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
   /* 	  if( current_CSC_begin == current_CSC_end) */
   /* 	    continue; */
 	  
-  /* 	  TP_overlaps overlaped = check_overalping_regions(current_CSC_begin, current_CSC_end, CSC_begin, CSC_end); */
+  /* 	  ParSHUM_overlaps overlaped = check_overalping_regions(current_CSC_begin, current_CSC_end, CSC_begin, CSC_end); */
   /* 	  switch (overlaped) { */
-  /* 	  case (TP_overlap_none) : */
+  /* 	  case (ParSHUM_overlap_none) : */
   /* 	    break; */
-  /* 	  case (TP_overlap_begin) : */
+  /* 	  case (ParSHUM_overlap_begin) : */
   /* 	    snprintf(mess, 2048, "The %d^th column and the %d^th column are overlaping in the begining of the col (col start %ld end %ld; col starts %ld ends on %ld).", */
   /* 		     j, i, current_CSC_begin , current_CSC_end, CSC_begin, CSC_end); */
   /* 	    print = 1; */
@@ -1199,7 +1198,7 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
   /* 	    break; */
   /* 	  } */
   /* 	  if (print) */
-  /* 	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
+  /* 	    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
   /* 	} */
   /*   } */
   
@@ -1218,21 +1217,21 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
   /* 	  long free_begin = unused_CSR->offset, free_end = unused_CSR->offset + unused_CSR->nb_elem; */
   /* 	  int print = 0; */
 	  
-  /* 	  TP_overlaps overlaped = check_overalping_regions(free_begin, free_end, CSR_begin, CSR_end); */
+  /* 	  ParSHUM_overlaps overlaped = check_overalping_regions(free_begin, free_end, CSR_begin, CSR_end); */
   /* 	  switch (overlaped) { */
-  /* 	  case (TP_overlap_none)  : */
+  /* 	  case (ParSHUM_overlap_none)  : */
   /* 	    break; */
-  /* 	  case (TP_overlap_begin) : */
+  /* 	  case (ParSHUM_overlap_begin) : */
   /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th row are overlaping in the begining of the col (row start %ld end %ld, free starts on  %ld ends on %ld).", */
   /* 		     current_unused, i, CSR_begin, CSR_end, free_begin, free_end); */
   /* 	    print = 1; */
   /* 	    break; */
-  /* 	  case (TP_overlap_end)   : */
+  /* 	  case (ParSHUM_overlap_end)   : */
   /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th row are overlaping in the end of the col (row start %ld end %ld, free starts on %ld ends on %ld).", */
   /* 		      current_unused, i, CSR_begin, CSR_end, free_begin, free_end); */
   /* 	    print = 1; */
   /* 	    break; */
-  /* 	  case (TP_overlap_total) : */
+  /* 	  case (ParSHUM_overlap_total) : */
   /* 	    snprintf(mess, 2048, "The %d^th free space and the %d^th column are overlapping (col starts at %ld and ends on %ld; free starts on %ld and ends on %ld).", */
   /* 		     current_unused, i, CSR_begin, CSR_end, free_begin, free_end); */
   /* 	    print = 1; */
@@ -1241,7 +1240,7 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
   /* 	    break; */
   /* 	  } */
   /* 	  if (print) */
-  /* 	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
+  /* 	    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
   /* 	  current_unused++; */
   /* 	  unused_CSR = unused_CSR->next; */
   /* 	} */
@@ -1256,21 +1255,21 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
   /* 	   if( current_CSR_begin == current_CSR_end) */
   /* 	     continue; */
 	   
-  /* 	   TP_overlaps overlaped = check_overalping_regions(current_CSR_begin, current_CSR_end, CSR_begin, CSR_end); */
+  /* 	   ParSHUM_overlaps overlaped = check_overalping_regions(current_CSR_begin, current_CSR_end, CSR_begin, CSR_end); */
   /* 	   switch (overlaped) { */
-  /* 	   case (TP_overlap_none) : */
+  /* 	   case (ParSHUM_overlap_none) : */
   /* 	     break; */
-  /* 	   case (TP_overlap_begin) : */
+  /* 	   case (ParSHUM_overlap_begin) : */
   /* 	     snprintf(mess, 2048, "The %d^th row and the %d^th column are overlaping in the begining of the row (row start %ld end %ld; row starts %ld ends on %ld).", */
   /* 		      j, i, current_CSR_begin , current_CSR_end, CSR_begin, CSR_end); */
   /* 	     print = 1; */
   /* 	     break; */
-  /* 	   case (TP_overlap_end) : */
+  /* 	   case (ParSHUM_overlap_end) : */
   /* 	     snprintf(mess, 2048, "The %d^th row and the %d^th row are overlaping in the end of the row (row start %ld end %ld; row starts %ld ends on %ld).", */
   /* 		      j, i, current_CSR_end, current_CSR_end, CSR_begin, CSR_end); */
   /* 	     print = 1; */
   /* 	     break; */
-  /* 	   case (TP_overlap_total) : */
+  /* 	   case (ParSHUM_overlap_total) : */
   /* 	     snprintf(mess, 2048, "The %d^th column and the %d^th column are overlapping (col starts at %ld and ends on %ld; col starts %ld ends on %ld).", */
   /* 		      j, i, current_CSR_end, current_CSR_end, CSR_begin, CSR_end); */
   /* 	     print = 1; */
@@ -1279,13 +1278,13 @@ TP_schur_matrix_memory_check(TP_schur_matrix self)
   /* 	     break; */
   /* 	   } */
   /* 	   if (print) */
-  /* 	     TP_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
+  /* 	     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
   /* 	} */
   /*   } */
 }
 
 void
-TP_schur_matrix_check_symetry(TP_schur_matrix self)
+ParSHUM_schur_matrix_check_symetry(ParSHUM_schur_matrix self)
 {
   long CSC_nnz = 0, CSR_nnz = 0;
   int i, j, n = self->n, m = self->m, row, col;
@@ -1299,17 +1298,17 @@ TP_schur_matrix_check_symetry(TP_schur_matrix self)
   
   if (CSC_nnz != CSR_nnz) {
     snprintf(mess, 2048, "CSR and CSC nnz are not the same, CSC = %ld and CSR = %ld", CSC_nnz, CSR_nnz);
-    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
   }
   
   if (CSC_nnz != self->nnz) {
     snprintf(mess, 2048, "CSC and S nnz are not the same, CSC = %ld and S_nnz = %ld", CSC_nnz, self->nnz);
-    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
   }
   
   if (CSR_nnz != self->nnz) {
     snprintf(mess, 2048, "CSR and S nnz are not the same, CSR = %ld and S_nnz = %ld", CSR_nnz, self->nnz);
-    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
   }
   
   for(col = 0; col < n; col++)
@@ -1335,7 +1334,7 @@ TP_schur_matrix_check_symetry(TP_schur_matrix self)
 	  if (!found) {
 	    snprintf(mess, 2048, "In CSC in col %d row %d exists, but in CSR in row %d, col %d does not exist",
 		     col, row, row, col);
-	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	  }
 	} /* for I */
     }
@@ -1363,7 +1362,7 @@ TP_schur_matrix_check_symetry(TP_schur_matrix self)
 	  if (!found) {
 	    snprintf(mess, 2048, "In CSR in row %d col %d exists, but in CSC in col %d, row %d does not exist",
 		     row, col, col, row);
-	    TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	  }
 	} /* for I */
     }
@@ -1371,16 +1370,16 @@ TP_schur_matrix_check_symetry(TP_schur_matrix self)
 
 /* TODO: addapt this to the new thing */
 void
-TP_print_GB(TP_schur_matrix self, char *mess)
+ParSHUM_print_GB(ParSHUM_schur_matrix self, char *mess)
 {
   /* free_space CSC = self->unused_CSC; */
   /* free_space CSR = self->unused_CSR; */
   
   /* fprintf(stdout,"%s\n", mess); */
   /* if (CSC->previous) */
-  /*   TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSC free memory has a predecessor"); */
+  /*   ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSC free memory has a predecessor"); */
   /* if (CSR->previous) */
-  /*   TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSR free memory has a predecessor"); */
+  /*   ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSR free memory has a predecessor"); */
   
   /* fprintf(stdout, "|================||=================|\n"); */
   /* fprintf(stdout, "|      CSC       ||      CSR        |\n"); */
@@ -1426,12 +1425,12 @@ TP_print_GB(TP_schur_matrix self, char *mess)
   /*   if (CSC) */
   /*     if (CSC->next) */
   /* 	if (CSC->next->previous != CSC) */
-  /* 	  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the CSC free memory's next cell, has a predecessor different from CSC"); */
+  /* 	  ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the CSC free memory's next cell, has a predecessor different from CSC"); */
 
   /*   if (CSR) */
   /*     if (CSR->next) */
   /* 	if (CSR->next->previous != CSR) */
-  /* 	  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the CSR free memory's next cell, has a predecessor different from CSR"); */
+  /* 	  ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the CSR free memory's next cell, has a predecessor different from CSR"); */
     
   /*   if (CSC) */
   /*     CSC=CSC->next; */
@@ -1442,12 +1441,12 @@ TP_print_GB(TP_schur_matrix self, char *mess)
 
 /* TODO: addapt this to the new thing */
 /* void */
-/* TP_print_single_GB(free_space self, char *mess) */
+/* ParSHUM_print_single_GB(free_space self, char *mess) */
 /* { */
   /* fprintf(stdout,"%s\n", mess); */
   
   /* if (self->previous) */
-  /*   TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSR free memory has a predecessor"); */
+  /*   ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the first CSR free memory has a predecessor"); */
     
   /* fprintf(stdout, "|================|\n"); */
   /* fprintf(stdout, "|    address     |\n"); */
@@ -1465,7 +1464,7 @@ TP_print_GB(TP_schur_matrix self, char *mess)
       
   /*     if (self->next) */
   /* 	if (self->next->previous != self) */
-  /* 	  TP_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the free memory's next cell, has a predecessor different from CSC"); */
+  /* 	  ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the free memory's next cell, has a predecessor different from CSC"); */
       
   /*     self = self->next; */
   /*   } */
@@ -1473,9 +1472,9 @@ TP_print_GB(TP_schur_matrix self, char *mess)
 
 
 void
-TP_check_current_counters(TP_schur_matrix self,
-			  int *col_perm, int *row_perm, int nb_perms, 
-			  int *col_count, int *row_count, int base)
+ParSHUM_check_current_counters(ParSHUM_schur_matrix self,
+			       int *col_perm, int *row_perm, int nb_perms, 
+			       int *col_count, int *row_count, int base)
 {
   int pivot, i, n = self->n, m = self->m; 
   int *_col_count = calloc( n, sizeof(*_col_count));
@@ -1507,25 +1506,25 @@ TP_check_current_counters(TP_schur_matrix self,
       if ( _row_count[row] != 1) {
 	snprintf(mess, 2048, "calculated row_count[%d] = %d, but %d is a pivot",
 		 row, _row_count[i], row);
-	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
 
       if ( row_count[row] != base) {
 	snprintf(mess, 2048, "row_count[%d] = %d, base = %d, but %d is a pivot",
 		 row, row_count[i], base, row);
-	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
 
       if ( _col_count[col] != 1) {
 	snprintf(mess, 2048, "calculated col_count[%d] = %d, but %d is a pivot",
 		 col, _col_count[i], row);
-	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
 
       if ( row_count[row] != base) {
 	snprintf(mess, 2048, "col_count[%d] = %d, base = %d, but %d is a pivot",
 		 col, col_count[i], base, col);
-	TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
     }  
 
@@ -1535,14 +1534,14 @@ TP_check_current_counters(TP_schur_matrix self,
 	if ( ( col_count[i] - base + 1 ) !=  _col_count[i]) {
 	  snprintf(mess, 2048, "error on col counter %d : col_count(%d) base(%d) and calculated col_count(%d)",
 		   i, col_count[i], base, _col_count[i]);
-	  TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	  ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	}
       
       if (row_count[i] >=  base) 
 	if ( ( row_count[i] - base + 1 ) !=  _row_count[i]) {
 	  snprintf(mess, 2048, "error on row counter %d : row_count(%d) base(%d) and calculated row_count(%d)",
 		   i, row_count[i], base, _row_count[i]);
-	  TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	  ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
 	}
     }	 
   

@@ -24,10 +24,10 @@ include_directories(include)
 pkg_check_modules(Plasma REQUIRED plasma )
 
 # Verbosity
-set(TP_VERBOSITY 1 CACHE STRING "Controls the verbosity. Default is 1.")
+set(ParSHUM_VERBOSITY 1 CACHE STRING "Controls the verbosity. Default is 1.")
 
-if (TP_VERBOSITY GREATER 0)
-  add_definitions(-DTP_VERBOSITY=${TP_VERBOSITY})
+if (ParSHUM_VERBOSITY GREATER 0)
+  add_definitions(-DParSHUM_VERBOSITY=${ParSHUM_VERBOSITY})
 endif()
 
 file(GLOB_RECURSE SOURCES control/*.c pivots/*.c smatrix/*.c )

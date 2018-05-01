@@ -2,43 +2,43 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <omp.h>
-#include "TP_auxiliary.h"
-#include "TP_paje.h"
+#include "ParSHUM_auxiliary.h"
+#include "ParSHUM_paje.h"
 
-#define TP_PAJE_MAXEVENTS  15000
-#define TP_PAJE_MAXTPES  12
+#define ParSHUM_PAJE_MAXEVENTS  15000
+#define ParSHUM_PAJE_MAXTPES  12
 
-static char *labels[TP_PAJE_MAXTPES] = {"Get singeltons", "Get eligeble pivtos", "Auxiliary", "Assign score", 
-					"First pass", "Discarding Pivots", "Getting Pivots", "Update L",
-					"Update S cols", "Update S rows", "Matrix convertion",
-					"Dense Factorization"}; 
+static char *labels[ParSHUM_PAJE_MAXTPES] = {"Get singeltons", "Get eligeble pivtos", "Auxiliary", "Assign score", 
+					     "First pass", "Discarding Pivots", "Getting Pivots", "Update L",
+					     "Update S cols", "Update S rows", "Matrix convertion",
+					     "Dense Factorization"}; 
 
-static double colors[TP_PAJE_MAXTPES][3] = {{1, 1, 0}, {1, 0.8, 0}, {0.9, 0.6, 0}, {0.8, 0.4, 0.15},
-					    {0.5, 0.8, 0.2}, {0.2, 0.9, 0.45}, {0, 0, 1}, {0, 1, 0},
-					    {0, 1, 1}, {0, 0.8, 0.2}, {0, 0.2, 0.8},  {0.2, 0.4, 1}}; 
+static double colors[ParSHUM_PAJE_MAXTPES][3] = {{1, 1, 0}, {1, 0.8, 0}, {0.9, 0.6, 0}, {0.8, 0.4, 0.15},
+						 {0.5, 0.8, 0.2}, {0.2, 0.9, 0.45}, {0, 0, 1}, {0, 1, 0},
+						 {0, 1, 1}, {0, 0.8, 0.2}, {0, 0.2, 0.8},  {0.2, 0.4, 1}}; 
 
-typedef struct _TP_paje_event TP_paje_event;
+typedef struct _ParSHUM_paje_event ParSHUM_paje_event;
 
-struct _TP_paje_event {
+struct _ParSHUM_paje_event {
   int id_event; 
   double start;
   double end;
 };
 
-struct _TP_paje {
+struct _ParSHUM_paje {
   int nb_threads;
   double time_zero;
 
   int *pending;
   int *nb_events;
-  TP_paje_event **events;
+  ParSHUM_paje_event **events;
 };
 
 
-TP_paje
-TP_paje_create(int nb_threads)
+ParSHUM_paje
+ParSHUM_paje_create(int nb_threads)
 {
-  TP_paje self = calloc((size_t) 1, sizeof(*self));
+  ParSHUM_paje self = calloc((size_t) 1, sizeof(*self));
   struct timeval time_s; 
   int i;
 
@@ -52,21 +52,21 @@ TP_paje_create(int nb_threads)
   self->nb_events = calloc((size_t) nb_threads, sizeof(*self->nb_events));
   self->events = calloc((size_t) nb_threads, sizeof(*self->events));
   for( i = 0; i < self->nb_threads; i++)
-    self->events[i] = calloc((size_t) TP_PAJE_MAXEVENTS, sizeof(**self->events));
+    self->events[i] = calloc((size_t) ParSHUM_PAJE_MAXEVENTS, sizeof(**self->events));
   
   return self;
 }
 
 void
-TP_paje_start_event(TP_paje self, int id)
+ParSHUM_paje_start_event(ParSHUM_paje self, int id)
 {
   int thread =  omp_get_thread_num();
-  TP_paje_event *event = &self->events[thread][self->nb_events[thread]];
+  ParSHUM_paje_event *event = &self->events[thread][self->nb_events[thread]];
   struct timeval time; 
   gettimeofday(&time, NULL);
 
   if (self->pending[thread])
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"Nested events are not supported");
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"Nested events are not supported");
     
   self->pending[thread] = 1; 
   event->start = (double) (time.tv_sec * 1e6 + time.tv_usec) - self->time_zero;
@@ -74,22 +74,22 @@ TP_paje_start_event(TP_paje self, int id)
 }
 
 void
-TP_paje_stop_event(TP_paje self)
+ParSHUM_paje_stop_event(ParSHUM_paje self)
 {
   int thread =  omp_get_thread_num();
-  TP_paje_event *event = &self->events[thread][self->nb_events[thread]++];
+  ParSHUM_paje_event *event = &self->events[thread][self->nb_events[thread]++];
   struct timeval time; 
   gettimeofday(&time, NULL);
 
   if (!self->pending[thread])
-    TP_fatal_error(__FUNCTION__, __FILE__, __LINE__,"Event is asked to stop, but is not started yet");
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"Event is asked to stop, but is not started yet");
 
   self->pending[thread] = 0; 
   event->end = (double) (time.tv_sec * 1e6 + time.tv_usec) - self->time_zero;
 }
 
 void
-TP_paje_create_file(TP_paje self, char *dir, char *prefix)
+ParSHUM_paje_create_file(ParSHUM_paje self, char *dir, char *prefix)
 {
   FILE *file;
   char filename[2048];
@@ -137,7 +137,7 @@ TP_paje_create_file(TP_paje self, char *dir, char *prefix)
   fprintf(file,"1 CT_Thread CT_Prog \"Thread\"\n");
   fprintf(file,"3 ST_ThreadState CT_Thread \"Thread State\"\n");
 
-  for( i = 0; i < TP_PAJE_MAXTPES; i++)
+  for( i = 0; i < ParSHUM_PAJE_MAXTPES; i++)
     fprintf(file,"6 \"%s\" ST_ThreadState \"%s\" \"%f %f %f\" \n",
 	    labels[i], labels[i], colors[i][0], colors[i][1], colors[i][2]);
 
@@ -150,7 +150,7 @@ TP_paje_create_file(TP_paje self, char *dir, char *prefix)
   for( i = 0; i < self->nb_threads; i++)
     for(j = 0; j < self->nb_events[i]; j++) 
       {
-	TP_paje_event *event = &self->events[i][j];
+	ParSHUM_paje_event *event = &self->events[i][j];
 	fprintf(file,"10 %f ST_ThreadState C_Thread%d \"%s\"\n", event->start / 1e6, i, labels[event->id_event]);
 	fprintf(file,"10 %f ST_ThreadState C_Thread%d idle\n", event->end / 1e6, i);
       }
@@ -168,7 +168,7 @@ TP_paje_create_file(TP_paje self, char *dir, char *prefix)
 
 
 void
-TP_paje_destroy(TP_paje self)
+ParSHUM_paje_destroy(ParSHUM_paje self)
 {
   int i;
   free(self->pending);

@@ -1,13 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "TP_L_matrix.h"
+#include "ParSHUM_L_matrix.h"
 
 
 
-TP_L_matrix 
-TP_L_matrix_create(int n)
+ParSHUM_L_matrix 
+ParSHUM_L_matrix_create(int n)
 {
-  TP_L_matrix self = malloc(sizeof(*self));
+  ParSHUM_L_matrix self = malloc(sizeof(*self));
 
   self->n = 0;
   self->nnz = 0;
@@ -17,7 +17,7 @@ TP_L_matrix_create(int n)
 }
 
 void
-TP_L_matrix_solve(TP_L_matrix L, TP_vector RHS, int *perms)
+ParSHUM_L_matrix_solve(ParSHUM_L_matrix L, ParSHUM_vector RHS, int *perms)
 {
   int    col, n = L->n, i;
   double *rhs_val = RHS->vect;
@@ -34,7 +34,7 @@ TP_L_matrix_solve(TP_L_matrix L, TP_vector RHS, int *perms)
 }
 
 void
-TP_L_matrix_print(TP_L_matrix self, char *mess)
+ParSHUM_L_matrix_print(ParSHUM_L_matrix self, char *mess)
 {
   int n = self->n, i, j;
 
@@ -54,7 +54,7 @@ TP_L_matrix_print(TP_L_matrix self, char *mess)
 }
 
 void
-TP_L_matrix_destroy(TP_L_matrix self)
+ParSHUM_L_matrix_destroy(ParSHUM_L_matrix self)
 {
   free(self->col);
   free(self);

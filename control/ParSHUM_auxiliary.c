@@ -4,22 +4,22 @@
 #include <libgen.h>
 #include <string.h>
 
-#include "TP_auxiliary.h"
+#include "ParSHUM_auxiliary.h"
 
-#define TP_RAND_MAX 32767
+#define ParSHUM_RAND_MAX 32767
 
 void 
-TP_fatal_error(const char *func, char *filename, const int line, const char *msg)
+ParSHUM_fatal_error(const char *func, char *filename, const int line, const char *msg)
 {
-  printf("TP_FATAL ERROR in %s(%s:%d) \n%s\n", func, basename(filename), line, msg);
+  printf("ParSHUM_FATAL ERROR in %s(%s:%d) \n%s\n", func, basename(filename), line, msg);
   GDB_BREAK;
   abort();
 }
 
 void 
-TP_warning(const char *func, char *filename, const int line, const char *msg)
+ParSHUM_warning(const char *func, char *filename, const int line, const char *msg)
 {
-  printf("TP_warning in %s(%s:%d) \n%s\n", func, basename(filename), line, msg);
+  printf("ParSHUM_warning in %s(%s:%d) \n%s\n", func, basename(filename), line, msg);
   GDB_BREAK;
 }
 
@@ -67,13 +67,13 @@ check_vlaid_perms(int *perms, int needed_pivots, int nb_pivots)
   int i;
   
   for(i = 0; i < needed_pivots; i++) {
-    if (perms[i] == TP_UNUSED_PIVOT) {
+    if (perms[i] == ParSHUM_UNUSED_PIVOT) {
       continue;
     } else if (perms[i] < 0) {
-      TP_warning(__FUNCTION__, __FILE__, __LINE__, "one of the pivots is negative ");
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "one of the pivots is negative ");
       continue;
     } else if (perms[i] >= needed_pivots) { 
-      TP_warning(__FUNCTION__, __FILE__, __LINE__, "one of the pivots is larger then n ");
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "one of the pivots is larger then n ");
       continue;
     }      
   }
@@ -89,7 +89,7 @@ check_perms_and_invr_perms(int *perms, int *invr_perms, int nb_pivots, char *nam
     if (invr_perms[perms[i]] != i ) {
       snprintf(mess, 2048, "%s_perm[%d] = %d but invr_%s_perm[%d] = %d",
 	       name, i, perms[i], name, perms[i], invr_perms[perms[i]]);
-      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
     }
 }
 
@@ -120,33 +120,33 @@ create_randomize(int n)
   return vect;
 }
 
-TP_overlaps
+ParSHUM_overlaps
 check_overalping_regions(long r1_start, long r1_end,
                          long r2_start, long r2_end)
 {
   if(r1_start <= r2_start && r1_end > r2_start) {
     if(r1_end >= r2_end) 
-      return TP_overlap_total;
+      return ParSHUM_overlap_total;
     else 
-      return TP_overlap_begin;
+      return ParSHUM_overlap_begin;
   }
   
   if(r1_start >= r2_start && r1_end <= r2_end)
-    return TP_overlap_total;
+    return ParSHUM_overlap_total;
   
   if(r1_start < r2_end && r1_end >= r2_end) {
     if(r1_start <= r2_start) 
-      return TP_overlap_total;
+      return ParSHUM_overlap_total;
     else 
-      return TP_overlap_end;
+      return ParSHUM_overlap_end;
   }
 
-  return TP_overlap_none;
+  return ParSHUM_overlap_none;
 }
 
 
 void
-TP_check_counters(int counter, int *array, int *used,
+ParSHUM_check_counters(int counter, int *array, int *used,
 		  int base, int size, int n)
 {
   int i, nb_elem = n * 2 * size;
@@ -155,26 +155,26 @@ TP_check_counters(int counter, int *array, int *used,
   for( i = 0; i < size; i++) 
     if (used[i])  {
       snprintf(mess, 2048, "in counter %d : used %d is still active", counter, i);
-      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
     }
   
   for( i = 0; i < nb_elem; i++) 
     if ( array[i] >= base) {
       snprintf(mess, 2048, "in counter %d : array[%d] = (%d) larger then base (%d)",
 	       counter, i, array[i], base);
-      TP_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
     }  
 }
 
 int 
-TP_rand_int(int *seed, int size)
+ParSHUM_rand_int(int *seed, int size)
 {
   *seed = *seed * 1103515245 + 12345;
   return (*seed /65536) % size;
 }
 
 double
-TP_rand_double(int *seed) 
+ParSHUM_rand_double(int *seed) 
 {
-  return fabs((double) TP_rand_int(seed, TP_RAND_MAX) / (double) TP_RAND_MAX);
+  return fabs((double) ParSHUM_rand_int(seed, ParSHUM_RAND_MAX) / (double) ParSHUM_RAND_MAX);
 }

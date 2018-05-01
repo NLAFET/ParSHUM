@@ -1,13 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "TP_U_matrix.h"
+#include "ParSHUM_U_matrix.h"
 
 
-TP_U_matrix 
-TP_U_matrix_create(TP_matrix A, double extra_space)
+ParSHUM_U_matrix 
+ParSHUM_U_matrix_create(ParSHUM_matrix A, double extra_space)
 {
   int i, n = A->n;
-  TP_U_matrix self = calloc(1, sizeof(*self));
+  ParSHUM_U_matrix self = calloc(1, sizeof(*self));
   self->col     = calloc((size_t) n, sizeof(*self->col));
   self->n       = n;
   
@@ -24,8 +24,8 @@ TP_U_matrix_create(TP_matrix A, double extra_space)
 }
 
 void 
-TP_U_matrix_solve(TP_U_matrix U, TP_matrix D, TP_vector rhs,
-		  int *col_perms, int *row_perms, int nb_dense_pivots)
+ParSHUM_U_matrix_solve(ParSHUM_U_matrix U, ParSHUM_matrix D, ParSHUM_vector rhs,
+		       int *col_perms, int *row_perms, int nb_dense_pivots)
 {
   int col, n = U->n, i;
   double *rhs_val = rhs->vect;
@@ -59,7 +59,7 @@ TP_U_matrix_solve(TP_U_matrix U, TP_matrix D, TP_vector rhs,
 
 /* TODO: take an argument, and doulbe allocated as long as it is smaller */
 void
-TP_U_col_realloc(U_col *self)
+ParSHUM_U_col_realloc(U_col *self)
 {
   self->allocated *=  2;
   self->val        = realloc(self->val, (size_t) self->allocated * sizeof(*self->val));
@@ -67,7 +67,7 @@ TP_U_col_realloc(U_col *self)
 }
 
 void
-TP_U_matrix_print(TP_U_matrix self, char *mess)
+ParSHUM_U_matrix_print(ParSHUM_U_matrix self, char *mess)
 {
   int n = self->n, i, j;
   fprintf(stdout, "%s\n", mess);
@@ -86,7 +86,7 @@ TP_U_matrix_print(TP_U_matrix self, char *mess)
 }
 
 void
-TP_U_matrix_destroy(TP_U_matrix self)
+ParSHUM_U_matrix_destroy(ParSHUM_U_matrix self)
 {
   int i, n = self->n;
 
