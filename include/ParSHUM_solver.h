@@ -94,11 +94,10 @@ void           ParSHUM_solver_init(ParSHUM_solver self);
 void           ParSHUM_solver_read_matrix(ParSHUM_solver self);
 void           ParSHUM_solver_factorize(ParSHUM_solver self);
 void           ParSHUM_solver_solve(ParSHUM_solver self, ParSHUM_vector rhs);
-void           ParSHUM_solver_iterative_refinement(ParSHUM_solver self, ParSHUM_vector X, 
-						   ParSHUM_vector rhs, double wanted_precision);
+/* void           ParSHUM_solver_iterative_refinement(ParSHUM_solver self, ParSHUM_vector X,  */
+/*     						      ParSHUM_vector rhs, double wanted_precision); */
 void           ParSHUM_solver_parse_args(ParSHUM_solver self, int argc, char **argv);
-void           ParSHUM_solver_copmpute_norms(ParSHUM_solver self,       ParSHUM_vector X,
-					     ParSHUM_vector X_computed, ParSHUM_vector rhs);
+void           ParSHUM_solver_compute_norms(ParSHUM_solver self, ParSHUM_vector X, ParSHUM_vector rhs);
 void           ParSHUM_solver_alloc_counters(ParSHUM_solver solver, int **col_count, int **row_count);
 void           ParSHUM_solver_dealloc_counters(ParSHUM_solver solver, int *col_count, int *row_count);
 

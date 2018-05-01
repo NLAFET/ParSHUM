@@ -71,8 +71,7 @@ int
 check_ParSHUM_with_plasma_perm(int argc, char **argv)
 {
   ParSHUM_solver plasma;
-  ParSHUM_vector X, rhs, sol_plasma, sol_TP;
-  int i;
+  ParSHUM_vector X, sol_plasma, sol_ParSHUM;
   
   plasma = ParSHUM_solver_create();
   ParSHUM_solver_parse_args(plasma, argc, argv);
@@ -84,23 +83,16 @@ check_ParSHUM_with_plasma_perm(int argc, char **argv)
   ParSHUM_solver_init(plasma);
   
   X   = ParSHUM_vector_create(plasma->A->n);
-  rhs = ParSHUM_vector_create(plasma->A->n);
-  sol_plasma = ParSHUM_vector_create(plasma->A->n);
-  sol_TP     = ParSHUM_vector_create(plasma->A->n);
+  sol_plasma  = ParSHUM_vector_create(plasma->A->n);
+  sol_ParSHUM = ParSHUM_vector_create(plasma->A->n);
   
-  if (plasma->exe_parms->RHS_file)
-    ParSHUM_vector_read_file(X, plasma->exe_parms->RHS_file);
-  else 
-    for(i=0; i < plasma->A->n; i++)
-      X->vect[i] = (i+1) * 10;
-  ParSHUM_vector_memset(rhs, 0.0);
-  ParSHUM_matrix_SpMV(plasma->A, X, rhs);
-  ParSHUM_vector_copy(rhs, sol_plasma);
+  ParSHUM_vector_read_file(X, plasma->exe_parms->RHS_file);
+  ParSHUM_vector_copy(X, sol_plasma);
 
   ParSHUM_solver_factorize(plasma);
   ParSHUM_solver_solve(plasma, sol_plasma);
-  ParSHUM_solver_copmpute_norms(plasma, X, sol_plasma, rhs);
-  ParSHUM_solver_iterative_refinement(plasma, X, rhs, 0.0);
+
+  ParSHUM_solver_compute_norms(plasma, X, sol_plasma);
 
   ParSHUM_solver_finalize(plasma);
 
@@ -116,21 +108,20 @@ check_ParSHUM_with_plasma_perm(int argc, char **argv)
   debug_solver->exe_parms->nb_previous_pivots  = 5;
   ParSHUM_solver_init(debug_solver);
 
-  ParSHUM_vector_permute(rhs, plasma_perms);
-  ParSHUM_vector_copy(rhs, sol_TP);
-  ParSHUM_solver_factorize(debug_solver);
-  ParSHUM_solver_solve(debug_solver, sol_TP);
+  ParSHUM_vector_permute(X, plasma_perms);
+  ParSHUM_vector_copy(X, sol_ParSHUM);
 
-  ParSHUM_solver_copmpute_norms(debug_solver, X, sol_TP, rhs);
-  ParSHUM_solver_iterative_refinement(debug_solver, X, rhs, 0.0);
-  
+  ParSHUM_solver_factorize(debug_solver);
+  ParSHUM_solver_solve(debug_solver, sol_ParSHUM);
+
+  ParSHUM_solver_compute_norms(debug_solver, X, sol_ParSHUM);
+
   ParSHUM_solver_finalize(debug_solver);
 
   free(plasma_perms);
   ParSHUM_vector_destroy(X);
-  ParSHUM_vector_destroy(rhs);
   ParSHUM_vector_destroy(sol_plasma);
-  ParSHUM_vector_destroy(sol_TP);
+  ParSHUM_vector_destroy(sol_ParSHUM);
   ParSHUM_solver_destroy(debug_solver);
   ParSHUM_solver_destroy(plasma);
 
@@ -141,8 +132,7 @@ int
 check_dense_with_ParSHUM_perm(int argc, char **argv)
 {
   ParSHUM_solver self;
-  ParSHUM_vector X, rhs, sol_TP, sol_dense;
-  int i;
+  ParSHUM_vector X, sol_ParSHUM, sol_dense;
   
   self = ParSHUM_solver_create();
   ParSHUM_solver_parse_args(self, argc, argv);
@@ -153,23 +143,16 @@ check_dense_with_ParSHUM_perm(int argc, char **argv)
   ParSHUM_solver_init(self);
   
   X   = ParSHUM_vector_create(self->A->n);
-  rhs = ParSHUM_vector_create(self->A->n);
-  sol_TP    = ParSHUM_vector_create(self->A->n);
-  sol_dense = ParSHUM_vector_create(self->A->n);
+  sol_ParSHUM = ParSHUM_vector_create(self->A->n);
+  sol_dense   = ParSHUM_vector_create(self->A->n);
   
-  if (self->exe_parms->RHS_file)
-    ParSHUM_vector_read_file(X, self->exe_parms->RHS_file);
-  else 
-    for(i=0; i < self->A->n; i++)
-      X->vect[i] = i * 10;
-  ParSHUM_vector_memset(rhs, 0.0);
-  ParSHUM_matrix_SpMV(self->A, X, rhs);
-  ParSHUM_vector_copy(rhs, sol_TP);
+  ParSHUM_vector_read_file(X, self->exe_parms->RHS_file);
+  ParSHUM_vector_copy(X, sol_ParSHUM);
+  ParSHUM_vector_copy(X, sol_dense);
 
   ParSHUM_solver_factorize(self);
-  ParSHUM_solver_solve(self, sol_TP);
-  ParSHUM_solver_copmpute_norms(self, X, sol_TP, rhs);
-  ParSHUM_solver_iterative_refinement(self, X, rhs, 0.0);
+  ParSHUM_solver_solve(self, sol_ParSHUM);
+  ParSHUM_solver_compute_norms(self, X, sol_ParSHUM);
 
   ParSHUM_solver_finalize(self);
  
@@ -187,19 +170,16 @@ check_dense_with_ParSHUM_perm(int argc, char **argv)
 
   ParSHUM_solver_init(dense_solver);
 
-  ParSHUM_vector_copy(rhs, sol_dense);
   ParSHUM_solver_factorize(dense_solver);
 
   ParSHUM_solver_solve(dense_solver, sol_dense);
 
-  ParSHUM_solver_copmpute_norms(dense_solver, X, sol_dense, rhs);
-  ParSHUM_solver_iterative_refinement(dense_solver, X, rhs, 0.0);
+  ParSHUM_solver_compute_norms(dense_solver, X, sol_dense);
 
   ParSHUM_solver_finalize(dense_solver);
  
   ParSHUM_vector_destroy(X);
-  ParSHUM_vector_destroy(rhs);
-  ParSHUM_vector_destroy(sol_TP);
+  ParSHUM_vector_destroy(sol_ParSHUM);
   ParSHUM_vector_destroy(sol_dense);
   ParSHUM_solver_destroy(dense_solver);
   ParSHUM_solver_destroy(self);
@@ -497,7 +477,7 @@ ParSHUM_solver_run_group(ParSHUM_solver solver, ParSHUM_parm_type type,
   ParSHUM_matrix A = ParSHUM_matrix_create();
   ParSHUM_exe_parms exe_parms = solver->exe_parms;
   char *file_ext = strrchr(exe_parms->matrix_file, '.');
-  ParSHUM_vector X, rhs, sol;
+  ParSHUM_vector X, rhs;
   char *output_runs_file = get_outfile_prefix(exe_parms, type);
   char filename[PATH_LENGTH];
   double current_val;
@@ -517,15 +497,8 @@ ParSHUM_solver_run_group(ParSHUM_solver solver, ParSHUM_parm_type type,
   solver->A = A;
   X   = ParSHUM_vector_create(A->n);
   rhs = ParSHUM_vector_create(A->n);
-  sol = ParSHUM_vector_create(A->n);
 
-  if (solver->exe_parms->RHS_file)
-    ParSHUM_vector_read_file(X, solver->exe_parms->RHS_file);
-  else 
-    for(i=0; i<X->n; i++)
-      X->vect[i] = (1+i) * 200;
-  ParSHUM_vector_memset(rhs, 0.0);
-  ParSHUM_matrix_SpMV(A, X, rhs);
+  ParSHUM_vector_read_file(X, solver->exe_parms->RHS_file);
   
   ParSHUM_verbose_print_parms_raw(exe_parms, type, file);
   for( i = 0; i < nb_steps; i++)
@@ -546,11 +519,11 @@ ParSHUM_solver_run_group(ParSHUM_solver solver, ParSHUM_parm_type type,
       update_exe_parms(run->exe_parms, type, init_val, i, (void *) &current_val, inc);
       
       ParSHUM_solver_init(run);
-      ParSHUM_vector_copy(rhs, sol);
+      ParSHUM_vector_copy(X, rhs);
       ParSHUM_solver_factorize(run);
-      ParSHUM_solver_solve(run, sol);
+      ParSHUM_solver_solve(run, rhs);
       
-      ParSHUM_solver_copmpute_norms(run, X, sol, rhs);
+      ParSHUM_solver_compute_norms(run, X, rhs);
       
       ParSHUM_solver_finalize(run);
       ParSHUM_verbose_print_group_run(run->verbose, type, (void *) &current_val, i, file);
@@ -560,7 +533,6 @@ ParSHUM_solver_run_group(ParSHUM_solver solver, ParSHUM_parm_type type,
   
   ParSHUM_vector_destroy(X);
   ParSHUM_vector_destroy(rhs);
-  ParSHUM_vector_destroy(sol);
 
   ParSHUM_matrix_destroy(A);
   free(output_runs_file);
@@ -1404,68 +1376,65 @@ ParSHUM_solver_solve(ParSHUM_solver self, ParSHUM_vector RHS)
 }
 
 void
-ParSHUM_solver_copmpute_norms(ParSHUM_solver self, ParSHUM_vector X,
-			      ParSHUM_vector X_computed, ParSHUM_vector rhs)
+ParSHUM_solver_compute_norms(ParSHUM_solver self,
+			     ParSHUM_vector X,
+			     ParSHUM_vector rhs)
 {
   if (self->verbose->reason & ParSHUM_reason_dense_too_large)
     return;
   double x_norm, A_norm, b_norm;
-  ParSHUM_vector r = ParSHUM_vector_create(X->n), tmp = ParSHUM_vector_create(X->n);
+  ParSHUM_vector r = ParSHUM_vector_create(X->n);
 
-  ParSHUM_vector_add(X, 1.00, X_computed, -1.00, tmp);
-  self->verbose->forward_error = ParSHUM_vector_2norm(tmp) / ParSHUM_vector_2norm(X);
-  
   /* || r = Ax - b || */
-  ParSHUM_matrix_SpMV(self->A, X_computed, r);
+  ParSHUM_matrix_SpMV(self->A, X, r);
   ParSHUM_vector_add(r, 1.00, rhs, -1.00, r);
   self->verbose->backward_error = ParSHUM_vector_2norm(r);
 
   A_norm  = ParSHUM_matrix_get_norm(self->A);
-  x_norm  = ParSHUM_vector_2norm(X_computed);
+  x_norm  = ParSHUM_vector_2norm(X);
   b_norm  = ParSHUM_vector_2norm(rhs);
 
   self->verbose->backward_error /= A_norm * x_norm + b_norm;
 
-  ParSHUM_vector_destroy(tmp);
   ParSHUM_vector_destroy(r);
 }
 
-void
-ParSHUM_solver_iterative_refinement(ParSHUM_solver self, 
-				    ParSHUM_vector X, 
-				    ParSHUM_vector rhs,
-				    double wanted_precision)
-{
-  if (self->verbose->reason & ParSHUM_reason_dense_too_large)
-    return;
-  ParSHUM_vector sol = ParSHUM_vector_create(self->A->n);
-  ParSHUM_vector tmp = ParSHUM_vector_create(self->A->n);
-  int i = 0;
+/* void */
+/* ParSHUM_solver_iterative_refinement(ParSHUM_solver self,  */
+/* 				    ParSHUM_vector X,  */
+/* 				    ParSHUM_vector rhs, */
+/* 				    double wanted_precision) */
+/* { */
+/*   if (self->verbose->reason & ParSHUM_reason_dense_too_large) */
+/*     return; */
+/*   ParSHUM_vector sol = ParSHUM_vector_create(self->A->n); */
+/*   ParSHUM_vector tmp = ParSHUM_vector_create(self->A->n); */
+/*   int i = 0; */
 
-  ParSHUM_vector_copy(rhs, sol);
-  ParSHUM_solver_solve(self, sol);
-  ParSHUM_solver_copmpute_norms(self, X, sol, rhs);
-  printf("iteration %d: backward error = %e and forward error = %e\n", 
-	 i++,
-	 self->verbose->backward_error,
-	 self->verbose->forward_error);
+/*   ParSHUM_vector_copy(rhs, sol); */
+/*   ParSHUM_solver_solve(self, sol); */
+/*   ParSHUM_solver_copmpute_norms(self, X, sol, rhs); */
+/*   printf("iteration %d: backward error = %e and forward error = %e\n",  */
+/* 	 i++, */
+/* 	 self->verbose->backward_error, */
+/* 	 self->verbose->forward_error); */
 
-  while ( i < 20 &&  self->verbose->backward_error > wanted_precision) {
-    ParSHUM_matrix_SpMV(self->A, sol, tmp);
-    ParSHUM_vector_add(rhs, 1.00, tmp, -1.00, tmp);
-    ParSHUM_solver_solve(self, tmp);
-    ParSHUM_vector_add(sol, 1.00, tmp, 1.00, sol);
-	 
-    ParSHUM_solver_copmpute_norms(self, X, sol, rhs);
-    printf("iteration %d: backward error = %e and forward error = %e\n", 
-	   i++,
-	   self->verbose->backward_error,
-	   self->verbose->forward_error);
-  }
+/*   while ( i < 20 &&  self->verbose->backward_error > wanted_precision) { */
+/*     ParSHUM_matrix_SpMV(self->A, sol, tmp); */
+/*     ParSHUM_vector_add(rhs, 1.00, tmp, -1.00, tmp); */
+/*     ParSHUM_solver_solve(self, tmp); */
+/*     ParSHUM_vector_add(sol, 1.00, tmp, 1.00, sol); */
+    
+/*     ParSHUM_solver_copmpute_norms(self, X, sol, rhs); */
+/*     printf("iteration %d: backward error = %e and forward error = %e\n",  */
+/* 	   i++, */
+/* 	   self->verbose->backward_error, */
+/* 	   self->verbose->forward_error); */
+/*   } */
 
-  ParSHUM_vector_destroy(sol);
-  ParSHUM_vector_destroy(tmp);
-}
+/*   ParSHUM_vector_destroy(sol); */
+/*   ParSHUM_vector_destroy(tmp); */
+/* } */
 
 void 
 ParSHUM_solver_finalize(ParSHUM_solver self)

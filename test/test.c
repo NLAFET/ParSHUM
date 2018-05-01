@@ -16,37 +16,42 @@ int
 main(int argc, char **argv) 
 {
   ParSHUM_solver self;
-  ParSHUM_vector X, rhs, sol;
-  int i;
+  ParSHUM_vector X, B;
   
+  /* Create the solver */
   self = ParSHUM_solver_create();
+
+  /* Parse the arguments */
   ParSHUM_solver_parse_args(self, argc, argv);
+  /* Read the matrix */
   ParSHUM_solver_read_matrix(self);
+
+  /* Initialize the vectors */
+  X = ParSHUM_vector_create(self->A->n);
+  B = ParSHUM_vector_create(self->A->n);  
+  ParSHUM_vector_read_file(X, self->exe_parms->RHS_file);
+
+  /* copy the vector X in B */
+  ParSHUM_vector_copy(X, B);
+  
+  /* Initialize the solver */
   ParSHUM_solver_init(self);
-  
-  X   = ParSHUM_vector_create(self->A->n);
-  rhs = ParSHUM_vector_create(self->A->n);
-  sol = ParSHUM_vector_create(self->A->n);
-  
-  if (self->exe_parms->RHS_file)
-    ParSHUM_vector_read_file(X, self->exe_parms->RHS_file);
-  else 
-    for(i=0; i<X->n; i++)
-      X->vect[i] = (1+i) * 200;
-  ParSHUM_vector_memset(rhs, 0.0);
-  ParSHUM_matrix_SpMV(self->A, X, rhs);
-  ParSHUM_vector_copy(rhs, sol);
-  
+
+  /* Perform the factorization */
   ParSHUM_solver_factorize(self);
   
-  ParSHUM_solver_solve(self, sol);
-  ParSHUM_solver_copmpute_norms(self, X, sol, rhs);
+  /* Perform the solve operation */
+  ParSHUM_solver_solve(self, B);
 
+  /* Compute the norms */
+  ParSHUM_solver_compute_norms(self, B, X);
+
+  /* Finalize the solver */
   ParSHUM_solver_finalize(self);
 
+  /* Free all the data */
   ParSHUM_vector_destroy(X);
-  ParSHUM_vector_destroy(rhs);
-  ParSHUM_vector_destroy(sol);
+  ParSHUM_vector_destroy(B);
   ParSHUM_solver_destroy(self);
 
   return 0;

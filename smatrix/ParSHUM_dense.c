@@ -40,14 +40,25 @@ ParSHUM_vector_read_mtl_file(ParSHUM_vector self, char *filename)
   }
 }
 
+/* TODO: rewrite this bullshit */
 void 
 ParSHUM_vector_read_file(ParSHUM_vector self, char *filename)
 {
-  char *file_ext = strrchr(filename, '.');
-  if (!strcmp(file_ext, ".mtl"))
-    ParSHUM_vector_read_mtl_file(self, filename);
-  else 
-    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsupported vector file");
+  char *file_ext;
+  
+  if (filename) {
+    file_ext = strrchr(filename, '.');
+
+    if (!strcmp(file_ext, ".mtl")) {
+      ParSHUM_vector_read_mtl_file(self, filename);
+    } else   {
+      for(int i=0; i < self->n; i++)
+	self->vect[i] = (double) (1+i);
+    }
+  }  else { 
+    for(int i=0; i < self->n; i++)
+      self->vect[i] = (double) (1+i);
+  }
 }
 
 void
