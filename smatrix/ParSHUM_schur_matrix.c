@@ -706,12 +706,12 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   U_col *U_col = &U->col[col];
   
   CSC_struct *CSC = &S->CSC[col];
-  int S_col_nb_elem      = CSC->nb_elem;
-  int U_nb_elem          = n;
-  int S_nb_elem          = 0;
-  int *S_rows            = CSC->row;
+  int S_col_nb_elem = CSC->nb_elem;
+  int U_nb_elem     = n;
+  int S_nb_elem     = 0;
+  int *S_rows       = CSC->row;
+  double *S_vals    = CSC->val;
   int *U_rows;
-  double *S_vals         = CSC->val;
   double *U_vals;
   long needed_size;
   

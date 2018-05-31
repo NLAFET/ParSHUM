@@ -970,7 +970,7 @@ void
 ParSHUM_solver_check_counters(ParSHUM_solver self)
 {
   int i; 
-  
+   
   for (i = 0; i < self->nb_counters; i++) 
     ParSHUM_check_counters(i, self->counters[i]->array, self->counters[i]->used_counters,
 		      self->done_pivots + 1, self->size_counters, self->A->n);
@@ -1268,10 +1268,9 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
        ParSHUM_verbose_start_timing(&step->timing_step);
        ParSHUM_verbose_start_timing(&step->timing_pivot_search);
        ParSHUM_solver_find_pivot_set(self);
-       /* if ( !self->nb_row_singletons && !self->nb_col_singletons) */
        previous_pivots[nb_pivot_blocks++ % nb_previous_pivots] = self->found_pivots - self->done_pivots;
        ParSHUM_verbose_stop_timing(&step->timing_pivot_search);
-       
+
        ParSHUM_verbose_start_timing(&step->timing_apply_perms);
        ParSHUM_solver_update_matrix(self);
        ParSHUM_verbose_stop_timing(&step->timing_apply_perms);
@@ -1281,7 +1280,7 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
 
   if (verbose->reason & ParSHUM_reason_dense_too_large)
     return;
-  
+
   ParSHUM_verbose_start_timing(&verbose->timing_convert_schur);
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_CONVERT_MATRIX);
   if ( self->debug & ParSHUM_CHECK_DENSE_W_ParSHUM_PERM )  {

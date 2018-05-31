@@ -30,7 +30,7 @@ ParSHUM_read_rutherford_boeing(ParSHUM_matrix self, const char*filename)
   struct spral_rb_read_options options;
 
   spral_rb_default_read_options(&options);
-  options.values = 4;
+  /* options.values = 4; */
 
   spral_rb_read(filename, &self->handle, &matrix_type, &self->m, &self->n, &self->col_ptr,
 		&self->row, &self->val, &options, NULL, NULL, NULL);
