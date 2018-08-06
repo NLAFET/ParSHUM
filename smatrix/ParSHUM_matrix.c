@@ -194,6 +194,62 @@ ParSHUM_matrix_realloc(ParSHUM_matrix self)
     }
 }
 
+void 
+ParSHUM_matrix_convert(ParSHUM_matrix self, ParSHUM_matrix_type type)
+{
+  int n = self->n, i, j;
+  long nnz = self->nnz;
+  long *row_ptr = calloc((size_t) n + 1, sizeof(*row_ptr));
+  int  *cols    = malloc((size_t) nnz * sizeof(*cols));
+  double *vals  = malloc((size_t) nnz * sizeof(*vals));
+  int *rows = self->row;
+  long *col_ptr = self->col_ptr;
+  int sizes[n];
+  memset(sizes, 0, (size_t) n*sizeof(*sizes));
+
+  if (self->type == type) 
+    return;
+  if (type != ParSHUM_CSR_matrix)  
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "this convertion is not supported");
+
+  if (self->type != ParSHUM_CSC_matrix && self->type != ParSHUM_Rutherford_matrix)  
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "this convertion is not supported");
+  
+  for( i = 0; i < n; i++)  
+    for(j = col_ptr[i]; j < col_ptr[i+1]; j++)
+      sizes[rows[j]]++;
+
+  for( i = 0; i < n; i++) {
+    int tmp = row_ptr[i] + sizes[i];
+    sizes[i] = 0;
+    row_ptr[i+1] += tmp;
+  }
+
+  if ( row_ptr[n] != nnz) 
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "something went wrong");
+  
+  for( i = 0; i < n; i++)  
+    for(j = col_ptr[i]; j < col_ptr[i+1]; j++)
+      {
+	int index = row_ptr[rows[j]] + sizes[rows[j]]++;
+	cols[index] = i;
+	vals[index] = self->val[j];
+      }    
+
+  /* if (self->type == ParSHUM_Rutherford_matrix) { */
+  /*   /\* spral_rb_free_handle(&self->handle); *\/ */
+  /* } else  */if (self->type == ParSHUM_CSC_matrix) {
+    free(self->row);
+    free(self->col_ptr);
+    free(self->val);
+  }
+
+  self->type = type;
+  self->col = cols;
+  self->row_ptr = row_ptr;
+  self->val = vals;
+}
+
 double 
 ParSHUM_matrix_get_norm(ParSHUM_matrix self)
 {

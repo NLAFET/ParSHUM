@@ -4,6 +4,8 @@ project(Tournament_Pivoting C)
 find_package(PkgConfig REQUIRED)
 FIND_PACKAGE(OpenMP REQUIRED)
 pkg_search_module(PLASMA QUIET plasma)
+find_package(MPI REQUIRED)
+
 
 if ( NOT PLASMA_FOUND) 
   MESSAGE(FATAL_ERROR "PLASMA is not found. We use pkg to find PLAsMA. Please install PLASMA and include the path to the plasma.pc file int PKG_CONFIG_PATH environment variable")
@@ -14,11 +16,12 @@ set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 set(LIBRARY_OUTPUT_PATH lib)
 SET(CMAKE_BUILD_TYPE DEBUG) 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -lm -Wall -O3 ")
-#SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -lm -Wall  -ggdb ")
+#SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -lm -Wall -O3 ")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -lm -Wall  -ggdb ")
 
 # The following folder will be included
 include_directories(include)
+include_directories(/home/cseg/numanlys/scarf523/install/zoltan/include)
 
 # Plasma
 pkg_check_modules(Plasma REQUIRED plasma )
@@ -40,6 +43,8 @@ target_link_libraries(Tournament_Pivoting pthread)
 target_include_directories(Tournament_Pivoting PUBLIC ${PLASMA_INCLUDE_DIRS})
 target_compile_options(Tournament_Pivoting PUBLIC ${PLASMA_CFLAGS_OTHER})
 
+include_directories(SYSTEM ${MPI_INCLUDE_PATH})
+
 if( SPRAL_DIR )
   target_include_directories(Tournament_Pivoting PUBLIC ${SPRAL_DIR}/include)
   link_directories(${SPRAL_DIR} ${SPRAL_DIR}/lib/)
@@ -48,11 +53,21 @@ if( SPRAL_DIR )
   message(FATAL_ERROR "SPRAL_DIR is not defined. Use -D SPRAL_DIR to provide the root directory of the SPRAL install")
 endif()
 
+target_include_directories(Tournament_Pivoting PUBLIC /home/cseg/numanlys/scarf523/install/zoltan/include)
+link_directories(${SPRAL_DIR} /home/cseg/numanlys/scarf523/install/zoltan/lib)
+target_link_libraries(Tournament_Pivoting zoltan)
+
+
 # Test driver: tp_test
 add_executable(tp_test ${PROJECT_SOURCE_DIR}/test/test.c)
 add_executable(rewrite ${PROJECT_SOURCE_DIR}/test/rewrite.c)
 add_executable(test_paje ${PROJECT_SOURCE_DIR}/test/test_paje.c)
+add_executable(zoltan_test ${PROJECT_SOURCE_DIR}/test/zoltan.c)
 
 target_link_libraries(tp_test Tournament_Pivoting)
 target_link_libraries(rewrite Tournament_Pivoting)
 target_link_libraries(test_paje Tournament_Pivoting)
+target_link_libraries(zoltan_test Tournament_Pivoting)
+target_link_libraries(zoltan_test ${MPI_C_LIBRARIES})
+target_link_libraries(zoltan_test /home/cseg/numanlys/scarf523/install/zoltan/lib/libzoltan.a)
+target_link_libraries(zoltan_test /home/cseg/numanlys/scarf523/install/patoh/lib/libpatoh.a)
