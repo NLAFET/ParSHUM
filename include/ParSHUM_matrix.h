@@ -39,14 +39,14 @@ void      ParSHUM_matrix_copy(ParSHUM_matrix src, ParSHUM_matrix dest);
 double    ParSHUM_matrix_get_val(ParSHUM_matrix A, int row, int col);
 int      *ParSHUM_matrix_rows_sizes(ParSHUM_matrix self);
 void      ParSHUM_matrix_print(ParSHUM_matrix self, char *mess);
+void      ParSHUM_matrix_print_as_dense(ParSHUM_matrix self, char *mess);
 void      ParSHUM_matrix_realloc(ParSHUM_matrix self);
 
 void      ParSHUM_matrix_solve_L(ParSHUM_matrix L, ParSHUM_vector X, int *perms);
 void      ParSHUM_matrix_solve_UD(ParSHUM_matrix U, ParSHUM_matrix D,  ParSHUM_vector rhs, int *perms);
 
-ParSHUM_matrix ParSHUM_matrix_permute(ParSHUM_matrix A, int *col_perm, int *row_perm);
+ParSHUM_matrix ParSHUM_matrix_permute(ParSHUM_matrix A, int *col_perm, int *invr_row_perm);
 void           ParSHUM_matrix_convert(ParSHUM_matrix self, ParSHUM_matrix_type type);
-
 
 void      ParSHUM_matrix_SpMV(ParSHUM_matrix A, ParSHUM_vector x, ParSHUM_vector y);
 double    ParSHUM_matrix_get_norm(ParSHUM_matrix self);

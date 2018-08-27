@@ -313,6 +313,51 @@ ParSHUM_matrix_print(ParSHUM_matrix self, char *mess)
   printf("\n");
 }
 
+void 
+ParSHUM_matrix_print_as_dense(ParSHUM_matrix self, char *mess)
+{
+  int i, j, k, n = self->n, m = self->m;
+  if ( self->type !=  ParSHUM_CSC_matrix &&  self->type != ParSHUM_Rutherford_matrix) 
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"this function is implemented for CSC matrix only");
+  long *col_ptr = self->col_ptr;
+  int  *rows    = self->row;
+
+  printf("%s\n", mess);
+  printf("    ");
+  for(i = 0; i < n; i++) 
+    if (i < 10)
+      printf("%d  ",i);
+    else
+      printf("%d ",i);
+  printf("\n    ");
+  for(i = 0; i < n; i++) 
+    printf("---");
+  printf("\n");
+  
+  for(i = 0; i < m; i++)
+    {
+      if (i < 10)
+	printf("%d   ",i);
+      else
+	printf("%d  ",i);
+      
+      for(j = 0; j < n; j++)
+	{
+	  int exists = 0;
+	  /* printf ("k from %d to %d\t", col_ptr[j], col_ptr[j+1]); */
+	  for(k = col_ptr[j]; k < col_ptr[j+1]; k++)  
+	    if (rows[k] == i) {
+	      exists = 1;
+	      break;
+	    }
+	  if (exists == 1)
+	    printf("*  ");
+	  else
+	    printf("   ");
+	}
+      printf("\n");
+    }
+}
 
 int *
 ParSHUM_matrix_rows_sizes(ParSHUM_matrix self)
@@ -399,9 +444,14 @@ ParSHUM_matrix_SpMV(ParSHUM_matrix A, ParSHUM_vector x, ParSHUM_vector y)
     }
 }
 
+/* TODO: fix the check_plasma driver so it gives the right permutation on input */
 ParSHUM_matrix
-ParSHUM_matrix_permute(ParSHUM_matrix A, int *col_perm, int *row_perm)
+ParSHUM_matrix_permute(ParSHUM_matrix A, int *col_perm, int *invr_row_perm)
 {
+  if ( A->type != ParSHUM_CSC_matrix &&
+       A->type != ParSHUM_Rutherford_matrix ) 
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsuported type of matrix for this function");
+
   ParSHUM_matrix self = ParSHUM_matrix_create();
   int n = A->n, m = A->m, i, j;
 
@@ -417,7 +467,7 @@ ParSHUM_matrix_permute(ParSHUM_matrix A, int *col_perm, int *row_perm)
       self->col_ptr[i+1] = self->col_ptr[i] + (A_col_end - A_col_start);
       for(j = A_col_start; j < A_col_end; j++)  {
 	self->val[self_col_start  ] = A->val[j];
-	self->row[self_col_start++] = row_perm[A->row[j]];
+	self->row[self_col_start++] = invr_row_perm[A->row[j]];
       }
     }
 

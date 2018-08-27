@@ -9,12 +9,11 @@
 #include "ParSHUM_pivot_list.h" 
 #include "ParSHUM_auxiliary.h"
 
-
 static char *global_fname="hypergraph.txt";
 
 /* Structure to hold distributed hypergraph */
 
-typedef struct{
+typedef struct _HGRAPH_DATA{
   int numMyVertices;  /* number of vertices that I own initially */
   ZOLTAN_ID_TYPE *vtxGID;        /* global ID of these vertices */
 
@@ -25,14 +24,28 @@ typedef struct{
   ZOLTAN_ID_TYPE *nborGID;  /* Vertices of edge edgeGID[i] begin at nborGID[nborIndex[i]] */
 } HGRAPH_DATA;
 
+
+typedef struct _block_perms {
+  int *perms;
+  int *invr_perms;
+  int *sizes;
+  int n;
+  int nb_blocks;
+} *block_perms;
+block_perms get_row_blocks(ZOLTAN_ID_TYPE *GIDs, int n, int rank,
+			   int *init_block, int init_block_size, int nb_parts);
+block_perms get_col_blocks(ParSHUM_schur_matrix A, block_perms row_perms);
+block_perms get_col_blocks2(ParSHUM_schur_matrix A, block_perms row_perms);
+
+
 /* 4 application defined query functions.  If we were going to define
  * a weight for each hyperedge, we would need to define 2 more query functions.
  */
 
 static int get_number_of_vertices(void *data, int *ierr);
 static void get_vertex_list(void *data, int sizeGID, int sizeLID,
-            ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
-                  int wgt_dim, float *obj_wgts, int *ierr);
+			    ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
+			    int wgt_dim, float *obj_wgts, int *ierr);
 static void get_hypergraph_size(void *data, int *num_lists, int *num_nonzeroes,
                                 int *format, int *ierr);
 static void get_hypergraph(void *data, int sizeGID, int num_edges, int num_nonzeroes,
@@ -41,10 +54,10 @@ static void get_hypergraph(void *data, int sizeGID, int num_edges, int num_nonze
 
 /* Functions to read hypergraph in from file, distribute it, view it, handle errors */
 
-static int get_next_line(FILE *fp, char *buf, int bufsize);
-static int get_line_ints(char *buf, int bufsize, int *vals);
-static void input_file_error(int numProcs, int tag, int startProc);
-static void showHypergraph(int myProc, int numProc, int numIDs, ZOLTAN_ID_TYPE *GIDs, int *parts, int n);
+/* static int get_next_line(FILE *fp, char *buf, int bufsize); */
+/* static int get_line_ints(char *buf, int bufsize, int *vals); */
+/* static void input_file_error(int numProcs, int tag, int startProc); */
+/* static void showHypergraph(int myProc, int numProc, int numIDs, ZOLTAN_ID_TYPE *GIDs, int *parts, int n); */
 static void read_input_file(int myRank, int numProcs, char *fname, HGRAPH_DATA *data, ParSHUM_matrix A);
 
 static HGRAPH_DATA global_hg; 
@@ -60,7 +73,6 @@ main(int argc, char *argv[])
   ZOLTAN_ID_PTR importGlobalGids, importLocalGids, exportGlobalGids, exportLocalGids;
   int *importProcs, *importToPart, *exportProcs, *exportToPart;
   int *parts;
-  FILE *fp;
   HGRAPH_DATA hg;
 
   ParSHUM_matrix A = ParSHUM_matrix_create();
@@ -70,44 +82,28 @@ main(int argc, char *argv[])
   /******************************************************************
   ** Initialize MPI and Zoltan
   ******************************************************************/
-
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
   MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
 
   rc = Zoltan_Initialize(argc, argv, &ver);
 
-
-  if (myRank == 0)  {
-    if (!strcmp(file_ext, ".mtl"))
-      ParSHUM_read_mtl_file(A, argv[1]);
-    else  if (!strcmp(file_ext, ".rb"))
-      ParSHUM_read_rutherford_boeing(A, argv[1]);
-    else
-      ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsuported matrix file");
-    
-    ParSHUM_matrix_convert(A, ParSHUM_CSR_matrix);
-  }
-  
- 
   if (rc != ZOLTAN_OK){
     printf("sorry...\n");
     MPI_Finalize();
     exit(0);
   }
 
+  if (!strcmp(file_ext, ".mtl"))
+    ParSHUM_read_mtl_file(A, argv[1]);
+  else  if (!strcmp(file_ext, ".rb"))
+    ParSHUM_read_rutherford_boeing(A, argv[1]);
+  else
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsuported matrix file");
+  
   /******************************************************************
   ** Read hypergraph from input file and distribute it 
   ******************************************************************/
-
-  fp = fopen(global_fname, "r");
-  if (!fp){
-    if (myRank == 0) fprintf(stderr,"ERROR: Can not open %s\n",global_fname);
-    MPI_Finalize();
-    exit(1);
-  }
-  fclose(fp);
-
   read_input_file(myRank, numProcs, global_fname, &hg, A);
 
   /******************************************************************
@@ -116,11 +112,9 @@ main(int argc, char *argv[])
   ** govern the library's calculation.  See the Zoltan User's
   ** Guide for the definition of these and many other parameters.
   ******************************************************************/
-
   zz = Zoltan_Create(MPI_COMM_WORLD);
 
   /* General parameters */
-
   Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
   Zoltan_Set_Param(zz, "LB_METHOD", "HYPERGRAPH");   /* partitioning method */
   Zoltan_Set_Param(zz, "HYPERGRAPH_PACKAGE", "PHG"); /* version of method */
@@ -129,44 +123,44 @@ main(int argc, char *argv[])
   Zoltan_Set_Param(zz, "RETURN_LISTS", "ALL"); /* export AND import lists */
   Zoltan_Set_Param(zz, "OBJ_WEIGHT_DIM", "0"); /* use Zoltan default vertex weights */
   Zoltan_Set_Param(zz, "EDGE_WEIGHT_DIM", "0");/* use Zoltan default hyperedge weights */
+  /* NEW PARM */
+  Zoltan_Set_Param(zz, "RETURN_LISTS", "ALL");/* controls what is returned in the  output 
+						  arrays after the LB_partition call */
 
   /* PHG parameters  - see the Zoltan User's Guide for many more
    *   (The "REPARTITION" approach asks Zoltan to create a partitioning that is
    *    better but is not too far from the current partitioning, rather than partitioning 
    *    from scratch.  It may be faster but of lower quality that LB_APPROACH=PARTITION.)
   */
-
-  Zoltan_Set_Param(zz, "LB_APPROACH", "REPARTITION");
+  Zoltan_Set_Param(zz, "LB_APPROACH", "PARTITION");
 
   /* Application defined query functions */
-
   Zoltan_Set_Num_Obj_Fn(zz, get_number_of_vertices, &hg);
   Zoltan_Set_Obj_List_Fn(zz, get_vertex_list, &hg);
   Zoltan_Set_HG_Size_CS_Fn(zz, get_hypergraph_size, &hg);
   Zoltan_Set_HG_CS_Fn(zz, get_hypergraph, &hg);
-
+  
   /******************************************************************
   ** Zoltan can now partition the vertices of hypergraph.
   ** In this simple example, we assume the number of partitions is
   ** equal to the number of processes.  Process rank 0 will own
   ** partition 0, process rank 1 will own partition 1, and so on.
   ******************************************************************/
-
-  rc = Zoltan_LB_Partition(zz, /* input (all remaining fields are output) */
-        &changes,        /* 1 if partitioning was changed, 0 otherwise */ 
-        &numGidEntries,  /* Number of integers used for a global ID */
-        &numLidEntries,  /* Number of integers used for a local ID */
-        &numImport,      /* Number of vertices to be sent to me */
-        &importGlobalGids,  /* Global IDs of vertices to be sent to me */
-        &importLocalGids,   /* Local IDs of vertices to be sent to me */
-        &importProcs,    /* Process rank for source of each incoming vertex */
-        &importToPart,   /* New partition for each incoming vertex */
-        &numExport,      /* Number of vertices I must send to other processes*/
-        &exportGlobalGids,  /* Global IDs of the vertices I must send */
-        &exportLocalGids,   /* Local IDs of the vertices I must send */
-        &exportProcs,    /* Process to which I send each of the vertices */
-        &exportToPart);  /* Partition to which each vertex will belong */
-
+  rc = Zoltan_LB_Partition(zz,                 /* input (all remaining fields are output) */
+			   &changes,           /* 1 if partitioning was changed, 0 otherwise */ 
+			   &numGidEntries,     /* Number of integers used for a global ID */
+			   &numLidEntries,     /* Number of integers used for a local ID */
+			   &numImport,         /* Number of vertices to be sent to me */
+			   &importGlobalGids,  /* Global IDs of vertices to be sent to me */
+			   &importLocalGids,   /* Local IDs of vertices to be sent to me */
+			   &importProcs,       /* Process rank for source of each incoming vertex */
+			   &importToPart,      /* New partition for each incoming vertex */
+			   &numExport,         /* Number of vertices I must send to other processes*/
+			   &exportGlobalGids,  /* Global IDs of the vertices I must send */
+			   &exportLocalGids,   /* Local IDs of the vertices I must send */
+			   &exportProcs,       /* Process to which I send each of the vertices */
+			   &exportToPart);     /* Partition to which each vertex will belong */
+  
   if (rc != ZOLTAN_OK){
     printf("sorry...\n");
     MPI_Finalize();
@@ -175,37 +169,124 @@ main(int argc, char *argv[])
   }
 
 
+  for( i = 0; i < numProcs; i++)  {
+    if ( i == myRank) {
+      char mess[2048];
+      snprintf(mess, 2048, "on process %d exportGlobalGids", i);
+      print_int_array((int *) exportGlobalGids, numExport, mess);
+      snprintf(mess, 2048, "on process %d exportLocalGids", i);
+      print_int_array((int *) exportLocalGids, numExport, mess);
+      snprintf(mess, 2048, "on process %d exportProcs", i);
+      print_int_array((int *) exportProcs, numExport, mess);
+      snprintf(mess, 2048, "on process %d exportToPart", i);
+      print_int_array((int *) exportToPart, numExport, mess);
+      printf("************************************************\n\n");
+      snprintf(mess, 2048, "on process %d importGlobalGids", i);
+      print_int_array((int *) importGlobalGids, numImport, mess);
+      snprintf(mess, 2048, "on process %d importLocalGids", i);
+      print_int_array((int *) importLocalGids, numImport, mess);
+      snprintf(mess, 2048, "on process %d importProcs", i);
+      print_int_array((int *) importProcs, numImport, mess);
+      snprintf(mess, 2048, "on process %d importToPart", i);
+      print_int_array((int *) importToPart, numImport, mess);
+      printf("************************************************\n");
+      printf("************************************************\n");
+      printf("************************************************\n\n");
+      fflush(stdout);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+
   /******************************************************************
   ** Visualize the hypergraph partitioning before and after calling Zoltan.
   ******************************************************************/
-
   parts = (int *)malloc(sizeof(int) * hg.numMyVertices);
+  int_array_memset(parts, ParSHUM_UNUSED_PIVOT, hg.numMyVertices);
+
+  for( i = 0; i < numProcs; i++)  {
+    if ( i == myRank) {
+      char mess[2048];
+      snprintf(mess, 2048, "on process %d parts after calloc", i);
+      print_int_array((int *) parts, numExport, mess);
+      fflush(stdout);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
 
   for (i=0; i < hg.numMyVertices; i++){
     parts[i] = myRank;
   }
+  for( i = 0; i < numProcs; i++)  {
+    if ( i == myRank) {
+      char mess[2048];
+      snprintf(mess, 2048, "on process %d parts in the begining", i);
+      print_int_array((int *) parts, numExport, mess);
+      fflush(stdout);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
 
+  
   if (myRank== 0){
     printf("\nHypergraph partition before calling Zoltan\n");
   }
 
-  showHypergraph(myRank, numProcs, hg.numMyVertices, hg.vtxGID, parts, A->n);
+  /* showHypergraph(myRank, numProcs, hg.numMyVertices, hg.vtxGID, parts, A->n); */
 
   for (i=0; i < numExport; i++){
     parts[exportLocalGids[i]] = exportToPart[i];
   }
 
+  for( i = 0; i < numProcs; i++)  {
+    if ( i == myRank) {
+      char mess[2048];
+      snprintf(mess, 2048, "on process %d parts", i);
+      print_int_array((int *) parts, numExport, mess);
+      fflush(stdout);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+
+  
   if (myRank == 0){
     printf("Graph partition after calling Zoltan\n");
   }
 
-  showHypergraph(myRank, numProcs, hg.numMyVertices, hg.vtxGID, parts, A->n);
+  /* showHypergraph(myRank, numProcs, hg.numMyVertices, hg.vtxGID, parts, A->n); */
+
+  block_perms  row_perms = get_row_blocks(hg.vtxGID, A->n, myRank, parts, numExport, numProcs);
+  if (myRank == 0){
+
+    /* ParSHUM_schur_matrix S = ParSHUM_schur_matrix_create(); */
+    /* ParSHUM_schur_matrix_allocate(S, A->n, A->n, A->nnz, 0, 0, 0, 0.0, 0.0); */
+    /* ParSHUM_schur_matrix_copy(A, S, 0.2); */
+    ParSHUM_matrix_print_as_dense(A, "not permuted");
+
+    int *tmp = malloc((size_t) A->n * sizeof(*tmp));
+    int o;
+    for(o = 0; o < A->n; o++)
+      tmp[o] = o;
+    ParSHUM_matrix C = ParSHUM_matrix_permute(A, tmp, row_perms->invr_perms);
+    ParSHUM_matrix_print_as_dense(C, "row permuted");
+
+    ParSHUM_schur_matrix S = ParSHUM_schur_matrix_create();
+    ParSHUM_schur_matrix_allocate(S, C->n, C->n, C->nnz, 0, 0, 0, 0.0, 0.0);
+    ParSHUM_schur_matrix_copy(C, S, 0.2);
+
+    block_perms  col_perms = get_col_blocks2(S, row_perms);
+
+    print_int_array(row_perms->perms, A->n, "row perms");
+    print_int_array(col_perms->perms, A->n, "col perms");
+    print_int_array(col_perms->invr_perms, A->n, "invr_col perms");
+
+    ParSHUM_matrix B = ParSHUM_matrix_permute(A, col_perms->perms, row_perms->invr_perms);
+    ParSHUM_matrix_print_as_dense(B, "all permuted");
+  }
 
   /******************************************************************
   ** Free the arrays allocated by Zoltan_LB_Partition, and free
   ** the storage allocated for the Zoltan structure.
   ******************************************************************/
-
   Zoltan_LB_Free_Part(&importGlobalGids, &importLocalGids,
                       &importProcs, &importToPart);
   Zoltan_LB_Free_Part(&exportGlobalGids, &exportLocalGids,
@@ -216,7 +297,6 @@ main(int argc, char *argv[])
   /**********************
   ** all done ***********
   **********************/
-
   MPI_Finalize();
 
   if (hg.numMyVertices > 0){
@@ -231,10 +311,202 @@ main(int argc, char *argv[])
     }
   }
 
-  if (myRank == 0)  ParSHUM_matrix_destroy(A);
+  ParSHUM_matrix_destroy(A);
 
   return 0;
 }
+
+/* Invr_perms from the block_perms is not the inverse permutation, but for each elemnt 
+   it tells you to which partition that row belongs. */
+block_perms
+get_row_blocks(ZOLTAN_ID_TYPE *GIDs, int n, int rank,
+	       int *init_block, int init_block_size, int nb_parts)
+{
+  int i;
+  block_perms perms = calloc(1, sizeof(*perms));
+  int *my_row_block = calloc((size_t) n, sizeof(*my_row_block));
+  int *all_row_block;
+  if( rank == 0 ) {
+    perms->n = n;
+    perms->nb_blocks = nb_parts;
+    perms->perms = calloc((size_t) n, sizeof(*perms->perms));
+    perms->invr_perms = calloc((size_t) n, sizeof(*perms->invr_perms));
+    perms->sizes = calloc((size_t) nb_parts + 1, sizeof(*perms->sizes));
+    all_row_block = malloc((size_t) n * sizeof(*all_row_block));
+    int_array_memset(all_row_block, ParSHUM_UNUSED_PIVOT, n);
+  }
+  
+  int_array_memset(my_row_block, ParSHUM_UNUSED_PIVOT, n);
+
+  for(i = 0; i < init_block_size; i++)
+    my_row_block[GIDs[i]] = init_block[i];
+
+  MPI_Reduce(my_row_block, all_row_block, n, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+
+  free(my_row_block);
+  if (rank > 0) {
+    return NULL;
+  }
+  print_int_array((int *) all_row_block, n, "after MPI_Reduce");
+
+  int *sizes = perms->sizes;
+  int *row_perms = perms->perms;
+  int *invr_row_perms = perms->invr_perms;
+
+  for(i = 0; i < n; i++)
+    sizes[all_row_block[i]+1]++;
+  print_int_array((int *) sizes, nb_parts+1, "row block sizes first");
+
+  for(i = 1; i <= nb_parts; i++)
+    sizes[i] += sizes[i-1];
+  print_int_array((int *) sizes, nb_parts+1, "row block sizes");
+
+  for(i = 0; i < n; i++) 
+    row_perms[sizes[all_row_block[i]]++] = i;
+  print_int_array((int *) sizes, nb_parts+1, "row block sizes after");
+
+  printf("nb parts = %d \n", nb_parts);
+  for(i = nb_parts - 1; i > 0; i--)
+    sizes[i] -= sizes[i] - sizes[i-1];
+  *sizes = 0;
+  print_int_array((int *) sizes, nb_parts+1, "row block sizes after all");
+
+  for(i = 0; i < n; i++) 
+    invr_row_perms[row_perms[i]] = i;
+
+  return perms;
+}
+
+int
+get_block(int row, int nb_blocks, int *blocks)
+{
+  int my_block, found = 1;
+		
+  for ( my_block = 0; my_block < nb_blocks; my_block++)
+    if ( row >= blocks[my_block] &&  row < blocks[my_block + 1])  {
+      found = 1;
+      break;
+    }
+  
+  if (found)
+    return my_block;
+  else
+    return -1;
+}
+
+block_perms
+get_col_blocks2(ParSHUM_schur_matrix A, block_perms row_perms)
+{
+  int n = A->n, BB_cols = A->n, affiliated_cols = 0, row, i, j;
+  int nb_blocks = row_perms->nb_blocks;
+  int *row_block_sizes = row_perms->sizes;
+  block_perms col_perm = calloc(1, sizeof(*col_perm));
+
+  col_perm->n = n;
+  col_perm->nb_blocks  = nb_blocks;
+  col_perm->perms      = calloc((size_t) n, sizeof(*col_perm->perms));
+  col_perm->invr_perms = malloc((size_t) n * sizeof(*col_perm->invr_perms));
+  int *col_perms = col_perm->perms;
+  int *invr_col_perms = col_perm->invr_perms;
+
+  int_array_memset(invr_col_perms, ParSHUM_UNUSED_PIVOT, n);
+  for( row = 0; row < n; row++)
+    {
+      int my_block = get_block(row, nb_blocks, row_block_sizes);
+      printf("my blocks is %d\n", my_block);
+      CSR_struct *CSR = &A->CSR[row];
+      int *cols       = CSR->col;
+      int row_nb_elem     = CSR->nb_elem;
+      for ( i = 0; i < row_nb_elem; i++)
+	{
+	  int col = cols[i];
+	  if (invr_col_perms[col] != ParSHUM_UNUSED_PIVOT) 
+	    continue;
+	  CSC_struct *CSC = &A->CSC[col];
+	  int *rows       = CSC->row;
+	  int col_nb_elem     = CSC->nb_elem;
+	  int BB_col = 0;
+	  for ( j = 0; j < col_nb_elem; j++) {
+	    int res = get_block(rows[j], nb_blocks, row_block_sizes);
+	    if (res < 0)
+	      printf("BIG KO\n");
+	    else if ( my_block !=  res)  {
+	      BB_col = 1;
+	      break;
+	    }
+	  }
+	  if (BB_col) {
+	    col_perms[--BB_cols] = col;
+	    invr_col_perms[col] = BB_cols;
+	  } else {
+	    col_perms[affiliated_cols] = col;
+	    invr_col_perms[col] = affiliated_cols++;
+	  }
+	}
+    }
+  printf("there are %d BB cols, %d cols in the ii blocks and n = %d\n", n - BB_cols, affiliated_cols, n);
+
+  return col_perm;
+}
+
+
+block_perms
+get_col_blocks(ParSHUM_schur_matrix A, block_perms row_perms)
+{
+  int n = A->n, BB_cols = A->n, affiliated_cols = 0, i, j, k;
+  int nb_blocks = row_perms->nb_blocks;
+  int *row_perm = row_perms->perms;
+  int *row_block_affiliation = row_perms->invr_perms;
+  block_perms col_perm = calloc(1, sizeof(*col_perm));
+
+  col_perm->n = n;
+  col_perm->nb_blocks  = nb_blocks;
+  col_perm->perms      = calloc((size_t) n, sizeof(*col_perm->perms));
+  col_perm->invr_perms = malloc((size_t) n * sizeof(*col_perm->invr_perms));
+  /* col_perms->sizes      = calloc((size_t) nb_blocks + 1, sizeof(*col_perms->sizes)); */
+  int *col_perms = col_perm->perms;
+  int *invr_col_perms = col_perm->invr_perms;
+  /* int *col_sizes = col_perms->sizes; */
+  int_array_memset(invr_col_perms, ParSHUM_UNUSED_PIVOT, n);
+
+  for( i = 0; i < n; i++)
+    {
+      int my_row      = row_perm[i];
+      int my_block    = row_block_affiliation[i];
+      CSR_struct *CSR = &A->CSR[my_row];
+      int *cols       = CSR->col;
+      int row_nb_elem     = CSR->nb_elem;
+
+      for ( j = 0; j < row_nb_elem; j++)
+	{
+	  int col = cols[j];
+	  if (invr_col_perms[col] != ParSHUM_UNUSED_PIVOT) 
+	    continue;
+	  CSC_struct *CSC = &A->CSC[col];
+	  int *rows = CSC->row;
+	  int col_nb_elem = CSC->nb_elem;
+	  int BB_col = 0;
+	  for ( k = 0; k < col_nb_elem; k++)
+	    {
+	      int row = rows[k];
+	      if (row_block_affiliation[row] != my_block)  {
+		BB_col = 1;
+		break;
+	      }
+	    }
+	  if (BB_col) {
+	    col_perms[--BB_cols] = col;
+	    invr_col_perms[col] = BB_cols;
+	  } else {
+	    col_perms[affiliated_cols] = col;
+	    invr_col_perms[col] = affiliated_cols++;
+	  }
+	}
+    }
+  printf("BB cols %d and affiliated cols %d\n", n - BB_cols, affiliated_cols);
+  return  col_perm;
+}
+
 
 /* Application defined query functions */
 static int get_number_of_vertices(void *data, int *ierr)
@@ -245,8 +517,8 @@ static int get_number_of_vertices(void *data, int *ierr)
 }
 
 static void get_vertex_list(void *data, int sizeGID, int sizeLID,
-            ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
-                  int wgt_dim, float *obj_wgts, int *ierr)
+			    ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
+			    int wgt_dim, float *obj_wgts, int *ierr)
 {
 int i;
 
@@ -309,319 +581,36 @@ int i;
 }
 
 
-/* Function to find next line of information in input file */
- 
-static int get_next_line(FILE *fp, char *buf, int bufsize)
-{
-int i, cval, len;
-char *c;
-
-  while (1){
-
-    c = fgets(buf, bufsize, fp);
-
-    if (c == NULL)
-      return 0;  /* end of file */
-
-    len = strlen(c);
-
-    for (i=0, c=buf; i < len; i++, c++){
-      cval = (int)*c; 
-      if (isspace(cval) == 0) break;
-    }
-    if (i == len) continue;   /* blank line */
-    if (*c == '#') continue;  /* comment */
-
-    if (c != buf){
-      strcpy(buf, c);
-    }
-    break;
-  }
-
-  return strlen(buf);  /* number of characters */
-}
-
-/* Function to return the list of non-negative integers in a line */
-
-static int get_line_ints(char *buf, int bufsize, int *vals)
-{
-char *c = buf;
-int count=0;
-
-  while (1){
-    while (!(isdigit(*c))){
-      if ((c - buf) >= bufsize) break;
-      c++;
-    }
-  
-    if ( (c-buf) >= bufsize) break;
-  
-    vals[count++] = atoi(c);
-  
-    while (isdigit(*c)){
-      if ((c - buf) >= bufsize) break;
-      c++;
-    }
-  
-    if ( (c-buf) >= bufsize) break;
-  }
-
-  return count;
-}
-
-
-/* Proc 0 notifies others of error and exits */
-static void input_file_error(int numProcs, int tag, int startProc)
-{
-int i, val[3];
-
-  val[0] = -1;   /* error flag */
-
-  fprintf(stderr,"ERROR in input file.\n");
-
-  for (i=startProc; i < numProcs; i++){
-    /* these procs have posted a receive for "tag" expecting counts */
-    MPI_Send(val, 3, MPI_INT, i, tag, MPI_COMM_WORLD);
-  }
-  for (i=1; i < startProc; i++){
-    /* these procs are done and waiting for ok-to-go */
-    MPI_Send(val, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-  }
-
-  MPI_Finalize();
-  exit(1);
-}
-
-/* Draw the partition assignments of the objects */
-
-static void
-showHypergraph(int myProc, int numProcs, int numIDs, ZOLTAN_ID_TYPE *GIDs, int *parts, int n)
-{
-  int *partAssign, *allPartAssign;
-  int i, j, part, count, numVtx, numEdges;
-  int edgeIdx, vtxIdx;
-  int maxPart, nPart, partIdx;
-  int **M;
-  int *partNums, *partCount;
-  ZOLTAN_ID_TYPE *nextID;
-  ZOLTAN_ID_TYPE edgeID, vtxID;
-  int cutn, cutl;
-  float imbal, localImbal;
-
-  numVtx = n;
-  numEdges = n;
-
-  partAssign = (int *)calloc(sizeof(int), numVtx);
-  allPartAssign = (int *)calloc(sizeof(int), numVtx);
-
-  for (i=0; i < numIDs; i++){
-    partAssign[GIDs[i]-1] = parts[i];
-  }
-
-  MPI_Reduce(partAssign, allPartAssign, numVtx, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
-
-  free(partAssign);
-
-  if (myProc > 0){
-    free(allPartAssign);
-    return;
-  }
-
-
-  /* Creating a dense matrix containing hyperedges, because this is small
-   * example problem, and it is simpler.
-   */
-
-  M = (int **)calloc(sizeof(int *) , numEdges);
-  for (i=0; i < numEdges; i++){
-    M[i] = (int *)calloc(sizeof(int) , numVtx);
-  }
-
-  nextID = global_hg.nborGID;
-
-  maxPart = 0;
-
-  for (i=0; i < numEdges; i++){
-
-    edgeID = global_hg.edgeGID[i];
-    edgeIdx = (int)edgeID - 1;
-    count = global_hg.nborIndex[i+1] - global_hg.nborIndex[i];
-
-    for (j=0; j < count; j++){
-      vtxID = *nextID++;
-      vtxIdx = (int)vtxID - 1;
-
-      part = allPartAssign[vtxIdx];
-
-      if (part > maxPart) maxPart = part;
-
-      M[edgeIdx][vtxIdx] = part+1;
-    }
-  }
-
-  /* Calculate vertex balance measure 1.0 is perfect, higher is worse */
-
-  imbal = 0;
-  partCount = (int *)calloc(sizeof(int), maxPart+1);
-
-  for (i=0; i < numVtx; i++){
-    partCount[allPartAssign[i]]++;
-  }
-
-  imbal = 0.0;
-  for (part=0; part <= maxPart; part++){
-     localImbal = (float)(numProcs * partCount[part]) / (float)numVtx;
-     if (localImbal > imbal) imbal = localImbal;
-  }
-
-  free(partCount);
-  free(allPartAssign);
-
-  /* Print the hypergraph as a matrix */
-  printf("\n                VERTICES\n    ");
-  for (j=0; j < numVtx; j++){
-
-    if (j < 9)
-      printf("%d  ",j+1);
-    else
-      printf("%d ",j+1);
-  }
-
-  printf(" NPARTS-1");
-
-  printf("\n    ");
-  for (j=0; j < numVtx; j++){
-    printf("---");
-  }
-  printf("\n");
-
-  partNums = (int *)calloc(sizeof(int), maxPart + 1);
-  cutn = 0;
-  cutl = 0;
-
-  for (i=0; i < numEdges; i++){
-    nPart = 0;
-
-    if (i < 9)
-      printf("%d   ",i+1);
-    else
-      printf("%d  ",i+1);
-
-    for (j=0; j < numVtx; j++){
-      part = M[i][j];
-      partIdx = part - 1;
-
-      if (part > 0){
-        printf("%d  ",partIdx);
-        if (partNums[partIdx] < i+1){
-          nPart++;
-          partNums[partIdx] = i+1;
-        }
-      }
-      else{
-        printf("   ");
-      }
-
-    }
-    if (nPart >= 2){
-      printf("    %d\n",nPart - 1);
-      cutn++;
-      cutl += (nPart - 1);
-    }
-    else{
-      printf("\n");
-    }
-  }
-  printf("Total number of cut edges: %d\n",cutn);
-  printf("Sum of NPARTS-1:           %d\n",cutl);
-  printf("Balance of vertices across partitions: %f\n",imbal);
-  printf("\n");
-
-  for (i=0; i < numEdges; i++){
-    free(M[i]);
-  }
-  free(M);
-  free(partNums);
-}
-
-/*
- * Read the hypergraph in the input file and distribute the non-zeroes. (See the
- * matrix analogy at the top of the source file.)
- *
- * We will distribute the hyperedges (rows) to the processes.  However, we could
- * distribute the vertices (columns), or we could distribute the non-zeroes
- * instead.
- *
- * Zoltan partitions the vertices, so we also create an initial partitioning of the vertices.
- */
-
 void read_input_file(int myRank, int numProcs,
 		     char *fname, HGRAPH_DATA *hg,
 		     ParSHUM_matrix A)
 {
-char buf[512];
-int bufsize;
 int numGlobalVertices, numGlobalEdges, numGlobalNZ;
 int num, count, nnbors, ack=0;
 int to=-1, from, remaining;
-int vGID;
 int i, j;
-int vals[128], send_count[3];
+int send_count[3];
 ZOLTAN_ID_TYPE *idx;
 unsigned int id;
-FILE *fp;
 MPI_Status status;
 int ack_tag = 5, count_tag = 10, id_tag = 15;
 HGRAPH_DATA *send_hg;
 
   if (myRank == 0){
 
-    bufsize = 512;
-
-    fp = fopen(fname, "r");
-
-    /* Get the number of vertices */
-
-    /* num = get_next_line(fp, buf, bufsize); */
-    /* if (num == 0) input_file_error(numProcs, count_tag, 1); */
-    /* num = sscanf(buf, "%d", &numGlobalVertices); */
-    /* if (num != 1) input_file_error(numProcs, count_tag, 1); */
     numGlobalVertices = A->n;
     global_hg.numMyVertices = numGlobalVertices = numGlobalVertices;
     global_hg.vtxGID = (ZOLTAN_ID_TYPE *)malloc(sizeof(ZOLTAN_ID_TYPE) * numGlobalVertices);
 
-    /* Get the vertex global IDs */
-
     for (i=0; i < numGlobalVertices; i++){
 
-      /* num = get_next_line(fp, buf, bufsize); */
-      /* if (num == 0) input_file_error(numProcs, count_tag, 1); */
-      /* num = sscanf(buf, "%d", &vGID); */
-      /* if (num != 1) input_file_error(numProcs, count_tag, 1); */
-
-      global_hg.vtxGID[i] = (ZOLTAN_ID_TYPE) i + 1;
+      global_hg.vtxGID[i] = (ZOLTAN_ID_TYPE) i;
     }
-
-    /* Get the number hyperedges which contain those vertices */
-
-    /* num = get_next_line(fp, buf, bufsize); */
-    /* if (num == 0) input_file_error(numProcs, count_tag, 1); */
-    /* num = sscanf(buf, "%d", &numGlobalEdges); */
-    /* if (num != 1) input_file_error(numProcs, count_tag, 1); */
     numGlobalEdges = A->n;
     global_hg.numMyHEdges = numGlobalEdges;
     global_hg.edgeGID = (ZOLTAN_ID_TYPE *)malloc(sizeof(ZOLTAN_ID_TYPE) * numGlobalEdges);
     global_hg.nborIndex = (int *)malloc(sizeof(int) * (numGlobalEdges + 1));
 
-    /* Get the total number of vertices or neighbors in all the hyperedges of
-     * the hypergraph.  Or get the number of non-zeroes in the matrix representing
-     * the hypergraph.
-     */
-
-    /* num = get_next_line(fp, buf, bufsize); */
-    /* if (num == 0) input_file_error(numProcs, count_tag, 1); */
-    /* num = sscanf(buf, "%d", &numGlobalNZ); */
-    /* if (num != 1) input_file_error(numProcs, count_tag, 1); */
     numGlobalNZ = A->nnz;
     global_hg.nborGID = (ZOLTAN_ID_TYPE *)malloc(sizeof(ZOLTAN_ID_TYPE) * numGlobalNZ);
 
@@ -629,42 +618,30 @@ HGRAPH_DATA *send_hg;
     global_hg.nborIndex[0] = 0;
 
     for (i=0; i < numGlobalEdges; i++){
-      int row_end  =  A->row_ptr[i+1];
-      int row_start =  A->row_ptr[i];
+      int row_end  =  A->col_ptr[i+1];
+      int row_start =  A->col_ptr[i];
 
-      /* num = get_next_line(fp, buf, bufsize); */
-      /* if (num == 0) input_file_error(numProcs, count_tag, 1); */
-
-      /* num = get_line_ints(buf, bufsize, vals); */
-
-      /* if (num < 2) input_file_error(numProcs, count_tag, 1); */
-
-      id = i + 1;
+      id = i;
       nnbors = row_end - row_start;
-
-      /* if (num < (nnbors + 2)) input_file_error(numProcs, count_tag, 1); */
 
       global_hg.edgeGID[i] = (ZOLTAN_ID_TYPE)id;
 
       for (j=0; j < nnbors; j++){
-        global_hg.nborGID[global_hg.nborIndex[i] + j] = (ZOLTAN_ID_TYPE)A->col[row_start + j] + 1;
+        global_hg.nborGID[global_hg.nborIndex[i] + j] = (ZOLTAN_ID_TYPE)A->row[row_start + j];
       }
 
       global_hg.nborIndex[i+1] = global_hg.nborIndex[i] + nnbors;
     }
 
-    fclose(fp);
 
     /* Create a sub graph for each process */
-
     send_hg = (HGRAPH_DATA *)calloc(sizeof(HGRAPH_DATA) , numProcs);
 
     /* 
      * Divide the vertices across the processes
      */
-
     remaining = numGlobalVertices;
-    count = (numGlobalVertices / numProcs) + 1;
+    count = (numGlobalVertices + numProcs  -1) / numProcs;
     idx = global_hg.vtxGID;
 
     for (i=0; i < numProcs; i++){
@@ -689,9 +666,8 @@ HGRAPH_DATA *send_hg;
     /*
      * Assign hyperedges to processes, and create a sub-hypergraph for each process.
      */
-
     remaining = numGlobalEdges;
-    count = (numGlobalEdges / numProcs) + 1;
+    count = (numGlobalVertices + numProcs  -1) / numProcs;
     from = 0;
 
     for (i=0; i < numProcs; i++){
@@ -736,7 +712,6 @@ HGRAPH_DATA *send_hg;
     }
 
     /* Send each process its hyperedges and the vertices in its partition */
-
     *hg = send_hg[0];
 
     for (i=1; i < numProcs; i++){
@@ -820,7 +795,6 @@ HGRAPH_DATA *send_hg;
     }
 
     /* ok to go on? */
-
     MPI_Recv(&ack, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
     if (ack < 0){
       MPI_Finalize();

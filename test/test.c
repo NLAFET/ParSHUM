@@ -22,10 +22,11 @@ main(int argc, char **argv)
   self = ParSHUM_solver_create();
 
   /* Parse the arguments */
-  ParSHUM_solver_parse_args(self, argc, argv);
+  ParSHUM_solver_parse_args(self, argc, argv, 1);
   /* Read the matrix */
   ParSHUM_solver_read_matrix(self);
 
+  
   /* Initialize the vectors */
   X = ParSHUM_vector_create(self->A->n);
   B = ParSHUM_vector_create(self->A->n);  

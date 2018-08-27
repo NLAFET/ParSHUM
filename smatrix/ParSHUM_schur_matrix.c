@@ -1045,10 +1045,6 @@ ParSHUM_schur_matrix_check_pivots(ParSHUM_schur_matrix self,
   int  i, j, n = self->n, m = self->m;
   int needed_pivots = self->n < self->m ? self->n : self->m;
   char mess[2048];
-  /* print_int_array(col_perms, n, "col_perms"); */
-  /* print_int_array(row_perms, n, "row_perms"); */
-  /* print_int_array(invr_col_perms, n, "invr_col_perms"); */
-  /* print_int_array(invr_row_perms, n, "invr_row_perms"); */
   
   check_vlaid_perms(row_perms,      needed_pivots, nb_pivots);
   check_vlaid_perms(col_perms,      needed_pivots, nb_pivots);

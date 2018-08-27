@@ -18,7 +18,7 @@ main(int argc, char **argv)
   ParSHUM_solver self;
   
   self = ParSHUM_solver_create();
-  ParSHUM_solver_parse_args(self, argc, argv);
+  ParSHUM_solver_parse_args(self, argc, argv, 1);
   ParSHUM_solver_read_matrix(self);
   ParSHUM_solver_init(self);
   printf("%d !\n",omp_get_thread_num());

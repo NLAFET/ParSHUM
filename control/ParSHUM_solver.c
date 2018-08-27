@@ -74,7 +74,7 @@ check_ParSHUM_with_plasma_perm(int argc, char **argv)
   ParSHUM_vector X, sol_plasma, sol_ParSHUM;
   
   plasma = ParSHUM_solver_create();
-  ParSHUM_solver_parse_args(plasma, argc, argv);
+  ParSHUM_solver_parse_args(plasma, argc, argv, 1);
   plasma->exe_parms->density_tolerance   = 1.0;
   plasma->exe_parms->min_pivot_per_steps = 5;
   plasma->exe_parms->nb_previous_pivots  = 5;
@@ -135,7 +135,7 @@ check_dense_with_ParSHUM_perm(int argc, char **argv)
   ParSHUM_vector X, sol_ParSHUM, sol_dense;
   
   self = ParSHUM_solver_create();
-  ParSHUM_solver_parse_args(self, argc, argv);
+  ParSHUM_solver_parse_args(self, argc, argv, 1);
   self->exe_parms->density_tolerance = 1.0;
   self->exe_parms->min_pivot_per_steps = 5;
   self->exe_parms->nb_previous_pivots  = 5;
@@ -157,7 +157,7 @@ check_dense_with_ParSHUM_perm(int argc, char **argv)
   ParSHUM_solver_finalize(self);
  
   ParSHUM_solver dense_solver = ParSHUM_solver_create();
-  ParSHUM_solver_parse_args(dense_solver, argc, argv);
+  ParSHUM_solver_parse_args(dense_solver, argc, argv, 1);
 
   dense_solver->A = self->A;
 
@@ -188,7 +188,7 @@ check_dense_with_ParSHUM_perm(int argc, char **argv)
 }
 
 void 
-ParSHUM_solver_parse_args(ParSHUM_solver self, int argc, char **argv)
+ParSHUM_solver_parse_args(ParSHUM_solver self, int argc, char **argv, int exit_on_notFound)
 {
   int i, run_args_start = 0;
 
@@ -324,12 +324,14 @@ ParSHUM_solver_parse_args(ParSHUM_solver self, int argc, char **argv)
 	printf("%s\n", usageStrign[j++]);
       exit(0);
     } else {
-      char mess[2048];
-      snprintf(mess, 2048, "unrecognized option \"%s\" ", argv[i]);
-      int j = 0;
-      while( usageStrign[j] !=  NULL)
-	printf("%s\n", usageStrign[j++]);
-      ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, mess);
+      if (exit_on_notFound) {
+	char mess[2048];
+	snprintf(mess, 2048, "unrecognized option \"%s\" ", argv[i]);
+	int j = 0;
+	while( usageStrign[j] !=  NULL)
+	  printf("%s\n", usageStrign[j++]);
+	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, mess);
+      }
     }
   }
   

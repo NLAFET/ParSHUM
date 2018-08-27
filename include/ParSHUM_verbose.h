@@ -1,6 +1,8 @@
 #ifndef   _ParSHUM_VERBOSE_H
 #define   _ParSHUM_VERBOSE_H
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/time.h>
 #include "ParSHUM_matrix.h"
 #include "ParSHUM_paje.h"
