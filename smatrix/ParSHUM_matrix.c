@@ -3,10 +3,10 @@
 #include <math.h>
 #include <string.h>
 #include <stdbool.h>
-
+#ifdef HAVE_SPRAL 
 #include "spral_matrix_util.h"
 #include "spral_rutherford_boeing.h"
-
+#endif // HAVE_SPRAL
 #include "ParSHUM_enum.h"
 #include "ParSHUM_auxiliary.h"
 #include "ParSHUM_solver.h"
@@ -22,6 +22,7 @@ ParSHUM_matrix_create()
   return self;
 }
 
+#ifdef HAVE_SPRAL 
 int
 ParSHUM_read_rutherford_boeing(ParSHUM_matrix self, const char*filename)
 {
@@ -42,6 +43,7 @@ ParSHUM_read_rutherford_boeing(ParSHUM_matrix self, const char*filename)
 
   return retval;
 }
+#endif
 
 void
 ParSHUM_read_mtl_file(ParSHUM_matrix self, const char*filename)
@@ -595,7 +597,9 @@ ParSHUM_matrix_destroy(ParSHUM_matrix self)
       return;
       
     case ParSHUM_Rutherford_matrix:
+#ifdef HAVE_SPRAL 
       spral_rb_free_handle(&self->handle);
+#endif
       free(self);
       return;
     }

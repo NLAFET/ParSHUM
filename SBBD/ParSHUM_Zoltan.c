@@ -239,6 +239,7 @@ ParSHUM_Zoltan_init_distrubtion(Zoltan_Hypergraph self,
       }
     }
   }
+
   return 0;
 }
 
@@ -292,7 +293,6 @@ ParSHUM_Zoltan_get_col_blocks(Zoltan_Hypergraph hypergraph,
 			      row_block row_blocks)
 {
   int n = A->n, nb_blocks = row_blocks->nb_blocks, block, i, j, k;
-  int BB_cols = A->n;
   ParSHUM_schur_matrix S = ParSHUM_schur_matrix_create();
   col_block col_blocks = calloc(1, sizeof(*col_blocks));
   
@@ -331,8 +331,8 @@ ParSHUM_Zoltan_get_col_blocks(Zoltan_Hypergraph hypergraph,
 		  break;
 		}
 	      if (BB_col) {
-		col_blocks->perms[--BB_cols] = col;
-		col_blocks->invr_perms[col] = BB_cols;
+		col_blocks->perms[--col_blocks->nb_BB_cols] = col;
+		col_blocks->invr_perms[col] = col_blocks->nb_BB_cols;
 	      } else {
 		col_blocks->perms[col_block_size] = col;
 		col_blocks->invr_perms[col] = col_block_size++;
@@ -342,12 +342,12 @@ ParSHUM_Zoltan_get_col_blocks(Zoltan_Hypergraph hypergraph,
       col_blocks->sizes[block+1] = col_block_size;
     }
   col_blocks->sizes[block+1] = n;
-  
+  col_blocks->nb_BB_cols = abs(col_blocks->nb_BB_cols - n);
   ParSHUM_schur_matrix_destroy(S);
   return col_blocks;
 }
 
-void
+static void
 ParSHUM_Zoltan_print_stats(Zoltan_Hypergraph self,
 			   ParSHUM_matrix A, 
 			   row_block row_blocks,
@@ -406,11 +406,92 @@ ParSHUM_Zoltan_print_stats(Zoltan_Hypergraph self,
     printf("#blocks\tavg_m\t\tstd_m\t\tmax_m\tmin_m\tavg_n\t\tstd_n\t\tmax_n\tmin_n\tavg_nnz\t\tstd_nnz\t\tmax_nnz\tmin_nnz\tBB_n\tBB_nnz\n"); 
   printf("%d\t%e\t%e\t%d\t%d\t%e\t%e\t%d\t%d\t%e\t%e\t%d\t%d\t%d\t%d\n", MPI_size, avg_m,   std_m,   max_m,   min_n,
 	                                                                           avg_n,   std_n,   max_n,   min_n,
-	                                                                           avg_nnz, std_nnz, max_nnz, min_nnz,
+	                                                                           avg_nnz, std_nnz, max_nnz,min_nnz,
 	                                                                           BB_n,    BB_nnz);  
-
 }
+
+static void 
+ParSHUM_Zoltan_check_blocks(ParSHUM_matrix A, row_block row_blocks, col_block col_blocks)
+{
+  int nb_blocks = row_blocks->nb_blocks, n = row_blocks->n, block, i, j;
+  char mess[2048];
+  ParSHUM_schur_matrix S = ParSHUM_schur_matrix_create();
+  ParSHUM_schur_matrix_allocate(S, A->n, A->m, A->nnz, 0, 0, 0, 0.0, 0.0);
+  ParSHUM_schur_matrix_copy(A, S, 0.0);
+
+  check_vlaid_perms(row_blocks->perms, n, n);
+  check_vlaid_perms(col_blocks->perms, n, n);
+  check_perms_and_invr_perms(col_blocks->perms, col_blocks->invr_perms, n, "col_block");
   
+  if (*row_blocks->sizes) 
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "the first row_block size is not zero");
+  for( block = 1; block <= nb_blocks; block++) 
+    if (row_blocks->sizes[block] < row_blocks->sizes[block-1]) {
+      snprintf(mess, 2048, "row_block_sizes[%d] = %d is larger then  row_block_sizes[%d] = %d", 
+	       block, row_blocks->sizes[block], block - 1, row_blocks->sizes[block - 1]);
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+    }
+  if (row_blocks->sizes[nb_blocks] != n) 
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "the last row_block size is not same as the matrix size");
+  
+  if (*col_blocks->sizes) 
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "the first col_block size is not zero");
+  for( block = 1; block <= nb_blocks; block++) 
+    if (col_blocks->sizes[block] < col_blocks->sizes[block-1]) {
+      snprintf(mess, 2048, "col_block_sizes[%d] = %d is larger then  row_col_sizes[%d] = %d", 
+	       block, col_blocks->sizes[block], block - 1, col_blocks->sizes[block - 1]);
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+    }
+  if (col_blocks->sizes[nb_blocks+1] != n) 
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "the last col_block size is not same as the matrix size"); 
+  if ((col_blocks->sizes[nb_blocks + 1] - col_blocks->sizes[nb_blocks]) != col_blocks->nb_BB_cols) 
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__,
+		    "the difference the last two col_block sizes are not same as the nb_BB_cols"); 
+
+  for (block = 0; block < nb_blocks; block++) 
+    for (i = row_blocks->sizes[block];  i < row_blocks->sizes[block+1]; i++)
+      if (row_blocks->belongs[row_blocks->perms[i]] != block ) {
+	snprintf(mess, 2048, "row_perms[%d]  belongs to %d, but the current block is %d",
+		 i, row_blocks->belongs[i], block);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      }
+
+  for (block = 0; block < nb_blocks; block++) 
+    for (i = col_blocks->sizes[block];  i < col_blocks->sizes[block+1]; i++)
+      {
+	int col = col_blocks->perms[i];
+	CSC_struct *CSC = &S->CSC[col];
+	int *rows       = CSC->row;
+	int col_nb_elem     = CSC->nb_elem;
+	for ( j = 0; j < col_nb_elem; j++) 
+	  if (row_blocks->belongs[rows[j]] != block) { 
+	    snprintf(mess, 2048, "col %d belongs to col_block %d, but the block of the row %d (col's entry) is %d ",
+		     col, block, rows[j], row_blocks->belongs[rows[j]]);
+	    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	  }
+      }
+  
+  for (i = col_blocks->sizes[nb_blocks];  i <= col_blocks->sizes[nb_blocks + 1]; i++)
+    {
+      int col = col_blocks->perms[i];
+      CSC_struct *CSC = &S->CSC[col];
+      int *rows       = CSC->row;
+      int col_nb_elem     = CSC->nb_elem;
+      int first_block = row_blocks->belongs[*rows];
+      int is_BB_col = 0;
+      for ( j = 1; j < col_nb_elem; j++) 
+	if (row_blocks->belongs[rows[j]] != first_block)  {
+	  is_BB_col = 1;
+	  break;
+	}
+      if (!is_BB_col) {
+	snprintf(mess, 2048, "col %d is in the BB block, but all of its entries belongs to %d",
+		 col, first_block);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      }
+    }
+  ParSHUM_schur_matrix_destroy(S);
+}
 
 void
 ParSHUM_Zoltan_parition(Zoltan_Hypergraph self, ParSHUM_matrix A)
@@ -419,7 +500,7 @@ ParSHUM_Zoltan_parition(Zoltan_Hypergraph self, ParSHUM_matrix A)
   row_block row_blocks;
   col_block col_blocks;
   int  rank = self->rank;
-    //, MPI_size = self->MPI_size;
+
 
    /* Application defined query functions */
   Zoltan_Set_Num_Obj_Fn(self->Zoltan,    ParSHUM_get_number_of_vertices, self);
@@ -449,6 +530,7 @@ ParSHUM_Zoltan_parition(Zoltan_Hypergraph self, ParSHUM_matrix A)
   if (!rank) {
     col_blocks = ParSHUM_Zoltan_get_col_blocks(self, A, row_blocks);
     ParSHUM_Zoltan_print_stats(self, A, row_blocks, col_blocks);
+    ParSHUM_Zoltan_check_blocks(A, row_blocks, col_blocks);
   }
 }
 

@@ -29,8 +29,9 @@ struct _ParSHUM_matrix {
 
 ParSHUM_matrix ParSHUM_matrix_create();
 ParSHUM_matrix ParSHUM_matrix_create_random_matrix(int m, int n);
+#ifdef HAVE_SPRAL 
 int ParSHUM_read_rutherford_boeing(ParSHUM_matrix self, const char*filename);
-
+#endif
 /* int       read_rutherford_boeing(ParSHUM_matrix self, const char*filename); */
 void      ParSHUM_read_mtl_file(ParSHUM_matrix self, const char*filename);
 void      ParSHUM_matrix_allocate(ParSHUM_matrix self, int n, int m, long nnz, double extra_space, ParSHUM_matrix_type type);

@@ -54,10 +54,12 @@ ParSUHM_SBBD_read_matrix(ParSHUM_SBBD self)
     char *file_ext = strrchr(self->matrix_file, '.');
     self->A        = ParSHUM_matrix_create();
 
-    if (!strcmp(file_ext, ".rb"))
-      ParSHUM_read_rutherford_boeing(self->A, self->matrix_file);
-    else if (!strcmp(file_ext, ".mtl"))
+    if (!strcmp(file_ext, ".mtl"))
       ParSHUM_read_mtl_file(self->A, self->matrix_file);
+#ifdef HAVE_SPRAL
+    else if (!strcmp(file_ext, ".rb"))
+      ParSHUM_read_rutherford_boeing(self->A, self->matrix_file);
+#endif
     else
       ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsupported matrix file");
   }

@@ -47,7 +47,7 @@ struct _ParSHUM_solver {
 
   ParSHUM_U_struct *U_struct;
   ParSHUM_U_struct *L_struct;
-
+  
   pthread_mutex_t counters_lock;
 
   int *row_perm;
