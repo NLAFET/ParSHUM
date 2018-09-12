@@ -525,7 +525,7 @@ ParSHUM_schur_matrix_update_U_singletons(ParSHUM_schur_matrix S, ParSHUM_U_matri
 	  }
 	  if (CSC->row[0] != row) 
 	    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "The pivot is not the same as before");
-	  D_indice = __atomic_fetch_add(&D->n, 1, __ATOMIC_SEQ_CST);
+	  /* D_indice = __atomic_fetch_add(&D->n, 1, __ATOMIC_SEQ_CST); */
 	  D->val[D_indice] = CSC->val[0];
 
 	  delete_entry_from_CSR(S, col, row);	  
@@ -615,9 +615,9 @@ ParSHUM_schur_matrix_update_U(ParSHUM_schur_matrix S, ParSHUM_U_matrix U,
 	for( i = 0; i < row_nb_elem; i++) {
 	  int current_col = cols[i];
 	  U_col  *u_col = &U->col[current_col];
-	  int indice = __atomic_fetch_add(&u_col->nb_elem, 1, __ATOMIC_SEQ_CST);
+	  /* int indice = __atomic_fetch_add(&u_col->nb_elem, 1, __ATOMIC_SEQ_CST); */
 	  
-	  u_col->row[indice] = row;
+	  /* u_col->row[indice] = row; */
 	}
 	
 	CSR->nb_elem = 0;
