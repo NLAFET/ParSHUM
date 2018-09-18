@@ -64,8 +64,6 @@ ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
 	  int row = rows[j];
 	  if (global_invr_row_perms[row] != ParSHUM_UNUSED_PIVOT ) 
 	    continue;
-	  if ( matrix->CSR[row].nb_elem <= 0) 
-	    printf("KOKO with %d on step %d \n", matrix->CSR[row].nb_elem, Luby->chosen_base / 3);
 	  int row_degree = matrix->CSR[row].nb_elem - 1;
 	  if ( col_best_row > row_degree)  {
 	    col_best_row = row_degree;
