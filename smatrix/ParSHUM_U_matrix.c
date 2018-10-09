@@ -37,9 +37,9 @@ ParSHUM_U_matrix_solve(ParSHUM_U_matrix U, ParSHUM_matrix D, ParSHUM_vector rhs,
       int nb_elem = u_col->nb_elem;
       double *u_val = u_col->val;
       int *u_rows = u_col->row;
-
+      double tmp = rhs_val[row_perms[col]];
       for( i = 0; i < nb_elem; i++)
-  	rhs_val[row_perms[u_rows[i]]] -= u_val[i] * rhs_val[col];
+  	rhs_val[u_rows[i]] -= u_val[i] * tmp;
     } 
 
   for( ; col >= 0; col--)
@@ -50,10 +50,10 @@ ParSHUM_U_matrix_solve(ParSHUM_U_matrix U, ParSHUM_matrix D, ParSHUM_vector rhs,
       double *u_val = u_col->val;
       int *u_rows = u_col->row;
 
-      rhs_val[col] /= D->val[col];
-
+      rhs_val[row_perms[col]] /= D->val[col];
+      double tmp = rhs_val[row_perms[col]];
       for( i = 0; i < nb_elem; i++)
-  	rhs_val[row_perms[u_rows[i]]] -= u_val[i] * rhs_val[col];
+  	rhs_val[u_rows[i]] -= u_val[i] * tmp;
     }
 }
 

@@ -28,8 +28,9 @@ ParSHUM_L_matrix_solve(ParSHUM_L_matrix L, ParSHUM_vector RHS, int *perms)
       double *L_val = CSC->val;
       int    *L_row = CSC->row;
       int nb_elem = CSC->nb_elem;
+      double tmp = rhs_val[perms[col]];
       for( i = 0; i < nb_elem; i++)
-  	rhs_val[perms[L_row[i]]] -= L_val[i] * rhs_val[col];
+  	rhs_val[L_row[i]] -= L_val[i] * tmp;
     }
 }
 

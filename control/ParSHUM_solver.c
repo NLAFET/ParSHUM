@@ -1385,35 +1385,32 @@ ParSHUM_solver_solve(ParSHUM_solver self, ParSHUM_vector RHS)
     ParSHUM_vector_permute(RHS, self->invr_col_perm, self->A_debug->m);
   } else {
     ParSHUM_verbose_start_timing(&verbose->timing_solve_L);
-    /* if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL))  */
-      ParSHUM_vector_print(RHS, "initial RHS");
-    ParSHUM_vector_permute(RHS, self->row_perm, self->S->m);
-    /* if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL)  */
-      ParSHUM_vector_print(RHS, "P RHS");
-    ParSHUM_L_matrix_solve(self->L, RHS, self->invr_row_perm);
-    /* if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL)  */
+
+    if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL)
+      ParSHUM_vector_print(RHS, "Init RHS");
+    ParSHUM_L_matrix_solve(self->L, RHS, self->row_perm);
+
+    if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL)
       ParSHUM_vector_print(RHS, "after forward solve");
     ParSHUM_verbose_stop_timing(&verbose->timing_solve_L);
     
     ParSHUM_verbose_start_timing(&verbose->timing_solve_dense);
-    printf("%d and %d\n", self->S_dense->n, self->S_dense->m);
     if (self->S_dense->n && self->S_dense->m) {
-      printf("entering!\n");
       if (self->S_dense->n == self->S_dense->m) {
       plasma_dgetrs(self->S_dense->n, 1, self->S_dense->val, self->S_dense->n,
     		    self->S_dense->pivots, &RHS_vals[self->done_pivots], self->S_dense->n);
       } else if ( self->S_dense->n < self->S_dense->m )  {
-	printf("%d and %d\n", self->S_dense->n, self->S_dense->m);
 	/* int diff_size = self->S_dense->m - self->S_dense->n; */
 	/* /\* ParSHUM_vector permuted_RHS = ParSHUM_vector_create(self->S_dense->m);  *\/ */
 	/* /\* memcpy(permuted_RHS->vect, &RHS_vals[self->done_pivots], permuted_RHS->n); *\/ */
 	/* double *dense_RHS = &RHS_vals[self->done_pivots]; */
 	/* int *perms = self->S_dense->pivots; */
-
+	/* print_int_array(perms, self->S_dense->m, ""); */
 	/* for( int i = 0; i < self->S_dense->n; i++) { */
 	/*   double tmp = dense_RHS[i]; */
-	/*   dense_RHS[i] = dense_RHS[perms[i]]; */
-	/*   dense_RHS[perms[i]] = tmp; */
+	/*   int perm = perms[i] - 1; */
+	/*   dense_RHS[i] = dense_RHS[perm]; */
+	/*   dense_RHS[perm] = tmp; */
 	/* } */
 	/* /\* print_int_array(self->S_dense->pivots, self->S_dense->m, "plasma pivots"); *\/ */
 	/* plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaUnit, */
@@ -1421,39 +1418,34 @@ ParSHUM_solver_solve(ParSHUM_solver self, ParSHUM_vector RHS)
 	/* 	     self->S_dense->m, dense_RHS, self->S_dense->m); */
 
 
-	/* plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, diff_size, 1, self->S_dense->n,  */
-	/* 	     -1.0,  */
+	/* plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, diff_size, 1, self->S_dense->n, */
+	/* 	     -1.0, */
 	/* 	     &self->S_dense->val[self->S_dense->m - diff_size], self->S_dense->m, */
-	/* 	     dense_RHS, self->A->m,  */
+	/* 	     dense_RHS, self->A->m, */
 	/* 	     1.0, */
-	/* 	     &dense_RHS[self->S_dense->n], self->A->m);  */
+	/* 	     &dense_RHS[self->S_dense->n], self->A->m); */
 	/* plasma_dtrsm(PlasmaLeft, PlasmaUpper, PlasmaNoTrans, PlasmaNonUnit, */
 	/* 	     self->S_dense->n, 1, 1.0, self->S_dense->val, */
 	/* 	     self->S_dense->m, dense_RHS, self->S_dense->m); */
-	/* for( int i = self->S_dense->n-1; i >= 0; i--) { */
-	/*   double tmp = dense_RHS[i]; */
-	/*   dense_RHS[i] = dense_RHS[perms[i]]; */
-	/*   dense_RHS[perms[i]] = tmp; */
-	/* } */
-
-	
       } else {
 	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not implemeted");
       }
     }
-    /* 
-       TODO: The memeory acces can be improved for the solve of U. But in for the part handled by plasma 
-             must be gathered and put int temp buffers and scatered back to the real vector. That way
-	     the nnz-inderection could be replaced with an n-inderection.  
-     */
+
     if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL) 
       ParSHUM_vector_print(RHS, "after dense solve");
     ParSHUM_verbose_stop_timing(&verbose->timing_solve_dense);
     
     ParSHUM_verbose_start_timing(&verbose->timing_solve_U);
-    ParSHUM_U_matrix_solve(self->U, self->D, RHS, self->col_perm, self->invr_row_perm, self->dense_pivots);
-    if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL) 
+
+    ParSHUM_U_matrix_solve(self->U, self->D, RHS, self->col_perm, self->row_perm, self->dense_pivots);
+    if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL))
       ParSHUM_vector_print(RHS, "after backward solve");
+
+    ParSHUM_vector_permute(RHS, self->row_perm, self->S->m);
+    if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL) 
+      ParSHUM_vector_print(RHS, "P RHS");
+
     ParSHUM_vector_permute(RHS, self->invr_col_perm, self->S->n);
     if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) 
       ParSHUM_vector_print(RHS, "after solve operation");
