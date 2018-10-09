@@ -16,7 +16,7 @@ ParSHUM_Luby_create(ParSHUM_schur_matrix matrix)
 
   self->n = n;
   
-  self->score    = calloc((size_t) n,  sizeof(*self->score));
+  self->score    = calloc((size_t) n, sizeof(*self->score));
   self->chosen   = calloc((size_t) n, sizeof(*self->chosen));
   self->position = calloc((size_t) n, sizeof(*self->position));
  
@@ -71,6 +71,7 @@ ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
 	  }
 	}
 
+      /* we should detect buffer overflow  */
       if (best_position != -1) {
 	int col_best_marko = col_best_row * col_degree;
 	if(col_best_marko < best_marko)

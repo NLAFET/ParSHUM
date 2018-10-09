@@ -26,7 +26,8 @@ typedef  enum _ParSHUM_matrix_type
 #define  ParSHUM_reason_density          (1<<1)
 #define  ParSHUM_reason_no_pivots        (1<<2)
 #define  ParSHUM_reason_dense_too_large  (1<<3)
-#define  ParSHUM_reason_because          (1<<4)
+#define  ParSHUM_reason_no_switch        (1<<4)
+#define  ParSHUM_reason_because          (1<<5)
 
 typedef enum _ParSHUM_overlaps
   {

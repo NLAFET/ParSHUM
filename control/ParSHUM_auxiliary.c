@@ -62,17 +62,17 @@ update_counter(int *counter, int *index, int n, int base)
 }
 
 void 
-check_vlaid_perms(int *perms, int needed_pivots, int nb_pivots)
+check_vlaid_perms(int *perms, int n, int nb_pivots)
 {
   int i;
   
-  for(i = 0; i < needed_pivots; i++) {
+  for(i = 0; i < n; i++) {
     if (perms[i] == ParSHUM_UNUSED_PIVOT) {
       continue;
     } else if (perms[i] < 0) {
       ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "one of the pivots is negative ");
       continue;
-    } else if (perms[i] >= needed_pivots) { 
+    } else if (perms[i] >= n) { 
       ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "one of the pivots is larger then n ");
       continue;
     }      

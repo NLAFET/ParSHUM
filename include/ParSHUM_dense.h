@@ -27,7 +27,7 @@ struct _ParSHUM_dense_2D {
 
 ParSHUM_vector ParSHUM_vector_create(int n);
 void           ParSHUM_vector_read_file(ParSHUM_vector self, char *filename);
-void           ParSHUM_vector_permute(ParSHUM_vector self, int *perms);
+void           ParSHUM_vector_permute(ParSHUM_vector self, int *perms, int n);
 void           ParSHUM_vector_memset(ParSHUM_vector self, double val);
 void           ParSHUM_vector_print(ParSHUM_vector self, char *mess);
 double         ParSHUM_vector_2norm(ParSHUM_vector self);

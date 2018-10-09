@@ -421,7 +421,7 @@ void
 ParSHUM_matrix_SpMV(ParSHUM_matrix A, ParSHUM_vector x, ParSHUM_vector y)
 {
   int  col, i;
-  int  *rows = A->row, n = A->n;
+  int  *rows = A->row, n = A->n, m = A->m;
   long *col_ptr = A->col_ptr;
   double *A_val = A->val, *x_val = x->vect, *y_val = y->vect;
 
@@ -435,7 +435,7 @@ ParSHUM_matrix_SpMV(ParSHUM_matrix A, ParSHUM_vector x, ParSHUM_vector y)
       ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "this function does not support this format");
     }
 
-  for(i = 0; i < n; i++)
+  for(i = 0; i < m; i++)
     y_val[i] = 0.0;
 
   for(col = 0; col < n; col++) 

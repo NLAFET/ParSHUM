@@ -22,12 +22,13 @@ ParSHUM_schur_matrix_allocate(ParSHUM_schur_matrix self, int n, int m, long nnz,
 			      ParSHUM_verbose verbose, int nb_threads, double extra_space,
 			      double extra_space_inbetween)
 {
-  int i;
+  int i, larger_size;
 
   self->nb_threads = nb_threads;
   self->n = n;
   self->m = m;
   self->verbose = verbose;
+  larger_size = n > m ? n : m;
 
   self->CSC = calloc( (size_t) n, sizeof(*self->CSC));
   self->CSR = calloc( (size_t) m, sizeof(*self->CSR));
@@ -41,7 +42,7 @@ ParSHUM_schur_matrix_allocate(ParSHUM_schur_matrix self, int n, int m, long nnz,
 
   self->data_struct = malloc((size_t) nb_threads * sizeof(*self->data_struct));
   for( i = 0; i < nb_threads; i++) 
-    self->data_struct[i] = calloc((size_t) n, sizeof(**self->data_struct));
+    self->data_struct[i] = calloc((size_t) larger_size, sizeof(**self->data_struct));
   self->base = malloc((size_t) nb_threads * sizeof(*self->base));
   int_array_memset(self->base, 1, nb_threads);
 
@@ -63,7 +64,8 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
   int n = self->n - done_pivots + previous_step_pivots;
   int m = self->m - done_pivots + previous_step_pivots;
   int i, _done_pivots = done_pivots;
-  
+  int needed_pivots = self->n < self->m ? self->n : self->m;
+  needed_pivots -= done_pivots;
   int _nb_col_singletons = 0, _nb_row_singletons = 0;
 
   for(i = 0; i < m; )  {
@@ -74,55 +76,54 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       continue;
     }
     
-    if ( self->CSR[row].nb_elem == 1 &&
-    	 self->CSC[self->CSR[row].col[0]].nb_elem > 0)
-      {
-    	int col = self->CSR[row].col[0];
-    	row_perm[done_pivots + _nb_row_singletons] = row;
-    	col_perm[done_pivots +_nb_row_singletons] = col;
-    	_nb_row_singletons++;
-      }
+    /* We need the first check only for rectangular matrices  */
+    /* if ( _nb_row_singletons < needed_pivots   && */
+    /* 	 self->CSR[row].nb_elem == 1 ) */
+    /*   { */
+    /* 	int col = self->CSR[row].col[0]; */
+    /* 	if (invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) { */
+    /* 	  row_perm[done_pivots + _nb_row_singletons] = row; */
+    /* 	  invr_col_perm[col]  = _nb_row_singletons + done_pivots; */
+    /* 	  col_perm[done_pivots +_nb_row_singletons] = col; */
+    /* 	  invr_row_perm[row] = _nb_row_singletons++ + done_pivots; */
+    /* 	} */
+    /*   } */
     i++;
   }
   done_pivots += _nb_row_singletons;
   if (m != self->m - _done_pivots) 
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
 
-
   for(i = 0; i < n; ) {
     int col = cols[i];
     
     if (invr_col_perm[col] != ParSHUM_UNUSED_PIVOT )  {
-      cols[i] = cols[--n];
+      if (invr_col_perm[col] < _done_pivots) 
+	cols[i] = cols[--n];
+      else 
+	i++;
       continue;
     }
 
-    if ( self->CSC[col].nb_elem == 1 && self->CSR[self->CSC[col].row[0]].nb_elem > 1)
-      {
-    	int row = self->CSC[col].row[0];
-    	col_perm[done_pivots + _nb_col_singletons] = col;
-    	invr_col_perm[col]  = _nb_col_singletons + done_pivots;
-    	row_perm[done_pivots + _nb_col_singletons] = row;
-    	invr_row_perm[row] = _nb_col_singletons + done_pivots;
-    	_nb_col_singletons++;
-      }
+
+    /* /\* We need the first check only for rectangular matrices  *\/ */
+    /* if ( _nb_col_singletons + done_pivots < needed_pivots && */
+    /* 	 self->CSC[col].nb_elem == 1 ) */
+    /*   { */
+    /* 	int row = self->CSC[col].row[0]; */
+    /* 	if (invr_row_perm[row] == ParSHUM_UNUSED_PIVOT) { */
+    /* 	  col_perm[done_pivots + _nb_col_singletons] = col; */
+    /* 	  invr_col_perm[col]  = _nb_col_singletons + done_pivots; */
+    /* 	  row_perm[done_pivots + _nb_col_singletons] = row; */
+    /* 	  invr_row_perm[row] = _nb_col_singletons++ + done_pivots; */
+    /* 	} */
+    /*   } */
     i++;
   }
 
   if (n != self->n - _done_pivots) 
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the cols are taken out from cols");
-
-  /* If found row singeltons, then update the invr row and col perms
-     after searching for col singeltons, so we do not discard them
-     from cols too early  */
-  for ( i = 0; i < _nb_row_singletons; i++) {
-    int indice = _done_pivots + i;
-    int row = row_perm[indice];
-    int col = col_perm[indice];
-    invr_row_perm[row] = indice;
-    invr_col_perm[col] = indice;
-  }
-
+  
   *nb_col_singletons = _nb_col_singletons;
   *nb_row_singletons = _nb_row_singletons;
 }
@@ -401,8 +402,9 @@ ParSHUM_schur_matrix_update_LD(ParSHUM_schur_matrix self, ParSHUM_L_matrix L, Pa
       /* TODO: ParSHUM_verbose_trace_start_event(verbose, ParSHUM_UPDATE_L); */
       int me =  omp_get_thread_num();
       int n = self->n;
+      int m = self->m;
       int *U_rows = (int *) workspace[me];
-      int *tmp = &U_rows[n];
+      int *tmp = &U_rows[m];
       double *U_vals = (double *) tmp;
       CSC_struct *CSC;
       int i, nb_elem, col, row;
@@ -694,12 +696,12 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
 #pragma omp  parallel for num_threads(nb_threads) reduction(+:S_new_nnz) reduction(+:U_new_nnz)
   for ( int i = 0; i < U_new_n; i++) {
   int me =  omp_get_thread_num();
-  int n = S->n;
-  int   k, l;
+  int m = S->m;
+  int k, l;
   int *schur_row_struct = S->data_struct[me];
   int base = S->base[me];
   int *tmp_rows = (int *) workspace[me];
-  int *tmp = &tmp_rows[n];
+  int *tmp = &tmp_rows[m];
   double *tmp_vals = (double *) tmp;
   
   int col = U_struct[i];
@@ -707,7 +709,7 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   
   CSC_struct *CSC = &S->CSC[col];
   int S_col_nb_elem = CSC->nb_elem;
-  int U_nb_elem     = n;
+  int U_nb_elem     = m;
   int S_nb_elem     = 0;
   int *S_rows       = CSC->row;
   double *S_vals    = CSC->val;
@@ -726,15 +728,15 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
       schur_row_struct[S_row] = base + S_nb_elem++;
     }
   }
-  
+
   U_vals = &tmp_vals[U_nb_elem];
   U_rows = &tmp_rows[U_nb_elem];
   S_vals = tmp_vals;
   S_rows = tmp_rows;
-  U_nb_elem = n - U_nb_elem; 
+  U_nb_elem = m - U_nb_elem; 
   
   if (S_col_nb_elem != ( U_nb_elem + S_nb_elem ))
-    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong");
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong in the schur update");
   
   U_new_nnz += (long) U_nb_elem;
 	
@@ -772,7 +774,7 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   CSC->nb_free += CSC->nb_elem;
   CSC->nb_elem = 0;
   needed_size = (long) CSC->nb_free;
-  
+
   if (needed_size < (long) S_nb_elem)  {
     while( needed_size < (long) S_nb_elem  )
       needed_size *= 2;
@@ -887,7 +889,8 @@ ParSHUM_schur_matrix_update_S_rows(ParSHUM_schur_matrix S, int *L_struct, int L_
 }
 
 ParSHUM_dense_matrix 
-ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int done_pivots)
+ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int *invr_col_perm,
+			     int *invr_row_perm, int done_pivots)
 {
   ParSHUM_dense_matrix self; 
   int col, k, i;
@@ -896,24 +899,21 @@ ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int done_pivots)
   int n_schur = n - done_pivots;
   int m_schur = m - done_pivots;
   int invr_row[m];
+  int bb = 0 ;
   self = ParSHUM_dense_matrix_create(n_schur, m_schur);
-  
+
   for(i = 0, k=0; i < m; i++)
-    {
-      CSR_struct *CSR = &S->CSR[i];
-      if ( !CSR->nb_elem )
-	continue;
+    if (invr_row_perm[i] == ParSHUM_UNUSED_PIVOT ) { 
       invr_row[i] = k;
       self->original_rows[k++] = i;
     }
   
   for(col = 0, k=0;  col < n; col++)
-    {
+    if (invr_col_perm[col] == ParSHUM_UNUSED_PIVOT ) { 
       CSC_struct *CSC = &S->CSC[col];
+
       int nb_elem = CSC->nb_elem;
-      if ( !nb_elem ) 
-	continue;
-      self->original_cols[k] =  col;
+      self->original_cols[k] = col;
       double *CSC_vals = CSC->val;
       int    *CSC_rows = CSC->row;
       for( i=0; i < nb_elem; i++) 
@@ -1038,18 +1038,17 @@ ParSHUM_schur_check_doubles(ParSHUM_schur_matrix self)
 
 void
 ParSHUM_schur_matrix_check_pivots(ParSHUM_schur_matrix self,
-			     int *row_perms, int *col_perms,
-			     int *invr_row_perms, int *invr_col_perms,
-			     int nb_pivots)
+				  int *row_perms, int *col_perms,
+				  int *invr_row_perms, int *invr_col_perms,
+				  int nb_pivots)
 {
   int  i, j, n = self->n, m = self->m;
-  int needed_pivots = self->n < self->m ? self->n : self->m;
   char mess[2048];
   
-  check_vlaid_perms(row_perms,      needed_pivots, nb_pivots);
-  check_vlaid_perms(col_perms,      needed_pivots, nb_pivots);
-  check_vlaid_perms(invr_row_perms, needed_pivots, nb_pivots);
-  check_vlaid_perms(invr_row_perms, needed_pivots, nb_pivots);
+  check_vlaid_perms(row_perms,      m, nb_pivots);
+  check_vlaid_perms(invr_row_perms, m, nb_pivots);
+  check_vlaid_perms(col_perms,      n, nb_pivots);
+  check_vlaid_perms(invr_row_perms, n, nb_pivots);
   check_perms_and_invr_perms(col_perms, invr_col_perms, nb_pivots, "col");
   check_perms_and_invr_perms(row_perms, invr_row_perms, nb_pivots, "row");
   

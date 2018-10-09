@@ -259,8 +259,11 @@ ParSHUM_verbose_print_raw(ParSHUM_verbose verbose)
     fprintf(file,"#unknown_reason_for_switch\n");
   else if (verbose->reason & ParSHUM_reason_density) 
     fprintf(file,"#density_failed\n");
+
   else if (verbose->reason & ParSHUM_reason_no_pivots)  
     fprintf(file,"#min_pivots_failed\n");
+  else if (verbose->reason & ParSHUM_reason_no_switch) 
+    fprintf(file,"#not_switched_to_dense_code\n");
   else if (verbose->reason & ParSHUM_reason_because) 
     fprintf(file,"#switched_to_dense_just_because\n");
 
@@ -322,15 +325,19 @@ ParSHUM_verbose_print_V0(ParSHUM_verbose self)
       fprintf(file,"[%s] The factorization was not finished  because the dense part was too large.\n", prog_name);
     }
 
-  fprintf(file,"[%s] The switch to dense code was done ", prog_name);
-  if (self->reason & ParSHUM_reason_unknown)
-    fprintf(file,"for uknown reason.\n");
-  else if (self->reason & ParSHUM_reason_density)
-    fprintf(file,"beacuse the schur became too dense.\n");
-  else if (self->reason & ParSHUM_reason_no_pivots)
-    fprintf(file,"because we did not found engough pivots.\n");
-  else if (self->reason & ParSHUM_reason_because)
-    fprintf(file,"just because.\n");
+  if ( self->reason & ParSHUM_reason_no_switch) { 
+    fprintf(file,"[%s] There was no switch to the desnse solver ", prog_name);
+  } else { 
+    fprintf(file,"[%s] The switch to dense code was done ", prog_name);
+    if (self->reason & ParSHUM_reason_unknown)
+      fprintf(file,"for uknown reason.\n");
+    else if (self->reason & ParSHUM_reason_density)
+      fprintf(file,"beacuse the schur became too dense.\n");
+    else if (self->reason & ParSHUM_reason_no_pivots)
+      fprintf(file,"because we did not found engough pivots.\n");
+    else if (self->reason & ParSHUM_reason_because)
+      fprintf(file,"just because.\n");
+  }
 
   if(self->computed_norms)
   fprintf(file,"[%s] The backward error is (%e) and the forward error is (%e)\n",

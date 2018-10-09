@@ -62,10 +62,9 @@ ParSHUM_vector_read_file(ParSHUM_vector self, char *filename)
 }
 
 void
-ParSHUM_vector_permute(ParSHUM_vector self, int *perms)
+ParSHUM_vector_permute(ParSHUM_vector self, int *perms, int n)
 {
   int     i;
-  int     n    = self->n;
   double *vect = self->vect, tmp[n];
   
   memcpy(tmp, vect, (size_t) n*sizeof(*vect));
@@ -142,6 +141,7 @@ ParSHUM_dense_matrix_create(int n, int m)
   self->original_rows = malloc((size_t) m * sizeof(*self->original_rows));
   self->original_cols = malloc((size_t) n * sizeof(*self->original_cols));
   self->pivots        = malloc((size_t) m * sizeof(*self->pivots));
+  int_array_memset(self->pivots, ParSHUM_UNUSED_PIVOT, m); 
   self->n = n;
   self->m = m;
 
@@ -152,10 +152,18 @@ ParSHUM_dense_matrix_create(int n, int m)
 void
 ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int nb_threads)
 {
+  int ret = 0;
+  char mess[2048];
+
   omp_set_num_threads(nb_threads);
-  int ret = plasma_dgetrf(self->m, self->n, self->val, self->m, self->pivots);  
-  if (ret) 
-    printf("The factorization of the dense schur is completed, but the entry U(%d,%d) has a zero on it.\n", ret, ret);
+  if (self->n && self->m) { 
+    ret = plasma_dgetrf(self->m, self->n, self->val, self->m, self->pivots);  
+  }
+  if (ret)  {
+    snprintf(mess, 2048,"The factorization of the dense schur is completed, but the entry U(%d,%d) has a zero on it.\n", ret, ret);
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+  }
+
 }
 
 

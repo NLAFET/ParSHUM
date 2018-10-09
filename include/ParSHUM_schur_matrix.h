@@ -75,7 +75,8 @@ ParSHUM_schur_matrix_update_S_rows(ParSHUM_schur_matrix S, int *L_struct, int L_
   
 void ParSHUM_schur_matrix_destroy(ParSHUM_schur_matrix self);
 
-ParSHUM_dense_matrix  ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix self, int done_pivots);
+ParSHUM_dense_matrix  ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int *invr_col_perm,
+						   int *invr_row_perm, int done_pivots);
 
 void ParSHUM_schur_check_doubles(ParSHUM_schur_matrix sefl);
 

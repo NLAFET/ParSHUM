@@ -108,7 +108,7 @@ check_ParSHUM_with_plasma_perm(int argc, char **argv)
   debug_solver->exe_parms->nb_previous_pivots  = 5;
   ParSHUM_solver_init(debug_solver);
 
-  ParSHUM_vector_permute(X, plasma_perms);
+  ParSHUM_vector_permute(X, plasma_perms, X->n);
   ParSHUM_vector_copy(X, sol_ParSHUM);
 
   ParSHUM_solver_factorize(debug_solver);
@@ -611,65 +611,68 @@ void
 ParSHUM_solver_alloc_internal(ParSHUM_solver self) 
 {
   double total_extra_space = 1 + self->exe_parms->extra_space_inbetween + self->exe_parms->extra_space;
-  int needed_pivots = self->A->n < self->A->m ? self->A->n : self->A->m;
-  int i;
+  int n = self->A->n, m = self->A->m, i;
+  int needed_pivots = n < m ? n : m;
+  int larger_size = n > m ? n : m;
  
   self->S    = ParSHUM_schur_matrix_create();
   self->D    = ParSHUM_matrix_create();
 
   if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL))
       ParSHUM_matrix_print(self->A, "A on input");
-  ParSHUM_schur_matrix_allocate(self->S, self->A->n, self->A->m, self->A->nnz, self->debug, self->verbose,
-			   self->exe_parms->nb_threads, self->exe_parms->extra_space, self->exe_parms->extra_space_inbetween);
+  ParSHUM_schur_matrix_allocate(self->S, n, m, self->A->nnz,
+				self->debug, self->verbose, self->exe_parms->nb_threads,
+				self->exe_parms->extra_space, self->exe_parms->extra_space_inbetween);
   ParSHUM_schur_matrix_copy(self->A, self->S, self->exe_parms->value_tol);
 
   if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL))
       ParSHUM_schur_matrix_print(self->S, "S on input");
-  ParSHUM_matrix_allocate(self->D, self->A->n, 0, 0, 1.0, ParSHUM_Diag_matrix);
-  self->L = ParSHUM_L_matrix_create(self->A->n);
+  ParSHUM_matrix_allocate(self->D, needed_pivots, 0, 0, 1.0, ParSHUM_Diag_matrix);
+  self->L = ParSHUM_L_matrix_create(needed_pivots);
   self->U = ParSHUM_U_matrix_create(self->A, total_extra_space);
   
-  self->row_perm      = malloc((size_t) needed_pivots * sizeof(*self->invr_row_perm));
-  self->col_perm      = malloc((size_t) needed_pivots * sizeof(*self->invr_col_perm));
-  self->invr_row_perm = malloc((size_t) needed_pivots * sizeof(*self->invr_row_perm));
-  self->invr_col_perm = malloc((size_t) needed_pivots * sizeof(*self->invr_col_perm));
-
-  int_array_memset(self->col_perm,      ParSHUM_UNUSED_PIVOT, needed_pivots);
-  int_array_memset(self->row_perm,      ParSHUM_UNUSED_PIVOT, needed_pivots);
-  int_array_memset(self->invr_col_perm, ParSHUM_UNUSED_PIVOT, needed_pivots);
-  int_array_memset(self->invr_row_perm, ParSHUM_UNUSED_PIVOT, needed_pivots);
+  self->row_perm      = malloc((size_t) m * sizeof(*self->row_perm));
+  self->invr_row_perm = malloc((size_t) m * sizeof(*self->invr_row_perm));
+  self->col_perm      = malloc((size_t) n * sizeof(*self->col_perm));
+  self->invr_col_perm = malloc((size_t) n * sizeof(*self->invr_col_perm));
+  
+  int_array_memset(self->row_perm,      ParSHUM_UNUSED_PIVOT, m);
+  int_array_memset(self->invr_row_perm, ParSHUM_UNUSED_PIVOT, m);
+  int_array_memset(self->col_perm,      ParSHUM_UNUSED_PIVOT, n);
+  int_array_memset(self->invr_col_perm, ParSHUM_UNUSED_PIVOT, n);
 
   self->previous_pivots = malloc((size_t) self->exe_parms->nb_previous_pivots *  sizeof(*self->previous_pivots));
   int_array_memset(self->previous_pivots, INT_MAX / self->exe_parms->nb_previous_pivots, self->exe_parms->nb_previous_pivots);
-
+  /* TODO: check if this is correct for the TP algo */
   self->candidates = calloc(1, sizeof(*self->candidates));
-  self->candidates->row        = malloc((size_t) self->A->n * sizeof(*self->candidates->row));
-  self->candidates->marko      = malloc((size_t) self->A->n * sizeof(*self->candidates->marko));
+  self->candidates->row        = malloc((size_t) n * sizeof(*self->candidates->row));
+  self->candidates->marko      = malloc((size_t) n * sizeof(*self->candidates->marko));
   self->candidates->best_marko = malloc((size_t) self->exe_parms->nb_threads * sizeof(*self->candidates->best_marko));
  
   self->counters              = calloc( 1, sizeof(*self->counters));
   *self->counters             = calloc( 1, sizeof(**self->counters));
 
-  self->random_col = create_randomize(self->A->n);
+  self->random_col = create_randomize(n);
 
-  (*self->counters)->array    = calloc((size_t) self->size_counters * 2 * self->A->n,  sizeof(*self->counters[0]->array));
+  /* TODO: check if this is correct for the TP algo */
+  (*self->counters)->array    = calloc((size_t) self->size_counters * 2 * n,  sizeof(*self->counters[0]->array));
   (*self->counters)->used_counters = calloc((size_t) self->size_counters, sizeof(*self->counters[0]->used_counters));
   self->nb_counters = 1;
 
-  self->allocated_U_struct = self->A->n / 100;  
+  self->allocated_U_struct = n / 100;  
   self->allocated_U_struct = self->allocated_U_struct ? self->allocated_U_struct : 1;
   self->U_struct = calloc((size_t) self->allocated_U_struct, sizeof(*self->U_struct));
-  self->allocated_L_struct = self->A->m / 100;  
+  self->allocated_L_struct = m / 100;  
   self->allocated_L_struct = self->allocated_L_struct ? self->allocated_L_struct : 1;
   self->L_struct = calloc((size_t) self->allocated_L_struct, sizeof(*self->L_struct));
-  
-  self->Luby = ParSHUM_Luby_create(self->S);
 
-  self->cols = malloc((size_t) self->A->n * sizeof(*self->cols));
-  for( i = 0; i < self->A->n; i++)
+  self->Luby = ParSHUM_Luby_create(self->S);
+  
+  self->cols = malloc((size_t) n * sizeof(*self->cols));
+  for( i = 0; i < n; i++)
     self->cols[i] = i;
-  self->rows = malloc((size_t) self->A->m * sizeof(*self->rows));
-  for( i = 0; i < self->A->m; i++)
+  self->rows = malloc((size_t) m * sizeof(*self->rows));
+  for( i = 0; i < m; i++)
     self->rows[i] = i;
   self->distributions = malloc((size_t) (self->exe_parms->nb_threads + 1)  * sizeof(*self->distributions));
   
@@ -681,10 +684,10 @@ ParSHUM_solver_alloc_internal(ParSHUM_solver self)
 
   self->workspace = malloc((size_t) self->exe_parms->nb_threads * sizeof(*self->workspace));
   for(i = 0; i < self->exe_parms->nb_threads; i++)
-    self->workspace[i] = malloc((size_t) self->A->n * (sizeof(int) + sizeof(double)));
+    self->workspace[i] = malloc((size_t) larger_size * (sizeof(int) + sizeof(double)));
   
-  self->logical_cols = calloc((size_t) self->A->n, sizeof(*self->logical_cols));
-  self->logical_rows = calloc((size_t) self->A->n, sizeof(*self->logical_rows));
+  self->logical_rows = calloc((size_t) m, sizeof(*self->logical_rows));
+  self->logical_cols = calloc((size_t) n, sizeof(*self->logical_cols));
   
   pthread_mutex_init(&self->counters_lock, NULL); 
 }
@@ -812,13 +815,13 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
   ParSHUM_schur_matrix S = self->S;
   ParSHUM_verbose verbose = self->verbose;
 
-  int n = S->n, nb_cols = S->n - self->done_pivots;
+  int n = S->n, nb_cols = S->n - self->done_pivots, nb_rows = S->m - self->done_pivots;
   int done_pivots = self->done_pivots;
   int new_pivots =  new_Luby_pivots + self->nb_col_singletons + self->nb_row_singletons;
   int all_pivots = new_pivots + done_pivots;
   int i, base = self->step + 1;
   int nb_threads = self->exe_parms->nb_threads;
-  int distribution_perms[nb_threads+1], distribution_n[nb_threads+1];
+  int distribution_perms[nb_threads+1], distribution_n[nb_threads+1], distribution_m[nb_threads+1];
   int row_sizes[nb_threads], col_sizes[nb_threads];
 
   int *logical_cols = self->logical_cols;
@@ -849,6 +852,11 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
     distribution_n[i] = (nb_cols / nb_threads) * i;
   distribution_n[nb_threads] = nb_cols;
 
+  *distribution_m = 0;
+  for(i = 1; i < nb_threads; i++)
+    distribution_m[i] = (nb_rows / nb_threads) * i;
+  distribution_m[nb_threads] = nb_rows;
+
 #pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, base, nb_cols, col_sizes, row_sizes, n, verbose)
   {
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GETTING_PIVOTS);
@@ -860,6 +868,7 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
   int *my_row_perms = &my_col_perms[nb_cols];
   int my_nb_cols = 0, my_nb_rows = 0;
   
+  /* Updte the invr_*_perms arrays */
   for( i = start; i < end; i++)
     {
       invr_col_perms[col_perms[i]] = i;
@@ -868,6 +877,7 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
 
 #pragma omp barrier
 
+  /* Updte the logical arrays with the  non-singelton pivots */
   for ( i = start; i < end; i++)
     {
       CSC_struct *CSC = &S->CSC[col_perms[i]];
@@ -886,6 +896,12 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
 #pragma omp barrier
 #pragma omp single
   {
+  /* 
+     Sequential updte the logical arrays with the col_singeltons. 
+     This is done seq  beacuse the update in parallel will need to use atomics. 
+     We need to treat the col singeltons separately, because we need to indetify 
+     entries that are in the pivotal square matrix in order to put them in U. 
+  */
   start = self->done_pivots + self->nb_row_singletons;
   end   = self->done_pivots + self->nb_row_singletons + self->nb_col_singletons;
   for ( i = start; i < end; i++)
@@ -927,14 +943,15 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
 #pragma omp barrier
 
   start = distribution_n[me];
-  end = distribution_n[me+1];
-
+  end   = distribution_n[me+1];
   for( i = start; i < end; i++)  {
     int col = cols[i];
     if(logical_cols[col] == base && invr_col_perms[col] == ParSHUM_UNUSED_PIVOT) 
       my_col_perms[my_nb_cols++] = col;
   }
 
+  start = distribution_m[me];
+  end   = distribution_m[me+1];
   for( i = start; i < end; i++)  {
     int row = rows[i];
     if(logical_rows[row] == base && invr_row_perms[row] == ParSHUM_UNUSED_PIVOT) 
@@ -990,21 +1007,26 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
   ParSHUM_verbose_per_step step = ParSHUM_verbose_get_step(self->verbose);
   ParSHUM_verbose verbose = self->verbose;
   int nb_threads = self->exe_parms->nb_threads;
-    
+  int needed_pivots = self->A->n < self->A->m ? self->A->n : self->A->m;
+  needed_pivots -= self->done_pivots;
+
+  int new_pivots = 0;
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GET_SINGELTONS);
   ParSHUM_schur_get_singletons(self->S, self->done_pivots, self->previous_step_pivots,
-  			  &self->nb_col_singletons, &self->nb_row_singletons,
-			  self->cols, self->rows, self->distributions,
-  			  self->done_pivots, self->col_perm, self->row_perm,
-  			  self->invr_col_perm, self->invr_row_perm);
+			       &self->nb_col_singletons, &self->nb_row_singletons,
+			       self->cols, self->rows, self->distributions,
+			       self->done_pivots, self->col_perm, self->row_perm,
+			       self->invr_col_perm, self->invr_row_perm);
+  needed_pivots -= self->nb_col_singletons + self->nb_row_singletons;
   ParSHUM_verbose_trace_stop_event(verbose);
 
   if (exe_parms->luby_algo) {
-    int new_pivots = 0, best_marko, nb_cols = self->S->n - self->done_pivots;
+  if (needed_pivots > 0) {
+    int  best_marko, nb_cols = self->S->n - self->done_pivots;
     int *distributions = self->distributions, best_markos[nb_threads];
     int candidates[nb_threads];
     int i;
-
+    
     *distributions = 0;
     for (i = 1; i < nb_threads; i++) 
       distributions[i] = (nb_cols / nb_threads) * i;
@@ -1058,6 +1080,12 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
     ParSHUM_verbose_stop_timing(&step->timing_extracting_candidates);
 
     ParSHUM_verbose_start_timing(&step->timing_merging_pivots);
+    /*
+      This restrictoin most be done for the recantular (overderminated)
+      case, so that we do not find too many pivots
+    */
+    if (step->nb_candidates > needed_pivots)  
+      step->nb_candidates = needed_pivots;
     *distributions = 0;
     for (i = 1; i < nb_threads; i++) 
       distributions[i] = (step->nb_candidates / nb_threads) * i;
@@ -1102,13 +1130,18 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
     }
     new_pivots = candidates[nb_threads-1];
     
-    if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) {
-      print_int_array(self->col_perm, self->A->n, "col_perms");
-      print_int_array(self->row_perm, self->A->n, "row_perms");
-    }
-    
-    ParSHUM_solver_get_Luby_pivots(self, self->Luby, new_pivots);
-    ParSHUM_verbose_stop_timing(&step->timing_merging_pivots);
+  } else { // needed_pivots
+    ParSHUM_verbose_start_timing(&step->timing_merging_pivots);
+  }
+  if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) {
+    printf(" %d row singeltons, %d col_singeltons and %d luby pivots were found\n",
+	   self->nb_row_singletons, self->nb_col_singletons, new_pivots);
+    print_int_array(self->col_perm, self->A->n, "col_perms");
+    print_int_array(self->row_perm, self->A->m, "row_perms");
+  }
+  
+  ParSHUM_solver_get_Luby_pivots(self, self->Luby, new_pivots);
+  ParSHUM_verbose_stop_timing(&step->timing_merging_pivots);
 
   } else {
     
@@ -1184,8 +1217,8 @@ ParSHUM_solver_update_matrix(ParSHUM_solver self)
 
   if (self->debug &  ParSHUM_CHECK_PIVOTS)
     ParSHUM_schur_matrix_check_pivots(self->S, self->row_perm, self->col_perm, 
-				 self->invr_row_perm, self->invr_col_perm,
-				 self->done_pivots);
+				      self->invr_row_perm, self->invr_col_perm,
+				      self->done_pivots);
   
   if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) {
     ParSHUM_schur_matrix_print(S, "S after update");
@@ -1253,7 +1286,8 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
 {
   ParSHUM_exe_parms exe_parms = self->exe_parms;
   ParSHUM_verbose verbose = self->verbose;
-  int needed_pivots = self->A->n < self->A->m ? self->A->n : self->A->m;
+  int n = self->S->n, m = self->S->m, i;
+  int needed_pivots = n < m ? n : m;
   int *previous_pivots   = self->previous_pivots;
   int nb_previous_pivots = exe_parms->nb_previous_pivots;
   int nb_pivot_blocks = 0;
@@ -1264,11 +1298,11 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
   ParSHUM_verbose_start_timing(&verbose->timing_facto);
   ParSHUM_verbose_start_timing(&verbose->timing_facto_sparse);
   while ( ParSHUM_continue_pivot_search(self->S, self->done_pivots, needed_pivots, 
-				   previous_pivots, nb_previous_pivots,
-				   exe_parms->density_tolerance,
-				   exe_parms->min_pivot_per_steps,
-				   exe_parms->max_dense_schur,
-				   self->debug, verbose) )
+					previous_pivots, nb_previous_pivots,
+					exe_parms->density_tolerance,
+					exe_parms->min_pivot_per_steps,
+					exe_parms->max_dense_schur,
+					self->debug, verbose) )
     { 
        ParSHUM_verbose_per_step  step = ParSHUM_verbose_step_start(verbose);
        ParSHUM_verbose_start_timing(&step->timing_step);
@@ -1294,9 +1328,10 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
 					self->row_perm, self->col_perm);
     verbose->schur_density = 1.00;
   }  else {
-    self->S_dense = ParSHUM_schur_matrix_convert(self->S, self->done_pivots);
+    self->S_dense = ParSHUM_schur_matrix_convert(self->S, self->invr_col_perm,
+						 self->invr_row_perm, self->done_pivots);
     verbose->schur_density = 
-      (double) self->S->nnz / ((self->S->n - self->done_pivots) * (self->S->m - self->done_pivots));
+      (double) self->S->nnz / ((n - self->done_pivots) * (m - self->done_pivots));
 
     if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) 
       ParSHUM_dense_matrix_print(self->S_dense, "dense schur after conversion");
@@ -1312,14 +1347,16 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
     ParSHUM_dense_matrix_factorize(self->S_dense, exe_parms->nb_threads);
     // Handeling the pivots
     memcpy(&self->row_perm[self->done_pivots], self->S_dense->original_rows,
-	   (size_t) (self->A->m - self->done_pivots) * sizeof(*self->row_perm));
+	   (size_t) (m - self->done_pivots) * sizeof(*self->row_perm));
     memcpy(&self->col_perm[self->done_pivots], self->S_dense->original_cols,
-	   (size_t) (self->A->n - self->done_pivots) * sizeof(*self->col_perm));
-    int i;
-    for(i = self->done_pivots; i < needed_pivots; i++) {
+	   (size_t) (n - self->done_pivots) * sizeof(*self->col_perm));
+    
+
+    for(i = self->done_pivots; i < m; i++) 
       self->invr_row_perm[self->row_perm[i]] = i;
+    for(i = self->done_pivots; i < n; i++) 
       self->invr_col_perm[self->col_perm[i]] = i;
-    }
+
     self->dense_pivots = needed_pivots - self->done_pivots;
     ParSHUM_verbose_update_dense_pivots(verbose, self->dense_pivots);
     verbose->nnz_final   = self->L->nnz + self->U->nnz + self->D->n + self->S_dense->n * self->S_dense->m;
@@ -1343,35 +1380,81 @@ ParSHUM_solver_solve(ParSHUM_solver self, ParSHUM_vector RHS)
 
   ParSHUM_verbose_start_timing(&verbose->timing_solve); 
   if (self->debug & ParSHUM_CHECK_DENSE_W_ParSHUM_PERM ) { 
-    ParSHUM_vector_permute(RHS, self->row_perm);
+    ParSHUM_vector_permute(RHS, self->row_perm, self->A_debug->m);
     ParSHUM_dense_2D_solve(self->A_debug, RHS);
-    ParSHUM_vector_permute(RHS, self->invr_col_perm);
+    ParSHUM_vector_permute(RHS, self->invr_col_perm, self->A_debug->m);
   } else {
     ParSHUM_verbose_start_timing(&verbose->timing_solve_L);
-    if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) 
+    /* if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL))  */
       ParSHUM_vector_print(RHS, "initial RHS");
-    ParSHUM_vector_permute(RHS, self->row_perm);
-    if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL) 
+    ParSHUM_vector_permute(RHS, self->row_perm, self->S->m);
+    /* if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL)  */
       ParSHUM_vector_print(RHS, "P RHS");
     ParSHUM_L_matrix_solve(self->L, RHS, self->invr_row_perm);
-    if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL) 
+    /* if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL)  */
       ParSHUM_vector_print(RHS, "after forward solve");
     ParSHUM_verbose_stop_timing(&verbose->timing_solve_L);
     
     ParSHUM_verbose_start_timing(&verbose->timing_solve_dense);
-    if (self->S_dense->n)
+    printf("%d and %d\n", self->S_dense->n, self->S_dense->m);
+    if (self->S_dense->n && self->S_dense->m) {
+      printf("entering!\n");
+      if (self->S_dense->n == self->S_dense->m) {
       plasma_dgetrs(self->S_dense->n, 1, self->S_dense->val, self->S_dense->n,
     		    self->S_dense->pivots, &RHS_vals[self->done_pivots], self->S_dense->n);
+      } else if ( self->S_dense->n < self->S_dense->m )  {
+	printf("%d and %d\n", self->S_dense->n, self->S_dense->m);
+	/* int diff_size = self->S_dense->m - self->S_dense->n; */
+	/* /\* ParSHUM_vector permuted_RHS = ParSHUM_vector_create(self->S_dense->m);  *\/ */
+	/* /\* memcpy(permuted_RHS->vect, &RHS_vals[self->done_pivots], permuted_RHS->n); *\/ */
+	/* double *dense_RHS = &RHS_vals[self->done_pivots]; */
+	/* int *perms = self->S_dense->pivots; */
+
+	/* for( int i = 0; i < self->S_dense->n; i++) { */
+	/*   double tmp = dense_RHS[i]; */
+	/*   dense_RHS[i] = dense_RHS[perms[i]]; */
+	/*   dense_RHS[perms[i]] = tmp; */
+	/* } */
+	/* /\* print_int_array(self->S_dense->pivots, self->S_dense->m, "plasma pivots"); *\/ */
+	/* plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaUnit, */
+	/* 	     self->S_dense->n, 1, 1.0, self->S_dense->val, */
+	/* 	     self->S_dense->m, dense_RHS, self->S_dense->m); */
+
+
+	/* plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, diff_size, 1, self->S_dense->n,  */
+	/* 	     -1.0,  */
+	/* 	     &self->S_dense->val[self->S_dense->m - diff_size], self->S_dense->m, */
+	/* 	     dense_RHS, self->A->m,  */
+	/* 	     1.0, */
+	/* 	     &dense_RHS[self->S_dense->n], self->A->m);  */
+	/* plasma_dtrsm(PlasmaLeft, PlasmaUpper, PlasmaNoTrans, PlasmaNonUnit, */
+	/* 	     self->S_dense->n, 1, 1.0, self->S_dense->val, */
+	/* 	     self->S_dense->m, dense_RHS, self->S_dense->m); */
+	/* for( int i = self->S_dense->n-1; i >= 0; i--) { */
+	/*   double tmp = dense_RHS[i]; */
+	/*   dense_RHS[i] = dense_RHS[perms[i]]; */
+	/*   dense_RHS[perms[i]] = tmp; */
+	/* } */
+
+	
+      } else {
+	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not implemeted");
+      }
+    }
+    /* 
+       TODO: The memeory acces can be improved for the solve of U. But in for the part handled by plasma 
+             must be gathered and put int temp buffers and scatered back to the real vector. That way
+	     the nnz-inderection could be replaced with an n-inderection.  
+     */
     if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL) 
       ParSHUM_vector_print(RHS, "after dense solve");
     ParSHUM_verbose_stop_timing(&verbose->timing_solve_dense);
     
     ParSHUM_verbose_start_timing(&verbose->timing_solve_U);
     ParSHUM_U_matrix_solve(self->U, self->D, RHS, self->col_perm, self->invr_row_perm, self->dense_pivots);
-    /* ParSHUM_matrix_solve_UD(self->U, self->D, RHS, self->invr_col_perm); */
     if (self->debug & ParSHUM_DEBUG_GOSSIP_GIRL) 
       ParSHUM_vector_print(RHS, "after backward solve");
-    ParSHUM_vector_permute(RHS, self->invr_col_perm);
+    ParSHUM_vector_permute(RHS, self->invr_col_perm, self->S->n);
     if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) 
       ParSHUM_vector_print(RHS, "after solve operation");
     ParSHUM_verbose_stop_timing(&verbose->timing_solve_U);
@@ -1399,7 +1482,8 @@ ParSHUM_solver_compute_norms(ParSHUM_solver self,
   x_norm  = ParSHUM_vector_2norm(X);
   b_norm  = ParSHUM_vector_2norm(rhs);
 
-  self->verbose->backward_error /= A_norm * x_norm + b_norm;
+  self->verbose->backward_error /= b_norm;
+  /* self->verbose->backward_error /= A_norm * x_norm + b_norm; */
 
   ParSHUM_vector_destroy(r);
 }
