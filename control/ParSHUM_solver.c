@@ -25,7 +25,7 @@ const char *usageStrign[] = {
   "            [--check_ParSHUM_with_plasma_perm] [--check_dense_with_ParSHUM_perm] [--print_each_step] [--check_GC]",
   "            [--group_run value_tol|marko_tol|schur_density|nb_candidates|min_pivots|nb_threads init inc nb_steps]",
   "            [--counters_size #double_counters] [--check_counters] [--check_schur_doubles] [--max_dense_schur size]",
-  "            [--luby_algorithm] [--trace]", 
+  "            [--luby_algorithm] [--singeltons_relaxation tol] [--trace]", 
   NULL,
 };
 
@@ -45,6 +45,7 @@ ParSHUM_solver_create()
 
   self->exe_parms->nb_threads              = 1;
   self->exe_parms->value_tol               = 0.1;
+  self->exe_parms->singeltons_relaxation   = 0.01;
   self->exe_parms->marko_tol               = 4;
   self->exe_parms->extra_space             = 1.0;
   self->exe_parms->extra_space_inbetween   = 1.0;
@@ -314,6 +315,8 @@ ParSHUM_solver_parse_args(ParSHUM_solver self, int argc, char **argv, int exit_o
 	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "max_dense_schur should be at least 1");
       self->exe_parms->max_dense_schur = tmp;
       continue;
+    } else if (!strcmp(argv[i], "--singeltons_relaxation")) {
+      self->exe_parms->singeltons_relaxation = atof(argv[++i]);
     } else if (!strcmp(argv[i], "--luby_algorithm")) {
       self->exe_parms->luby_algo = 1;
     } else if (!strcmp(argv[i], "--trace")) {
@@ -1013,10 +1016,10 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
   int new_pivots = 0;
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GET_SINGELTONS);
   ParSHUM_schur_get_singletons(self->S, self->done_pivots, self->previous_step_pivots,
-			       self->value_tol, &self->nb_col_singletons, &self->nb_row_singletons,
-			       self->cols, self->rows, self->distributions,
-			       self->done_pivots, self->col_perm, self->row_perm,
-			       self->invr_col_perm, self->invr_row_perm);
+			       self->exe_parms->value_tol * self->exe_parms->singeltons_relaxation,
+			       &self->nb_col_singletons, &self->nb_row_singletons, self->cols,
+			       self->rows, self->distributions, self->done_pivots, self->col_perm,
+			       self->row_perm, self->invr_col_perm, self->invr_row_perm);
   needed_pivots -= self->nb_col_singletons + self->nb_row_singletons;
   ParSHUM_verbose_trace_stop_event(verbose);
 

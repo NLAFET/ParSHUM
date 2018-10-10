@@ -25,6 +25,7 @@ struct _ParSHUM_verbose_parms {
 
 struct _ParSHUM_exe_parms {
   double value_tol;
+  double singeltons_relaxation;
   double marko_tol;
   double extra_space;
   double extra_space_inbetween;

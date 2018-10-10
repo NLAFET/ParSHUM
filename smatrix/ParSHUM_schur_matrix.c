@@ -80,9 +80,10 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
     if ( _nb_row_singletons < needed_pivots   &&
     	 self->CSR[row].nb_elem == 1 )
       {
-
-    	int col = self->CSR[row].col[0];
-    	if (invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) {
+    	int col = *self->CSR[row].col;
+	double val = *self->CSC[col].val, col_max = self->CSC[col].col_max;
+    	if (invr_col_perm[col] == ParSHUM_UNUSED_PIVOT && 
+	    val > col_max * val_tol) {
     	  row_perm[done_pivots + _nb_row_singletons] = row;
     	  invr_col_perm[col]  = _nb_row_singletons + done_pivots;
     	  col_perm[done_pivots +_nb_row_singletons] = col;
@@ -106,18 +107,20 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       continue;
     }
 
-    /* We need the first check only for rectangular matrices  */
-    /* if ( _nb_col_singletons + _nb_row_singletons < needed_pivots && */
-    /* 	 self->CSC[col].nb_elem == 1 ) */
-    /*   { */
-    /* 	int row = self->CSC[col].row[0]; */
-    /* 	if (invr_row_perm[row] == ParSHUM_UNUSED_PIVOT) { */
-    /* 	  col_perm[done_pivots + _nb_col_singletons] = col; */
-    /* 	  invr_col_perm[col]  = _nb_col_singletons + done_pivots; */
-    /* 	  row_perm[done_pivots + _nb_col_singletons] = row; */
-    /* 	  invr_row_perm[row] = _nb_col_singletons++ + done_pivots; */
-    /* 	} */
-    /*   } */
+    /* We need the first check only for rectangular matrices */
+    if ( _nb_col_singletons + _nb_row_singletons < needed_pivots &&
+    	 self->CSC[col].nb_elem == 1 )
+      {
+    	int row = *self->CSC[col].row;
+	double val = *self->CSC[col].val, col_max = self->CSC[col].col_max;
+    	if (invr_row_perm[row] == ParSHUM_UNUSED_PIVOT && 
+	    val > col_max * val_tol) {
+    	  col_perm[done_pivots + _nb_col_singletons] = col;
+    	  invr_col_perm[col]  = _nb_col_singletons + done_pivots;
+    	  row_perm[done_pivots + _nb_col_singletons] = row;
+    	  invr_row_perm[row] = _nb_col_singletons++ + done_pivots;
+    	}
+      }
     i++;
   }
 
