@@ -48,6 +48,13 @@ typedef enum _ParSHUM_parm_type
     ParSHUM_nb_threads
   } ParSHUM_parm_type;
 
+typedef enum _ParSHUM_perm_type
+  {
+    ParSHUM_perm_none,
+    ParSHUM_perm_global,
+    ParSHUM_perm_both
+  } ParSHUM_perm_type;
+
 #define  ParSHUM_DEBUG_NONE              0
 #define  ParSHUM_CHECK_PIVOTS            (1<<0)
 #define  ParSHUM_CHECK_SCHUR_MEMORY      (1<<1)

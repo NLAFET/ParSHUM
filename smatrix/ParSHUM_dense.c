@@ -138,8 +138,6 @@ ParSHUM_dense_matrix_create(int n, int m)
   ParSHUM_dense_matrix self = calloc((size_t) 1,  sizeof(*self));
 
   self->val = calloc((size_t) n * m, sizeof(*self->val));
-  self->original_rows = malloc((size_t) m * sizeof(*self->original_rows));
-  self->original_cols = malloc((size_t) n * sizeof(*self->original_cols));
   self->pivots        = malloc((size_t) m * sizeof(*self->pivots));
   int_array_memset(self->pivots, ParSHUM_UNUSED_PIVOT, m); 
   self->n = n;
@@ -155,7 +153,6 @@ ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int nb_threads)
   int ret = 0;
   char mess[2048];
 
-  omp_set_num_threads(nb_threads);
   if (self->n && self->m) { 
     ret = plasma_dgetrf(self->m, self->n, self->val, self->m, self->pivots);  
   }
@@ -168,20 +165,59 @@ ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int nb_threads)
 
 
 int *
-ParSHUM_dense_get_row_perms(ParSHUM_dense_matrix self)
+ParSHUM_dense_get_row_perms(ParSHUM_dense_matrix self, int *row_perm)
 {
   int m = self->m, i;
-  int *row_perms = malloc((size_t) m * sizeof(*row_perms));
+  int *_row_perm = malloc((size_t) m * sizeof(*_row_perm));
   
-  memcpy(row_perms, self->original_rows, (size_t) m * sizeof(*row_perms));
+  memcpy(_row_perm, row_perm, (size_t) m * sizeof(*row_perm));
   for(i = 0; i < m; i++) {
-    int tmp = row_perms[i]; 
+    int tmp = _row_perm[i]; 
     /*  plasma is in freaking fortran  */
     int perm  = self->pivots[i] - 1 ;
-    row_perms[i]    = row_perms[perm];
-    row_perms[perm] = tmp;
+    _row_perm[i]    = _row_perm[perm];
+    _row_perm[perm] = tmp;
   }
-  return row_perms;
+  return _row_perm;
+}
+
+void
+ParSHUM_dense_matrix_get_RHS(ParSHUM_dense_matrix self, double *dense_RHS,
+			     int *row_perms, double *RHS, ParSHUM_perm_type perms_type)
+{
+  int i,  m = self->m, n = self->n; 
+  int *plasma_perm = self->pivots;
+  if (perms_type != ParSHUM_perm_none)  
+    for(i = 0; i < m; i++) 
+      dense_RHS[i] = RHS[row_perms[i]];
+  
+  if (perms_type == ParSHUM_perm_both)  
+    for(i = 0; i < n; i++) { 
+      double tmp = dense_RHS[i];
+      /*  plasma is in freaking fortran  */
+      int perm   = plasma_perm[i] - 1;
+      dense_RHS[i] = dense_RHS[perm];
+      dense_RHS[perm] = tmp;
+    }
+}
+
+void
+ParSHUM_dense_matrix_update_RHS(ParSHUM_dense_matrix self, double *dense_RHS,
+				int *row_perms, double *RHS)
+{
+  int i,  m = self->m, n = self->n; 
+  int *plasma_perm = self->pivots;
+
+  /* for(i = n - 1; i >= 0; i--) { */
+  /*   double tmp = dense_RHS[i]; */
+  /*   /\*  plasma is in freaking fortran  *\/ */
+  /*   int perm   = plasma_perm[i] - 1; */
+  /*   dense_RHS[i] = dense_RHS[perm]; */
+  /*   dense_RHS[perm] = tmp; */
+  /* } */
+
+  for(i = 0; i < m; i++) 
+    RHS[row_perms[i]] = dense_RHS[i];
 }
 
 void
@@ -203,8 +239,6 @@ ParSHUM_dense_matrix_print(ParSHUM_dense_matrix self, char *mess)
 void 
 ParSHUM_dense_matrix_destroy(ParSHUM_dense_matrix self)
 {
-  free(self->original_rows);
-  free(self->original_cols);
   free(self->pivots);
   free(self->val);
   free(self);

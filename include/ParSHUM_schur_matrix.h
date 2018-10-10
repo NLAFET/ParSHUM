@@ -48,7 +48,7 @@ void ParSHUM_schur_matrix_copy(ParSHUM_matrix A, ParSHUM_schur_matrix self, doub
 void ParSHUM_schur_matrix_print(ParSHUM_schur_matrix self, char *mess);
 
 void ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int previous_step_pivots,
-				  int *nb_col_singletons, int *nb_row_singletons,
+				  double val_tol, int *nb_col_singletons, int *nb_row_singletons,
 				  int *cols, int *rows, int *distributions,
 				  int nb_done_pivots, int *col_perm, int *row_perm,
 				  int *invr_col_perm, int *invr_row_perm);
@@ -75,8 +75,11 @@ ParSHUM_schur_matrix_update_S_rows(ParSHUM_schur_matrix S, int *L_struct, int L_
   
 void ParSHUM_schur_matrix_destroy(ParSHUM_schur_matrix self);
 
-ParSHUM_dense_matrix  ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int *invr_col_perm,
-						   int *invr_row_perm, int done_pivots);
+ParSHUM_dense_matrix 
+ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int done_pivots, 
+			     int *col_perm, int *invr_col_perm,
+			     int *row_perm, int *invr_row_perm);
+
 
 void ParSHUM_schur_check_doubles(ParSHUM_schur_matrix sefl);
 

@@ -32,7 +32,7 @@ main(int argc, char **argv)
   B    = ParSHUM_vector_create(self->A->m);  
   ParSHUM_vector_read_file(X, self->exe_parms->RHS_file); 
 
-  ParSHUM_vector_print(X, "the real X");
+  /* ParSHUM_vector_print(X, "the real X"); */
   ParSHUM_matrix_SpMV(self->A, X, SOL);
 
   /* copy the vector SOL in B */
@@ -46,7 +46,7 @@ main(int argc, char **argv)
   
   /* Perform the solve operation */
   ParSHUM_solver_solve(self, B);
-  ParSHUM_vector_print(B, "computed solution");
+  /* ParSHUM_vector_print(B, "computed solution"); */
 
   /* compute the norms */
   ParSHUM_solver_compute_norms(self, B, SOL);

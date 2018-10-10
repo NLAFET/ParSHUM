@@ -56,7 +56,7 @@ ParSHUM_schur_matrix_allocate(ParSHUM_schur_matrix self, int n, int m, long nnz,
 }
 
 void
-ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int previous_step_pivots,
+ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int previous_step_pivots, double val_tol,
 			     int *nb_col_singletons, int *nb_row_singletons, int *cols, int *rows,
 			     int *distributions, int nb_doane_pivots, int *col_perm, int *row_perm, 
 			     int *invr_col_perm, int *invr_row_perm)
@@ -77,17 +77,18 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
     }
     
     /* We need the first check only for rectangular matrices  */
-    /* if ( _nb_row_singletons < needed_pivots   && */
-    /* 	 self->CSR[row].nb_elem == 1 ) */
-    /*   { */
-    /* 	int col = self->CSR[row].col[0]; */
-    /* 	if (invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) { */
-    /* 	  row_perm[done_pivots + _nb_row_singletons] = row; */
-    /* 	  invr_col_perm[col]  = _nb_row_singletons + done_pivots; */
-    /* 	  col_perm[done_pivots +_nb_row_singletons] = col; */
-    /* 	  invr_row_perm[row] = _nb_row_singletons++ + done_pivots; */
-    /* 	} */
-    /*   } */
+    if ( _nb_row_singletons < needed_pivots   &&
+    	 self->CSR[row].nb_elem == 1 )
+      {
+
+    	int col = self->CSR[row].col[0];
+    	if (invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) {
+    	  row_perm[done_pivots + _nb_row_singletons] = row;
+    	  invr_col_perm[col]  = _nb_row_singletons + done_pivots;
+    	  col_perm[done_pivots +_nb_row_singletons] = col;
+    	  invr_row_perm[row] = _nb_row_singletons++ + done_pivots;
+    	}
+      }
     i++;
   }
   done_pivots += _nb_row_singletons;
@@ -105,9 +106,8 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       continue;
     }
 
-
-    /* /\* We need the first check only for rectangular matrices  *\/ */
-    /* if ( _nb_col_singletons + done_pivots < needed_pivots && */
+    /* We need the first check only for rectangular matrices  */
+    /* if ( _nb_col_singletons + _nb_row_singletons < needed_pivots && */
     /* 	 self->CSC[col].nb_elem == 1 ) */
     /*   { */
     /* 	int row = self->CSC[col].row[0]; */
@@ -889,8 +889,9 @@ ParSHUM_schur_matrix_update_S_rows(ParSHUM_schur_matrix S, int *L_struct, int L_
 }
 
 ParSHUM_dense_matrix 
-ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int *invr_col_perm,
-			     int *invr_row_perm, int done_pivots)
+ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int done_pivots, 
+			     int *col_perm, int *invr_col_perm,
+			     int *row_perm, int *invr_row_perm)
 {
   ParSHUM_dense_matrix self; 
   int col, k, i;
@@ -899,30 +900,32 @@ ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int *invr_col_perm,
   int n_schur = n - done_pivots;
   int m_schur = m - done_pivots;
   int invr_row[m];
-  int bb = 0 ;
   self = ParSHUM_dense_matrix_create(n_schur, m_schur);
 
-  for(i = 0, k=0; i < m; i++)
-    if (invr_row_perm[i] == ParSHUM_UNUSED_PIVOT ) { 
-      invr_row[i] = k;
-      self->original_rows[k++] = i;
+  for(i = 0, k = done_pivots ; i < m && k < m; i++)
+    if (invr_row_perm[i] == ParSHUM_UNUSED_PIVOT )  {
+      row_perm[k] = i;
+      invr_row_perm[i] = k++;
     }
-  
-  for(col = 0, k=0;  col < n; col++)
-    if (invr_col_perm[col] == ParSHUM_UNUSED_PIVOT ) { 
-      CSC_struct *CSC = &S->CSC[col];
+  if (k != m) 
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the conversion to dense matrix has failed");
 
-      int nb_elem = CSC->nb_elem;
-      self->original_cols[k] = col;
-      double *CSC_vals = CSC->val;
-      int    *CSC_rows = CSC->row;
-      for( i=0; i < nb_elem; i++) 
-	{ 
-	  int schur_row = invr_row[CSC_rows[i]];
-	  self->val[k*m_schur + schur_row] =  CSC_vals[i];
-	}
-      k++;
-    }
+  for(i = 0, k = done_pivots ; i < n && k < n; i++)
+    if (invr_col_perm[i] == ParSHUM_UNUSED_PIVOT )  {
+      col_perm[k] = i;
+      invr_col_perm[i] = k++;
+    } 
+  if (k != n) 
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the conversion to dense matrix has failed");
+ 
+  for(col = done_pivots, k = 0;  col < n; col++, k++){
+    CSC_struct *CSC = &S->CSC[col_perm[col]];
+    int nb_elem = CSC->nb_elem;
+    double *CSC_vals = CSC->val;
+    int    *CSC_rows = CSC->row;
+    for( i=0; i < nb_elem; i++) 
+      self->val[k*m_schur + invr_row_perm[CSC_rows[i]] - done_pivots] =  CSC_vals[i];
+  }
 
   return self;
 }
