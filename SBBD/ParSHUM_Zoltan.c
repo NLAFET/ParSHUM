@@ -471,7 +471,7 @@ ParSHUM_Zoltan_check_blocks(ParSHUM_matrix A, row_block row_blocks, col_block co
 	  }
       }
   
-  for (i = col_blocks->sizes[nb_blocks];  i <= col_blocks->sizes[nb_blocks + 1]; i++)
+  for (i = col_blocks->sizes[nb_blocks];  i < col_blocks->sizes[nb_blocks + 1]; i++)
     {
       int col = col_blocks->perms[i];
       CSC_struct *CSC = &S->CSC[col];
@@ -490,6 +490,7 @@ ParSHUM_Zoltan_check_blocks(ParSHUM_matrix A, row_block row_blocks, col_block co
 	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
     }
+
   ParSHUM_schur_matrix_destroy(S);
 }
 

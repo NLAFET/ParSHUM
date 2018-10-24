@@ -725,7 +725,7 @@ ParSHUM_solver_read_matrix(ParSHUM_solver self)
   char *file_ext = strrchr(self->exe_parms->matrix_file, '.');
   self->A        = ParSHUM_matrix_create();
   
-if (!strcmp(file_ext, ".mtl")) 
+  if (!strcmp(file_ext, ".mtl")) 
     ParSHUM_read_mtl_file(self->A, self->exe_parms->matrix_file);
 #ifdef HAVE_SPRAL
   else if (!strcmp(file_ext, ".rb"))
