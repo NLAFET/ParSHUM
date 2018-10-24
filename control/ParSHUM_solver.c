@@ -1043,10 +1043,11 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
     int *my_row_perms = &my_col_perms[nb_cols];
     int *global_col_perms = (int *) self->workspace[0];
     int *global_row_perms = &global_col_perms[nb_cols];
+    int max_col_length = self->S->nnz /nb_cols ;
 
     ParSHUM_verbose_start_timing(&step->timing_extracting_candidates);
     
-    best_markos[me] = ParSHUM_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, self->invr_row_perm, self->cols, distributions[me], distributions[me + 1], 0);
+    best_markos[me] = ParSHUM_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, self->invr_row_perm, self->cols, distributions[me], distributions[me + 1], max_col_length );
     ParSHUM_verbose_trace_stop_event(verbose);
 #pragma omp barrier    
 #pragma omp single 
@@ -1459,8 +1460,7 @@ ParSHUM_solver_compute_norms(ParSHUM_solver self,
   x_norm  = ParSHUM_vector_2norm(X);
   b_norm  = ParSHUM_vector_2norm(rhs);
 
-  self->verbose->backward_error /= b_norm;
-  /* self->verbose->backward_error /= A_norm * x_norm + b_norm; */
+  self->verbose->backward_error /= A_norm * x_norm + b_norm;
 
   ParSHUM_vector_destroy(r);
 }

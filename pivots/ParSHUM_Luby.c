@@ -49,10 +49,12 @@ ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
     {
       int col = cols[i];
       CSC_struct *CSC = &matrix->CSC[col];
-      if ( global_invr_col_perms[col] != ParSHUM_UNUSED_PIVOT) {
-	CSC->nb_numerical_eligible = 0;
-	continue;
+
+      if ( global_invr_col_perms[col] != ParSHUM_UNUSED_PIVOT ||
+      	   CSC->nb_elem > max_col_length) {
+      	continue;
       }
+
       int *rows    = CSC->row;
       int col_degree  = CSC->nb_elem - 1;
       int col_nb_elem = CSC->nb_numerical_eligible;
@@ -104,11 +106,13 @@ ParSHUM_Luby_assign_score(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix,
       if (chosen[col] != yes)
       	continue;
       int row  = CSC->row[positions[col]];
-      if  ( (matrix->CSR[row].nb_elem - 1) * (CSC->nb_elem - 1) > allowed_marko)
+      int marko_cost = (matrix->CSR[row].nb_elem - 1) * (CSC->nb_elem - 1);
+      if  (  marko_cost > allowed_marko)
       	continue;
-      double score =  ParSHUM_rand_double(&my_seed);
 
-      scores[col] = score;
+      scores[col] = ((double) marko_cost / (double) allowed_marko)
+      	          + (CSC->val[positions[col]] /CSC->col_max);
+
       chosen[col] = potential_pivot;
       
       col_perm[nb_candidates  ] = col;
