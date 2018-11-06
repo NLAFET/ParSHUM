@@ -66,17 +66,73 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
   int i, _done_pivots = done_pivots;
   int needed_pivots = self->n < self->m ? self->n : self->m;
   needed_pivots -= done_pivots;
+  int  nb_threads = self->nb_threads;
   int _nb_col_singletons = 0, _nb_row_singletons = 0;
+  int **workspace = malloc(nb_threads * sizeof(*workspace));
+  int sizes[nb_threads+1], original_sizes[nb_threads+1];
+  int part = m / nb_threads;
 
-  for(i = 0; i < m; )  {
-    int row = rows[i];
+  for( i = 0; i < nb_threads; i++) {
+    workspace[i] = calloc( m, sizeof(**workspace));
+    sizes[i] = original_sizes[i] = i * part;
+  }
+  sizes[nb_threads] = original_sizes[nb_threads] = m;
+  /* printf("previous_step_pivots = %d\n", previous_step_pivots); */
+  /* print_int_array(rows, m, "rows before"); */
 
-    if (invr_row_perm[row] != ParSHUM_UNUSED_PIVOT) { 
-      rows[i] = rows[--m];
-      continue;
+#pragma omp  parallel num_threads(nb_threads) shared( rows, invr_row_perm, workspace, nb_threads)
+  {
+    int j;
+    int me =  omp_get_thread_num();
+    int start = original_sizes[me];
+    int end   = original_sizes[me+1];
+    int *tmp = workspace[me];
+    int nb = 0;
+    for(j = start; j < end; j++)  
+      if (invr_row_perm[rows[j]] == ParSHUM_UNUSED_PIVOT) 
+	tmp[nb++] = rows[j];
+    sizes[me+1] = nb;
+  /* print_int_array(tmp, nb, "tmp"); */
+#pragma omp barrier
+#pragma omp single
+    {
+      int k;
+      for ( k = 1; k <= nb_threads; k++) 
+	sizes[k] += sizes[k-1];
+      
+      /* print_int_array(sizes,          nb_threads+1, "sizes"); */
+      /* print_int_array(original_sizes, nb_threads+1, "original sizes"); */
+      for ( k = 0; k < nb_threads; k++)  {
+	size_t size = (sizes[k+1] - sizes[k]) * sizeof(*rows);
+	int *source = workspace[k];
+	int *dst    = &rows[sizes[k]];
+#pragma omp taks firstprivate(dst, source, size)
+	memcpy(dst, source, size);
+      }
     }
-    
+  }
+  (void ) 0;
+  /* print_int_array(rows, sizes[nb_threads], "rows afterwards"); */
+  /* for( i = 0; i < sizes[nb_threads]; i++)  { */
+  /* 	if (rows[i] < 0)  */
+  /* 	  printf("smaller then 0"); */
+  /* 	if ( rows[i] >= self->m) */
+  /* 	  printf("larger then m"); */
+  /* 	if (rows[i] == ParSHUM_UNUSED_PIVOT) */
+  /* 	  printf("found a pivot"); */
+  /*     } */
+  
+  for( i = 0; i < nb_threads; i++) 
+    free(workspace[i]);
+  free(workspace);
+  
+  if (sizes[nb_threads] != self->m - _done_pivots) 
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
+
+  
+  for(i = 0; i < m; )  {
     /* We need the first check only for rectangular matrices  */
+    int row = rows[i];
     if ( _nb_row_singletons < needed_pivots   &&
     	 self->CSR[row].nb_elem == 1 )
       {
@@ -93,9 +149,7 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
     i++;
   }
   done_pivots += _nb_row_singletons;
-  if (m != self->m - _done_pivots) 
-    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
-
+  
   for(i = 0; i < n; ) {
     int col = cols[i];
     
@@ -105,9 +159,17 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       else 
 	i++;
       continue;
+    } else {
+      i++;
     }
+  }
 
+  if (n != self->n - _done_pivots) 
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the cols are taken out from cols");
+  
+  for(i = 0; i < n; ) {
     /* We need the first check only for rectangular matrices */
+	int col = cols[i];
     if ( _nb_col_singletons + _nb_row_singletons < needed_pivots &&
     	 self->CSC[col].nb_elem == 1 )
       {
@@ -123,9 +185,6 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       }
     i++;
   }
-
-  if (n != self->n - _done_pivots) 
-    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the cols are taken out from cols");
   
   *nb_col_singletons = _nb_col_singletons;
   *nb_row_singletons = _nb_row_singletons;
