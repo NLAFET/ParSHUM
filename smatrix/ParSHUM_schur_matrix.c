@@ -68,67 +68,90 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
   needed_pivots -= done_pivots;
   int  nb_threads = self->nb_threads;
   int _nb_col_singletons = 0, _nb_row_singletons = 0;
-  int **workspace = malloc(nb_threads * sizeof(*workspace));
   int sizes[nb_threads+1], original_sizes[nb_threads+1];
   int part = m / nb_threads;
 
   for( i = 0; i < nb_threads; i++) {
-    workspace[i] = calloc( m, sizeof(**workspace));
     sizes[i] = original_sizes[i] = i * part;
   }
   sizes[nb_threads] = original_sizes[nb_threads] = m;
-  /* printf("previous_step_pivots = %d\n", previous_step_pivots); */
-  /* print_int_array(rows, m, "rows before"); */
 
-#pragma omp  parallel num_threads(nb_threads) shared( rows, invr_row_perm, workspace, nb_threads)
+#pragma omp  parallel num_threads(nb_threads) shared( rows, invr_row_perm, nb_threads)
   {
     int j;
     int me =  omp_get_thread_num();
     int start = original_sizes[me];
     int end   = original_sizes[me+1];
-    int *tmp = workspace[me];
-    int nb = 0;
-    for(j = start; j < end; j++)  
-      if (invr_row_perm[rows[j]] == ParSHUM_UNUSED_PIVOT) 
-	tmp[nb++] = rows[j];
-    sizes[me+1] = nb;
-  /* print_int_array(tmp, nb, "tmp"); */
+    for(j = start; j < end; )  
+      if (invr_row_perm[rows[j]] != ParSHUM_UNUSED_PIVOT) 
+	rows[j] = rows[--end]; 
+      else
+	j++;
+    sizes[me+1] = end - start ;
+
 #pragma omp barrier
 #pragma omp single
     {
       int k;
-      for ( k = 1; k <= nb_threads; k++) 
-	sizes[k] += sizes[k-1];
-      
-      /* print_int_array(sizes,          nb_threads+1, "sizes"); */
-      /* print_int_array(original_sizes, nb_threads+1, "original sizes"); */
-      for ( k = 0; k < nb_threads; k++)  {
-	size_t size = (sizes[k+1] - sizes[k]) * sizeof(*rows);
-	int *source = workspace[k];
-	int *dst    = &rows[sizes[k]];
-#pragma omp taks firstprivate(dst, source, size)
-	memcpy(dst, source, size);
+      for ( j = 1; j <= nb_threads; j++) 
+	sizes[j] += original_sizes[j-1];
+
+      start = 1; end = nb_threads;
+
+      /* This loop takes care to fill in all the holes in the row array. */
+      while (start < end ) { 
+	int hole_size = 0;
+	if ( sizes[start] < original_sizes[start])  {
+	  hole_size = original_sizes[start] - sizes[start];
+	} else { 
+	  start++; continue;
+	} 
+	int avail_size = 0;
+	if (sizes[end] > original_sizes[end - 1]) {
+	  avail_size =  sizes[end] - original_sizes[end - 1] ;
+	} else {
+	  end--; nb_threads--; continue;
+	}
+	size_t size;
+	int *source;
+	int *dst;
+	dst = &rows[sizes[start]];
+	if (avail_size > hole_size) { 
+	  size = hole_size * sizeof(*rows);
+	  source = &rows[sizes[end] - hole_size];
+	  sizes[start++] += hole_size;
+	  sizes[end    ] -= hole_size;
+	} else if (avail_size < hole_size) {
+	  size = avail_size * sizeof(*rows);
+	  source = &rows[sizes[end] - avail_size];
+	  if (start == end - 1 ) { 
+	    sizes[start] += avail_size;
+	    sizes[end--]  = sizes[start];
+	    nb_threads--;
+	} else { 
+	    sizes[start] += avail_size;
+	    sizes[end--] -= avail_size;
+	    nb_threads--;
+	  }
+	}  else { 
+	  size = avail_size * sizeof(*rows);
+	  source = &rows[sizes[end] - avail_size];
+	  sizes[start++] += avail_size;
+	  sizes[end--  ] -= avail_size;
+	  nb_threads--;
+	}
+	
+#pragma omp task firstprivate(dst, source, size)
+	{
+	  memcpy(dst, source, size);
+	}
       }
     }
   }
   (void ) 0;
-  /* print_int_array(rows, sizes[nb_threads], "rows afterwards"); */
-  /* for( i = 0; i < sizes[nb_threads]; i++)  { */
-  /* 	if (rows[i] < 0)  */
-  /* 	  printf("smaller then 0"); */
-  /* 	if ( rows[i] >= self->m) */
-  /* 	  printf("larger then m"); */
-  /* 	if (rows[i] == ParSHUM_UNUSED_PIVOT) */
-  /* 	  printf("found a pivot"); */
-  /*     } */
-  
-  for( i = 0; i < nb_threads; i++) 
-    free(workspace[i]);
-  free(workspace);
   
   if (sizes[nb_threads] != self->m - _done_pivots) 
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
-
   
   for(i = 0; i < m; )  {
     /* We need the first check only for rectangular matrices  */
