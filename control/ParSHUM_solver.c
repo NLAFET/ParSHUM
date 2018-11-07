@@ -1140,15 +1140,15 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
   
   ParSHUM_solver_get_Luby_pivots(self, self->Luby, new_pivots);
   ParSHUM_verbose_stop_timing(&step->timing_merging_pivots);
-  /* if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) { */
-    /* char mess[2048]; */
-    /* snprintf(mess, 2048,"%d row singeltons, %d col_singeltons and %d luby pivots were found\ncol pemrs", */
-    /* 	     self->nb_row_singletons, self->nb_col_singletons, new_pivots); */
-    /* print_int_array(self->col_perm, self->A->n, mess); */
-    /* print_int_array(self->row_perm, self->A->m, "row_perms"); */
-    /* print_int_array(self->invr_col_perm, self->A->m, "invr_col_perms"); */
-    /* print_int_array(self->invr_row_perm, self->A->m, "invr_row_perms"); */
-  /* } */
+  if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) {
+    char mess[2048];
+    snprintf(mess, 2048,"%d row singeltons, %d col_singeltons and %d luby pivots were found\ncol pemrs",
+    	     self->nb_row_singletons, self->nb_col_singletons, new_pivots);
+    print_int_array(self->col_perm, self->A->n, mess);
+    print_int_array(self->row_perm, self->A->m, "row_perms");
+    print_int_array(self->invr_col_perm, self->A->m, "invr_col_perms");
+    print_int_array(self->invr_row_perm, self->A->m, "invr_row_perms");
+  }
 
   } else {
     

@@ -82,7 +82,7 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
   sizes_m[nb_threads] = original_sizes_m[nb_threads] = m;
   sizes_n[nb_threads] = original_sizes_n[nb_threads] = n;
 
-#pragma omp  parallel num_threads(nb_threads) shared(self, rows, row_perm, col_perm, invr_row_perm, invr_col_perm, done_pivots, _done_pivots, needed_pivots, nb_threads, nb_threads_, _nb_row_singletons, local_nb_sing, workspace, sizes_m, original_sizes_m, sizes_n, original_sizes_n)
+#pragma omp  parallel num_threads(nb_threads) shared(self, rows, row_perm, col_perm, invr_row_perm, invr_col_perm, done_pivots, _done_pivots, needed_pivots, nb_threads, nb_threads_, _nb_row_singletons, local_nb_sing, workspace, sizes_m, original_sizes_m, sizes_n, original_sizes_n, val_tol)
   {
     int j;
     int me =  omp_get_thread_num();
@@ -100,12 +100,7 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       }
 
       if ( self->CSR[row].nb_elem == 1 )
-	{
-	  int col = *self->CSR[row].col;
-	  double val = *self->CSC[col].val, col_max = self->CSC[col].col_max;
-	  if (val > col_max * val_tol) 
-	    row_singeltons[nb_singeltons++] = row; 
-	}
+	row_singeltons[nb_singeltons++] = row; 
       j++;
     }
 
@@ -179,6 +174,27 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
 	for  ( k = 0; k < nb_elem; k++) {
           int row = row_singeltons[k];
           int col = *self->CSR[row].col;
+	  CSC_struct *CSC = &self->CSC[col];
+	  double *vals = CSC->val;
+	  int    *rows = CSC->row;
+	  int  col_nb_elem = CSC->nb_elem;
+	  int d, passed = 0, tmp_int;
+	  double  tmp_dbl;
+	  for ( d = 0; d < col_nb_elem; d++) {
+	    if ( rows[d] == row &&
+		 vals[d] > CSC->col_max * val_tol)
+	      passed = 1;
+	      break;
+	  }
+	  if (!passed) 
+	    continue;
+	  tmp_int = rows[d];
+	  rows[d] = rows[col_nb_elem-1];
+	  rows[col_nb_elem-1] = tmp_int;
+	  tmp_dbl = vals[d];
+	  vals[d] = vals[col_nb_elem-1];
+	  vals[col_nb_elem-1] = tmp_dbl;
+	  
           if ( _nb_row_singletons < needed_pivots && 
 	       invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) {
 	    int next_pivot = done_pivots + _nb_row_singletons++;
@@ -584,21 +600,7 @@ ParSHUM_schur_matrix_update_LD(ParSHUM_schur_matrix self, ParSHUM_L_matrix L, Pa
       col = col_perm[current_pivot];
       row = row_perm[current_pivot];
       
-      if (current_pivot < nb_row_singeltons ) {
-	CSC     = &self->CSC[col];
-	L->col[L_indice] = *CSC;
-	vals    = CSC->val;
-	rows    = CSC->row;
-	nb_elem = CSC->nb_elem;
-	S_nnz += CSC->nb_elem;
-	for ( i = 0; i <  nb_elem; i++) 
-	  if (rows[i] == row)  {
-	    D->val[D_input_size + current_pivot] = pivot_val = vals[i];
-	    vals[i] = vals[--L->col[L_indice].nb_elem];
-	    rows[i] = rows[  L->col[L_indice].nb_elem];
-	    break;
-	  }
-      }  else if ( col < n)  { 
+      if ( col < n)  { 
 	CSC     = &self->CSC[col];
 	L->col[L_indice] = *CSC;
 	vals    = CSC->val;
