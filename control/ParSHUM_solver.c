@@ -1019,7 +1019,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
 			       self->exe_parms->value_tol * self->exe_parms->singeltons_relaxation,
 			       &self->nb_col_singletons, &self->nb_row_singletons, self->cols,
 			       self->rows, self->distributions, self->done_pivots, self->col_perm,
-			       self->row_perm, self->invr_col_perm, self->invr_row_perm);
+			       self->row_perm, self->invr_col_perm, self->invr_row_perm, self->workspace);
   needed_pivots -= self->nb_col_singletons + self->nb_row_singletons;
   ParSHUM_verbose_trace_stop_event(verbose);
 

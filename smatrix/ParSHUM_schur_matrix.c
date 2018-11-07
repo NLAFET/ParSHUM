@@ -59,140 +59,219 @@ void
 ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int previous_step_pivots, double val_tol,
 			     int *nb_col_singletons, int *nb_row_singletons, int *cols, int *rows,
 			     int *distributions, int nb_doane_pivots, int *col_perm, int *row_perm, 
-			     int *invr_col_perm, int *invr_row_perm)
+			     int *invr_col_perm, int *invr_row_perm, void **workspace)
 {
   int n = self->n - done_pivots + previous_step_pivots;
   int m = self->m - done_pivots + previous_step_pivots;
   int i, _done_pivots = done_pivots;
   int needed_pivots = self->n < self->m ? self->n : self->m;
   needed_pivots -= done_pivots;
-  int  nb_threads = self->nb_threads;
+  int  nb_threads  = self->nb_threads;
+  int  nb_threads_ = self->nb_threads;
   int _nb_col_singletons = 0, _nb_row_singletons = 0;
-  int sizes[nb_threads+1], original_sizes[nb_threads+1];
-  int part = m / nb_threads;
+  int sizes_m[nb_threads+1], original_sizes_m[nb_threads+1];
+  int sizes_n[nb_threads+1], original_sizes_n[nb_threads+1];
+  int local_nb_sing[nb_threads];
+  int part_m = m / nb_threads;
+  int part_n = n / nb_threads;
 
   for( i = 0; i < nb_threads; i++) {
-    sizes[i] = original_sizes[i] = i * part;
+    sizes_m[i] = original_sizes_m[i] = i * part_m;
+    sizes_n[i] = original_sizes_n[i] = i * part_n;
   }
-  sizes[nb_threads] = original_sizes[nb_threads] = m;
+  sizes_m[nb_threads] = original_sizes_m[nb_threads] = m;
+  sizes_n[nb_threads] = original_sizes_n[nb_threads] = n;
 
-#pragma omp  parallel num_threads(nb_threads) shared( rows, invr_row_perm, nb_threads)
+#pragma omp  parallel num_threads(nb_threads) shared(rows, row_perm, col_perm, invr_row_perm, invr_col_perm, done_pivots, _done_pivots, needed_pivots, nb_threads, nb_threads_, _nb_row_singletons, local_nb_sing, workspace, sizes_m, original_sizes_m, sizes_n, original_sizes_n)
   {
     int j;
     int me =  omp_get_thread_num();
-    int start = original_sizes[me];
-    int end   = original_sizes[me+1];
-    for(j = start; j < end; )  
-      if (invr_row_perm[rows[j]] != ParSHUM_UNUSED_PIVOT) 
+    int start = original_sizes_m[me];
+    int end   = original_sizes_m[me+1];
+    int *row_singeltons =  (int *) workspace[me]; 
+    int nb_singeltons = 0;
+    
+    for(j = start; j < end; )  {
+      int row = rows[j];
+      
+      if (invr_row_perm[rows[j]] != ParSHUM_UNUSED_PIVOT)  {
 	rows[j] = rows[--end]; 
-      else
-	j++;
-    sizes[me+1] = end - start ;
+	continue;
+      }
 
+      if ( self->CSR[row].nb_elem == 1 )
+	{
+	  int col = *self->CSR[row].col;
+	  double val = *self->CSC[col].val, col_max = self->CSC[col].col_max;
+	  if (val > col_max * val_tol) 
+	    row_singeltons[nb_singeltons++] = row; 
+	}
+      j++;
+    }
+
+    sizes_m[me+1] = end - start ;
+    local_nb_sing[me] = nb_singeltons;
 #pragma omp barrier
 #pragma omp single
     {
-      int k;
-      for ( j = 1; j <= nb_threads; j++) 
-	sizes[j] += original_sizes[j-1];
+      for ( j = 1; j <= nb_threads_; j++) 
+	sizes_m[j] += original_sizes_m[j-1];
 
-      start = 1; end = nb_threads;
+      start = 1; end = nb_threads_;
 
       /* This loop takes care to fill in all the holes in the row array. */
       while (start < end ) { 
 	int hole_size = 0;
-	if ( sizes[start] < original_sizes[start])  {
-	  hole_size = original_sizes[start] - sizes[start];
+	if ( sizes_m[start] < original_sizes_m[start])  {
+	  hole_size = original_sizes_m[start] - sizes_m[start];
 	} else { 
 	  start++; continue;
 	} 
 	int avail_size = 0;
-	if (sizes[end] > original_sizes[end - 1]) {
-	  avail_size =  sizes[end] - original_sizes[end - 1] ;
+	if (sizes_m[end] > original_sizes_m[end - 1]) {
+	  avail_size =  sizes_m[end] - original_sizes_m[end - 1] ;
 	} else {
-	  end--; nb_threads--; continue;
+	  end--; nb_threads_--; continue;
 	}
 	size_t size;
 	int *source;
 	int *dst;
-	dst = &rows[sizes[start]];
+	dst = &rows[sizes_m[start]];
 	if (avail_size > hole_size) { 
 	  size = hole_size * sizeof(*rows);
-	  source = &rows[sizes[end] - hole_size];
-	  sizes[start++] += hole_size;
-	  sizes[end    ] -= hole_size;
+	  source = &rows[sizes_m[end] - hole_size];
+	  sizes_m[start++] += hole_size;
+	  sizes_m[end    ] -= hole_size;
 	} else if (avail_size < hole_size) {
 	  size = avail_size * sizeof(*rows);
-	  source = &rows[sizes[end] - avail_size];
+	  source = &rows[sizes_m[end] - avail_size];
 	  if (start == end - 1 ) { 
-	    sizes[start] += avail_size;
-	    sizes[end--]  = sizes[start];
-	    nb_threads--;
+	    sizes_m[start] += avail_size;
+	    sizes_m[end--]  = sizes_m[start];
+	    nb_threads_--;
 	} else { 
-	    sizes[start] += avail_size;
-	    sizes[end--] -= avail_size;
-	    nb_threads--;
+	    sizes_m[start] += avail_size;
+	    sizes_m[end--] -= avail_size;
+	    nb_threads_--;
 	  }
 	}  else { 
 	  size = avail_size * sizeof(*rows);
-	  source = &rows[sizes[end] - avail_size];
-	  sizes[start++] += avail_size;
-	  sizes[end--  ] -= avail_size;
-	  nb_threads--;
+	  source = &rows[sizes_m[end] - avail_size];
+	  sizes_m[start++] += avail_size;
+	  sizes_m[end--  ] -= avail_size;
+	  nb_threads_--;
 	}
-	
+
 #pragma omp task firstprivate(dst, source, size)
 	{
 	  memcpy(dst, source, size);
 	}
       }
+      if (sizes_m[nb_threads_] != self->m - _done_pivots) 
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
     }
-  }
-  (void ) 0;
-  
-  if (sizes[nb_threads] != self->m - _done_pivots) 
-    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
-  
-  for(i = 0; i < m; )  {
-    /* We need the first check only for rectangular matrices  */
-    int row = rows[i];
-    if ( _nb_row_singletons < needed_pivots   &&
-    	 self->CSR[row].nb_elem == 1 )
-      {
-    	int col = *self->CSR[row].col;
-	double val = *self->CSC[col].val, col_max = self->CSC[col].col_max;
-    	if (invr_col_perm[col] == ParSHUM_UNUSED_PIVOT && 
-	    val > col_max * val_tol) {
-    	  row_perm[done_pivots + _nb_row_singletons] = row;
-    	  invr_col_perm[col]  = _nb_row_singletons + done_pivots;
-    	  col_perm[done_pivots +_nb_row_singletons] = col;
-    	  invr_row_perm[row] = _nb_row_singletons++ + done_pivots;
-    	}
+#pragma omp single
+    { 
+      int k;
+      for (j = 0; j < nb_threads; j++ ) {
+	int *row_singeltons = (int *) workspace[j];
+	int nb_elem = local_nb_sing[j];
+	for  ( k = 0; k < nb_elem; k++) {
+          int row = row_singeltons[k];
+          int col = *self->CSR[row].col;
+          if ( _nb_row_singletons < needed_pivots && 
+	       invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) {
+	    int next_pivot = done_pivots + _nb_row_singletons++;
+	    col_perm[next_pivot] = col;
+	    invr_col_perm[col]  = next_pivot;
+	    row_perm[next_pivot] = row;
+	    invr_row_perm[row] = next_pivot;
+	  }
+	}
       }
-    i++;
-  }
-  done_pivots += _nb_row_singletons;
-  
-  for(i = 0; i < n; ) {
-    int col = cols[i];
+      done_pivots += _nb_row_singletons;
+    }
+  /* } */
+
+#pragma omp barrier
+    start = original_sizes_n[me];
+    end   = original_sizes_n[me+1];
     
-    if (invr_col_perm[col] != ParSHUM_UNUSED_PIVOT )  {
-      if (invr_col_perm[col] < _done_pivots) 
-	cols[i] = cols[--n];
-      else 
-	i++;
-      continue;
-    } else {
-      i++;
+    for(j = start; j < end; )  {
+      int col = cols[j];
+      
+      if (invr_col_perm[col] != ParSHUM_UNUSED_PIVOT &&
+	  invr_col_perm[col] < _done_pivots)
+	cols[j] = cols[--end];
+      else
+	j++;
+    }
+    sizes_n[me+1] = end - start ;
+    
+#pragma omp barrier
+#pragma omp single
+    {
+      nb_threads_ = nb_threads;
+
+      for ( j = 1; j <= nb_threads_; j++)
+	sizes_n[j] += original_sizes_n[j-1];
+
+      start = 1; end = nb_threads_;
+
+      while (start < end ) {
+	int hole_size = 0;
+	if ( sizes_n[start] < original_sizes_n[start])  {
+	  hole_size = original_sizes_n[start] - sizes_n[start];
+	} else {
+	  start++; continue;
+	}
+	int avail_size = 0;
+	if (sizes_n[end] > original_sizes_n[end - 1]) {
+	  avail_size =  sizes_n[end] - original_sizes_n[end - 1] ;
+	} else {
+	  end--; nb_threads_--; continue;
+	}
+	size_t size;
+	int *source;
+	int *dst;
+	dst = &cols[sizes_n[start]];
+	if (avail_size > hole_size) {
+	  size = hole_size * sizeof(*cols);
+	  source = &cols[sizes_n[end] - hole_size];
+	  sizes_n[start++] += hole_size;
+	  sizes_n[end    ] -= hole_size;
+	} else if (avail_size < hole_size) {
+	  size = avail_size * sizeof(*cols);
+	  source = &cols[sizes_n[end] - avail_size];
+	  if (start == end - 1 ) {
+	    sizes_n[start] += avail_size;
+	    sizes_n[end--]  = sizes_n[start];
+	    nb_threads_--;
+	} else {
+	    sizes_n[start] += avail_size;
+	    sizes_n[end--] -= avail_size;
+	    nb_threads_--;
+	  }
+	}  else {
+	  size = avail_size * sizeof(*cols);
+	  source = &cols[sizes_n[end] - avail_size];
+	  sizes_n[start++] += avail_size;
+	  sizes_n[end--  ] -= avail_size;
+	  nb_threads_--;
+	}
+#pragma omp task firstprivate(dst, source, size)
+	{
+	  memcpy(dst, source, size);
+	}
+      }
+      if (sizes_n[nb_threads_] != self->n - _done_pivots)
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the cols are taken out from cols");
     }
   }
 
-  if (n != self->n - _done_pivots) 
-    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the cols are taken out from cols");
-  
-  for(i = 0; i < n; ) {
+  for(i = 0; i < (n - previous_step_pivots); ) {
+    int col = cols[i];
     /* We need the first check only for rectangular matrices */
-	int col = cols[i];
     if ( _nb_col_singletons + _nb_row_singletons < needed_pivots &&
     	 self->CSC[col].nb_elem == 1 )
       {
@@ -208,7 +287,7 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       }
     i++;
   }
-  
+
   *nb_col_singletons = _nb_col_singletons;
   *nb_row_singletons = _nb_row_singletons;
 }
