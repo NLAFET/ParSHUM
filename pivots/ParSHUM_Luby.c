@@ -33,17 +33,16 @@ ParSHUM_Luby_destroy(ParSHUM_Luby self)
   free(self);
 }
 
-int
+long
 ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
 			  double value_tol, int *global_invr_col_perms,
 			  int *global_invr_row_perms, int *cols,
 			  int first_col, int last_col, int max_col_length)
 {
-  int best_marko = INT_MAX;
-  int i, j, unused = max_col_length;
+  long best_marko = LONG_MAX;
+  int i, j;
   int *chosen = Luby->chosen, *position = Luby->position;
   int yes = Luby->chosen_base + 1;
-  unused++;
   
   for(i = first_col; i < last_col; i++)
     {
@@ -64,6 +63,7 @@ ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
       for ( j = 0; j < col_nb_elem; j++)
 	{
 	  int row = rows[j];
+	  /* we have to test this because of singeltons */
 	  if (global_invr_row_perms[row] != ParSHUM_UNUSED_PIVOT ) 
 	    continue;
 	  int row_degree = matrix->CSR[row].nb_elem - 1;
@@ -73,9 +73,8 @@ ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
 	  }
 	}
 
-      /* we should detect buffer overflow  */
       if (best_position != -1) {
-	int col_best_marko = col_best_row * col_degree;
+	long col_best_marko =  (long) col_best_row * col_degree;
 	if(col_best_marko < best_marko)
 	  best_marko = col_best_marko;
 	position[col] = best_position;
@@ -88,7 +87,7 @@ ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
 
 int
 ParSHUM_Luby_assign_score(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix,
-			  int allowed_marko, int *seed,
+			  long allowed_marko, int *seed,
 			  int *col_perm, int *row_perm, 
 			  int *cols, int first_col, int last_col)
 {
@@ -106,7 +105,7 @@ ParSHUM_Luby_assign_score(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix,
       if (chosen[col] != yes)
       	continue;
       int row  = CSC->row[positions[col]];
-      int marko_cost = (matrix->CSR[row].nb_elem - 1) * (CSC->nb_elem - 1);
+      long marko_cost = (matrix->CSR[row].nb_elem - 1) * (CSC->nb_elem - 1);
       if  (  marko_cost > allowed_marko)
       	continue;
 

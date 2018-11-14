@@ -1025,8 +1025,9 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
 
   if (exe_parms->luby_algo) {
   if (needed_pivots > 0) {
-    int  best_marko, nb_cols = self->S->n - self->done_pivots;
-    int *distributions = self->distributions, best_markos[nb_threads];
+    int nb_cols = self->S->n - self->done_pivots;
+    int *distributions = self->distributions;
+    long best_marko, best_markos[nb_threads];
     int candidates[nb_threads];
     int i;
     
@@ -1047,7 +1048,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
 
     ParSHUM_verbose_start_timing(&step->timing_extracting_candidates);
     
-    best_markos[me] = ParSHUM_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, self->invr_row_perm, self->cols, distributions[me], distributions[me + 1], max_col_length );
+    best_markos[me] = ParSHUM_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, self->invr_row_perm, self->cols, distributions[me], distributions[me + 1], max_col_length);
     ParSHUM_verbose_trace_stop_event(verbose);
 #pragma omp barrier    
 #pragma omp single 
@@ -1293,7 +1294,7 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
 {
   ParSHUM_exe_parms exe_parms = self->exe_parms;
   ParSHUM_verbose verbose = self->verbose;
-  int n = self->S->n, m = self->S->m, i;
+  int n = self->S->n, m = self->S->m;
   int needed_pivots = n < m ? n : m;
   int *previous_pivots   = self->previous_pivots;
   int nb_previous_pivots = exe_parms->nb_previous_pivots;

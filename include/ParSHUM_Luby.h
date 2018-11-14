@@ -21,17 +21,17 @@ ParSHUM_Luby  ParSHUM_Luby_create(ParSHUM_schur_matrix matrix);
 
 void ParSHUM_Luby_destroy(ParSHUM_Luby self);
 
-int ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
-			      double value_tol, int *global_invr_col_perms,
-			      int *global_invr_row_perms, int *cols, int first_col,
-			      int last_col, int max_col_length);
+long ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
+			       double value_tol, int *global_invr_col_perms,
+			       int *global_invr_row_perms, int *cols, int first_col,
+			       int last_col, int max_col_length);
 
 void ParSHUM_Luby_get_candidates(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
 				 int allowed_marko, int *cols,
 				 int first_col, int last_col);
 
 int ParSHUM_Luby_assign_score(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix,
-			      int allowed_marko, int *seed,
+			      long allowed_marko, int *seed,
 			      int *col_perm, int *row_perm, 
 			      int *cols, int first_col, int last_col);
 

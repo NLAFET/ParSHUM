@@ -205,8 +205,8 @@ void
 ParSHUM_dense_matrix_update_RHS(ParSHUM_dense_matrix self, double *dense_RHS,
 				int *row_perms, double *RHS)
 {
-  int i,  m = self->m, n = self->n; 
-  int *plasma_perm = self->pivots;
+  int i,  m = self->m;//, n = self->n; 
+  /* int *plasma_perm = self->pivots; */
 
   /* for(i = n - 1; i >= 0; i--) { */
   /*   double tmp = dense_RHS[i]; */

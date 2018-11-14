@@ -5,12 +5,34 @@
 
 #include "ParSHUM_matrix.h"
 #include "ParSHUM_U_matrix.h"
-#include "ParSHUM_L_matrix.h"
 #include "ParSHUM_dense.h"
 #include "ParSHUM_verbose.h"
 #include "ParSHUM_internal_mem.h"
 
 typedef struct _ParSHUM_schur_matrix *ParSHUM_schur_matrix;
+
+typedef struct _CSC_struct CSC_struct;
+typedef struct _CSR_struct CSR_struct;
+
+typedef struct _ParSHUM_L_matrix *ParSHUM_L_matrix;
+
+
+struct _CSR_struct {
+  int nb_elem;
+  int nb_free;
+  int *col;
+};
+
+struct _CSC_struct {
+  double col_max;
+  int    nb_elem;
+  int    nb_free;
+  int    nb_numerical_eligible;
+  int    nb_eligible;
+
+  double *val;
+  int    *row;
+};
 
 struct _ParSHUM_schur_matrix {
   CSC_struct *CSC;
@@ -22,6 +44,7 @@ struct _ParSHUM_schur_matrix {
   ParSHUM_internal_mem internal_mem;
   ParSHUM_verbose verbose;
 
+  long alignment;
   int **data_struct;
   int *base;
 
@@ -35,6 +58,13 @@ struct _ParSHUM_schur_matrix {
   
   double extra_space;
   double extra_space_inbetween;
+};
+
+
+struct _ParSHUM_L_matrix {
+  int n;
+  long nnz;
+  CSC_struct *col;
 };
 
 ParSHUM_schur_matrix ParSHUM_schur_matrix_create();
