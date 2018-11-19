@@ -1117,7 +1117,7 @@ ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int done_pivots,
   if (k != n) 
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the conversion to dense matrix has failed");
  
-#pragma omp parallel for firstprivate(done_pivots, n, S, invr_row_perm, col_perm, m_schur)
+#pragma omp parallel for private(col, i) shared(S, invr_row_perm, col_perm) firstprivate(done_pivots, n, m_schur)
   for(col = done_pivots;  col < n; col++){
     CSC_struct *CSC = &S->CSC[col_perm[col]];
     int local_row = (col - done_pivots) * m_schur;
