@@ -530,7 +530,7 @@ ParSHUM_solver_run_group(ParSHUM_solver solver, ParSHUM_parm_type type,
       ParSHUM_solver_factorize(run);
       ParSHUM_solver_solve(run, rhs);
       
-      ParSHUM_solver_compute_norms(run, X, rhs);
+      ParSHUM_solver_compute_norms(run, rhs, X);
       
       ParSHUM_solver_finalize(run);
       ParSHUM_verbose_print_group_run(run->verbose, type, (void *) &current_val, i, file);

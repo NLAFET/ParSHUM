@@ -68,6 +68,7 @@ ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
 	    continue;
 	  int row_degree = matrix->CSR[row].nb_elem - 1;
 	  if ( col_best_row > row_degree)  {
+
 	    col_best_row = row_degree;
 	    best_position = j;
 	  }
