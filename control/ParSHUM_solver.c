@@ -717,6 +717,11 @@ ParSHUM_solver_init(ParSHUM_solver self)
     ParSHUM_solver_alloc_internal(self);
 
   ParSHUM_verbose_create_dirs(self->verbose->parms->output_dir);
+#pragma omp  parallel num_threads(self->exe_parms->nb_threads)
+  {
+  int me  = omp_get_thread_num();
+  me++;
+  }
 }
 
 void
@@ -1012,8 +1017,9 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
   int nb_threads = self->exe_parms->nb_threads;
   int needed_pivots = self->A->n < self->A->m ? self->A->n : self->A->m;
   needed_pivots -= self->done_pivots;
-
   int new_pivots = 0;
+
+  ParSHUM_verbose_start_timing(&step->timing_extracting_candidates);
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GET_SINGELTONS);
   ParSHUM_schur_get_singletons(self->S, self->done_pivots, self->previous_step_pivots,
 			       self->exe_parms->value_tol * self->exe_parms->singeltons_relaxation,
@@ -1038,7 +1044,6 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
 
 #pragma omp parallel num_threads(nb_threads) shared(nb_cols, best_marko, distributions)
     {
-    ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GET_ELIGEBLE);
     int me = omp_get_thread_num();
     int *my_col_perms = (int *) self->workspace[me];
     int *my_row_perms = &my_col_perms[nb_cols];
@@ -1046,8 +1051,8 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
     int *global_row_perms = &global_col_perms[nb_cols];
     int max_col_length = self->S->nnz /nb_cols ;
 
-    ParSHUM_verbose_start_timing(&step->timing_extracting_candidates);
-    
+
+    ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GET_ELIGEBLE);
     best_markos[me] = ParSHUM_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, self->invr_row_perm, self->cols, distributions[me], distributions[me + 1], max_col_length);
     ParSHUM_verbose_trace_stop_event(verbose);
 #pragma omp barrier    
@@ -1205,18 +1210,13 @@ ParSHUM_solver_update_matrix(ParSHUM_solver self)
   
   ParSHUM_verbose_start_timing(&step->timing_update_S);
   ParSHUM_schur_matrix_update_S(S, L, U, &self->col_perm[self->found_pivots],
-			   self->n_U_structs, self->invr_row_perm, nb_pivots,
-			   &self->row_perm[self->done_pivots], self->workspace,
-			   self->exe_parms->value_tol);
+				self->n_U_structs, &self->row_perm[self->found_pivots],
+				self->n_L_structs, self->row_perm, self->invr_col_perm,
+				self->invr_row_perm, nb_pivots, self->done_pivots,
+				self->exe_parms->value_tol, self->workspace);
+
   ParSHUM_verbose_stop_timing(&step->timing_update_S);
   
-  ParSHUM_verbose_start_timing(&step->timing_update_U);
-  ParSHUM_schur_matrix_update_S_rows(S, &self->row_perm[self->found_pivots],
-				self->n_L_structs, self->nnz_L_structs,
-				self->invr_col_perm, nb_pivots, self->row_perm,
-				self->done_pivots, self->workspace);
-  ParSHUM_verbose_stop_timing(&step->timing_update_U);
-
   self->done_pivots = self->found_pivots;
   self->step++;
     

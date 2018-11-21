@@ -93,15 +93,11 @@ void ParSHUM_schur_matrix_update_U(ParSHUM_schur_matrix S, ParSHUM_U_matrix U,
 				   ParSHUM_matrix L, int nb_pivots, int *row_perm,
 				   ParSHUM_U_struct *U_struct, int U_new_n, int U_new_nnz);
 
-void ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHUM_U_matrix U,
-				   int *U_struct, int U_new_n, int *invr_row_perm,
-				   int nb_pivots, int *row_perms, void **workspace,
-				   double value_tol);
-
-void 
-ParSHUM_schur_matrix_update_S_rows(ParSHUM_schur_matrix S, int *L_struct, int L_new_n,
-				   int L_new_nnz, int *invr_col_perm, int nb_pivots,
-				   int *row_perms, int done_pivots, void **workspace);
+void
+ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHUM_U_matrix U,
+			      int *U_struct, int U_new_n, int *L_struct, int L_new_n,  
+			      int *row_perms, int *invr_col_perm, int *invr_row_perm, 
+			      int nb_pivots, int done_pivots, double value_tol, void **workspace);
   
 void ParSHUM_schur_matrix_destroy(ParSHUM_schur_matrix self);
 

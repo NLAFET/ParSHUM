@@ -9,6 +9,7 @@
 #include "ParSHUM_auxiliary.h"
 #include "ParSHUM_schur_matrix.h"
 
+#define NB_PER_THREAD 2000
 
 ParSHUM_schur_matrix
 ParSHUM_schur_matrix_create()
@@ -107,6 +108,10 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
   int part_m = m / nb_threads;
   int part_n = n / nb_threads;
 
+  if ( nb_threads * NB_PER_THREAD > n) {
+    nb_threads = nb_threads_ = n / NB_PER_THREAD;
+  }
+
   for( i = 0; i < nb_threads; i++) {
     sizes_m[i] = original_sizes_m[i] = i * part_m;
     sizes_n[i] = original_sizes_n[i] = i * part_n;
@@ -139,6 +144,46 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
     sizes_m[me+1] = end - start ;
     local_nb_sing[me] = nb_singeltons;
 #pragma omp barrier
+    int nb_elem = local_nb_sing[me];
+    
+    int perm_place = 0;
+    for  ( j = 0; j < me; j++)
+      perm_place += local_nb_sing[j];
+    perm_place += _done_pivots;
+    
+    for  ( j = 0; j < nb_elem; j++) {
+      int row = row_singeltons[j];
+      int col = *self->CSR[row].col;
+      CSC_struct *CSC = &self->CSC[col];
+      double *vals = CSC->val;
+      int    *rows = CSC->row;
+      int  col_nb_elem = CSC->nb_elem;
+      int d, tmp_int;
+      double  tmp_dbl;
+      
+      for ( d = 0; d < col_nb_elem; d++)
+	if ( rows[d] == row)
+	  break;
+      
+      tmp_int = rows[d];
+      rows[d] = rows[col_nb_elem-1];
+      rows[col_nb_elem-1] = tmp_int;
+      tmp_dbl = vals[d];
+      vals[d] = vals[col_nb_elem-1];
+      vals[col_nb_elem-1] = tmp_dbl;
+      
+      int next_pivot = perm_place + j;
+      col_perm[next_pivot] = col;
+      invr_col_perm[col]  = next_pivot;
+      row_perm[next_pivot] = row;
+      invr_row_perm[row] = next_pivot;
+    }
+    
+#pragma omp atomic 
+      done_pivots += nb_elem;
+#pragma omp atomic
+      _nb_row_singletons += nb_elem;
+
 #pragma omp single
     {
       for ( j = 1; j <= nb_threads_; j++) 
@@ -196,48 +241,6 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       }
       if (sizes_m[nb_threads_] != self->m - _done_pivots) 
 	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows");
-    }
-#pragma omp single
-    { 
-      int k;
-      for (j = 0; j < nb_threads; j++ ) {
-	int *row_singeltons = (int *) workspace[j];
-	int nb_elem = local_nb_sing[j];
-	for  ( k = 0; k < nb_elem; k++) {
-          int row = row_singeltons[k];
-          int col = *self->CSR[row].col;
-	  CSC_struct *CSC = &self->CSC[col];
-	  double *vals = CSC->val;
-	  int    *rows = CSC->row;
-	  int  col_nb_elem = CSC->nb_elem;
-	  int d, passed = 0, tmp_int;
-	  double  tmp_dbl;
-	  for ( d = 0; d < col_nb_elem; d++) {
-	    if ( rows[d] == row) {
-	      passed = 1;
-	      break;
-	    }
-	  }
-	  if (!passed) 
-	    continue;
-	  tmp_int = rows[d];
-	  rows[d] = rows[col_nb_elem-1];
-	  rows[col_nb_elem-1] = tmp_int;
-	  tmp_dbl = vals[d];
-	  vals[d] = vals[col_nb_elem-1];
-	  vals[col_nb_elem-1] = tmp_dbl;
-	  
-          if ( _nb_row_singletons < needed_pivots && 
-	       invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) {
-	    int next_pivot = done_pivots + _nb_row_singletons++;
-	    col_perm[next_pivot] = col;
-	    invr_col_perm[col]  = next_pivot;
-	    row_perm[next_pivot] = row;
-	    invr_row_perm[row] = next_pivot;
-	  }
-	}
-      }
-      done_pivots += _nb_row_singletons;
     }
 
 #pragma omp barrier
@@ -885,23 +888,28 @@ ParSHUM_CSC_update_col_max_array(CSC_struct *CSC, double *vals, int *rows,
 
 void
 ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHUM_U_matrix U,
-			      int *U_struct, int U_new_n, int *invr_row_perm, int nb_pivots,
-			      int *row_perms, void **workspace, double value_tol)
+			      int *U_struct, int U_new_n, int *L_struct, int L_new_n,  
+			      int *row_perms, int *invr_col_perm, int *invr_row_perm, 
+			      int nb_pivots, int done_pivots, double value_tol, void **workspace)
 {
   int nb_threads = S->nb_threads;
   long S_new_nnz = 0;
   long U_new_nnz = 0;
+  int start = done_pivots, end = done_pivots + nb_pivots;
   
-#pragma omp  parallel for num_threads(nb_threads) reduction(+:S_new_nnz) reduction(+:U_new_nnz)
-  for ( int i = 0; i < U_new_n; i++) {
+#pragma omp parallel num_threads(nb_threads) shared(S_new_nnz, U_new_nnz, workspace, U_new_n, start, end, L_new_n, ) firstprivate(S, L, U, done_pivots, U_struct, invr_row_perm, value_tol, L_struct, invr_col_perm, row_perms) default(none)
+  {
   int me =  omp_get_thread_num();
   int m = S->m;
-  int k, l;
   int *schur_row_struct = S->data_struct[me];
   int base = S->base[me];
   int *tmp_rows = (int *) workspace[me];
   int *tmp = &tmp_rows[m];
   double *tmp_vals = (double *) tmp;
+
+#pragma omp for  reduction(+:S_new_nnz) reduction(+:U_new_nnz) nowait  schedule(guided, 10)
+  for ( int i = 0; i < U_new_n; i++) {
+  int k, l;
   
   int col = U_struct[i];
   U_col *U_col = &U->col[col];
@@ -934,6 +942,7 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   S_rows = tmp_rows;
   U_nb_elem = m - U_nb_elem; 
   
+
   if (S_col_nb_elem != ( U_nb_elem + S_nb_elem ))
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong in the schur update");
   
@@ -992,21 +1001,8 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   S->base[me] = base;
   } // for
 
-  S->nnz += S_new_nnz;
-  U->nnz += U_new_nnz;
-}
-
-
-void
-ParSHUM_schur_matrix_update_S_rows(ParSHUM_schur_matrix S, int *L_struct, int L_new_n,
-				   int L_new_nnz, int *invr_col_perm, int nb_pivots,
-				   int *row_perms, int done_pivots, void **workspace)
-{
-  int nb_threads = S->nb_threads;
-
-#pragma omp parallel for num_threads(nb_threads) 
+#pragma omp for schedule(guided, 10)
   for ( int i = 0; i < L_new_n; i++) {
-  int me = omp_get_thread_num();
   int k, l;
   int *schur_row_struct = S->data_struct[me];
   int base = S->base[me];
@@ -1078,13 +1074,17 @@ ParSHUM_schur_matrix_update_S_rows(ParSHUM_schur_matrix S, int *L_struct, int L_
   S->base[me] = base;
   }
 
-  int start = done_pivots, end = done_pivots + nb_pivots;
 
-#pragma omp parallel for num_threads(nb_threads) shared(start, end)
+#pragma omp  for schedule(guided, 10)
   for(int i = start; i < end; i++)  {
     S->CSR[row_perms[i]].nb_free += S->CSR[row_perms[i]].nb_elem;
     S->CSR[row_perms[i]].nb_elem = 0;
   }
+  
+  }
+
+  S->nnz += S_new_nnz;
+  U->nnz += U_new_nnz;
 }
 
 ParSHUM_dense_matrix 
