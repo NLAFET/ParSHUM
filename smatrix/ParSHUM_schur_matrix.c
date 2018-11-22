@@ -110,6 +110,7 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
 
   if ( nb_threads * NB_PER_THREAD > n) {
     nb_threads = nb_threads_ = n / NB_PER_THREAD;
+    nb_threads = nb_threads_ = !nb_threads ? 1 : nb_threads;
   }
 
   for( i = 0; i < nb_threads; i++) {
