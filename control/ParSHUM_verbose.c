@@ -303,6 +303,7 @@ ParSHUM_verbose_print_V0(ParSHUM_verbose self)
 	  prog_name, exe_parms->nb_threads, exe_parms->nb_candidates_per_block);
   fprintf(file,"[%s] \n", prog_name);
 
+  fprintf(file,"[%s] the factorization took %f seconds\n", prog_name, self->timing_facto / 1e6);
   fprintf(file,"[%s] %d independent sets of pivots were found with a total of %d pivots in %f seconds\n", 
 	  prog_name, self->nb_steps, self->sparse_pivots, self->timing_facto_sparse / 1e6);
   if ( ! ( self->reason & ParSHUM_reason_dense_too_large ) )
@@ -343,7 +344,7 @@ ParSHUM_verbose_print_V0(ParSHUM_verbose self)
   fprintf(file,"[%s] The backward error is (%e) and the forward error is (%e)\n",
  	  prog_name, self->backward_error, self->forward_error);
 
-  ParSHUM_verbose_print_steps(self->stats_first, self->parms);
+  /* ParSHUM_verbose_print_steps(self->stats_first, self->parms); */
 }
 
 void
