@@ -14,6 +14,12 @@ enum ParSHUM_return_code
     ParSHUM_uninitialized_data
   };
 
+typedef enum _ParSHUM_schur_fortmat 
+{
+  ParSHUM_schur_sparse, 
+  ParSHUM_schur_dense
+} ParSHUM_schur_format;
+
 typedef  enum _ParSHUM_matrix_type 
   {
     ParSHUM_CSC_matrix,    

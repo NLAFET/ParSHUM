@@ -30,6 +30,7 @@ struct _ParSHUM_exe_parms {
   double extra_space;
   double extra_space_inbetween;
   double density_tolerance;
+  double vector_density_switch;
 
   char *matrix_file;
   char *RHS_file;

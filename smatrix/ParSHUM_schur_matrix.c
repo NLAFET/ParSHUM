@@ -11,6 +11,15 @@
 
 #define NB_PER_THREAD 2000
 
+struct _ParSHUM_dense_ctl {
+  omp_lock_t lock;
+
+  int *rows;
+  int size;
+  int rdy;
+};
+
+
 ParSHUM_schur_matrix
 ParSHUM_schur_matrix_create()
 {
@@ -55,6 +64,15 @@ ParSHUM_schur_matrix_allocate(ParSHUM_schur_matrix self, int n, int m, long nnz,
   self->col_locks = malloc((size_t) m * sizeof(*self->col_locks));
   for( i = 0; i < m; i++)
     omp_init_lock(&self->col_locks[i]);
+
+  self->dense_ctl = malloc( sizeof(*self->dense_ctl));
+  self->dense_ctl->rows = malloc((size_t) m * sizeof(*self->dense_ctl->rows));
+  for( i = 0; i < m; i++)
+    self->dense_ctl->rows[i] = ParSHUM_UNUSED_PIVOT;
+  self->dense_ctl->rdy = 0;
+  self->dense_ctl->size = 0;
+  
+  omp_init_lock(&self->dense_ctl->lock);
 }
 
 void
@@ -64,7 +82,7 @@ ParSHUM_CSC_alloc(ParSHUM_internal_mem mem, CSC_struct *CSC, int nb_elem, long a
   int part = (int) alignment / sizeof(CSC->row);
 
   if (nb_elem % part) 
-    nb_elem += (part - nb_elem % sizeof(CSC->row))  ;
+    nb_elem += part - nb_elem % part;
     
   ParSHUM_internal_mem_alloc(mem, (void **) &CSC->val, (size_t) nb_elem * (sizeof(CSC->val) + sizeof(CSC->row)) );
   tmp = &CSC->val[nb_elem];
@@ -80,12 +98,29 @@ ParSHUM_CSR_alloc(ParSHUM_internal_mem mem, CSR_struct *CSR, int nb_elem, long a
   int part = (int) alignment / sizeof(CSR->col);
 
   if (nb_elem % part) 
-    nb_elem +=  (part - nb_elem % sizeof(CSR->col));
+    nb_elem += part - nb_elem % part;
 
   ParSHUM_internal_mem_alloc(mem, (void **)  &CSR->col, nb_elem * sizeof(CSR->col) );
 
   CSR->nb_elem = 0;
   CSR->nb_free = nb_elem;
+}
+
+void
+ParSHUM_CSC_dense_alloc(ParSHUM_internal_mem mem, CSC_struct *CSC, int nb_elem, long aligment)
+{
+  /* int part = (int) aligment / sizeof(CSC->val); */
+
+  /* if (nb_elem % part) */
+  /*   nb_elem += part - nb_elem % part; */
+  
+  ParSHUM_internal_mem_alloc(mem, (void **)  &CSC->val, nb_elem * sizeof(CSC->val) );
+  memset(CSC->val, 0, (size_t) nb_elem * sizeof(CSC->val));
+
+  CSC->nb_elem = nb_elem;
+  CSC->nb_free = 0;
+  CSC->row = NULL;
+  CSC->format = ParSHUM_schur_dense;
 }
 
 void
@@ -161,6 +196,8 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       int  col_nb_elem = CSC->nb_elem;
       int d, tmp_int;
       double  tmp_dbl;
+      if (CSC->format == ParSHUM_schur_dense) 
+	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "a row singeltons is in a dense column");
       
       for ( d = 0; d < col_nb_elem; d++)
 	if ( rows[d] == row)
@@ -331,7 +368,10 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
 	int nb_elem = local_nb_sing[j];
 	for  ( k = 0; k < nb_elem; k++) {
           int col = col_singeltons[k];
+
           int row = *self->CSC[col].row;
+	  if ( self->CSR[row].format == ParSHUM_schur_dense)
+	    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "a col singeltons is in a dense row");
           if ( (_nb_row_singletons + _nb_col_singletons) < needed_pivots && 
 	       invr_row_perm[row] == ParSHUM_UNUSED_PIVOT) {
 	    int next_pivot = done_pivots + _nb_col_singletons++;
@@ -406,6 +446,7 @@ ParSHUM_schur_matrix_copy(ParSHUM_matrix A, ParSHUM_schur_matrix self, double va
   int i, j;
   int *row_sizes;
   int n = self->n;
+  int m = self->m;
   
   row_sizes = ParSHUM_matrix_rows_sizes(A);
   ParSHUM_schur_matrix_init_ptr(self, A->col_ptr, row_sizes);
@@ -433,6 +474,14 @@ ParSHUM_schur_matrix_copy(ParSHUM_matrix A, ParSHUM_schur_matrix self, double va
       self->CSC[i].nb_free -= col_length; 
 
       ParSHUM_CSC_update_col_max(&self->CSC[i], value_tol);
+      self->CSC[i].format = ParSHUM_schur_sparse;
+      /* if ( i == 1)  { */
+      /* 	int invr_row_perm[m]; */
+      /* 	int_array_memset(invr_row_perm, ParSHUM_UNUSED_PIVOT, m); */
+	
+      /* 	ParSHUM_CSC_format_dense(self->dense_ctl, &self->CSC[i], self->internal_mem, m, CSC_vals, CSC_rows, */
+      /* 				 col_length, self->alignment, invr_row_perm, m); */
+      /* } */
 
       // handle the copy  of the column into the CSR structure
       for(j = A_col_start; j < A_col_end; j++)
@@ -445,6 +494,9 @@ ParSHUM_schur_matrix_copy(ParSHUM_matrix A, ParSHUM_schur_matrix self, double va
 	  CSR->nb_free--;
 	}
     }
+
+  for( i = 0; i < m; i++) 
+    self->CSR[i].format = ParSHUM_schur_sparse;
 }
 
 void
@@ -635,6 +687,8 @@ ParSHUM_schur_matrix_update_LD(ParSHUM_schur_matrix self, ParSHUM_L_matrix L, Pa
       
       if ( col < n)  { 
 	CSC     = &self->CSC[col];
+	if (CSC->format == ParSHUM_schur_dense ) 
+	  ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "dense column in L");
 	L->col[L_indice] = *CSC;
 	vals    = CSC->val;
 	S_nnz += CSC->nb_elem;
@@ -644,6 +698,8 @@ ParSHUM_schur_matrix_update_LD(ParSHUM_schur_matrix self, ParSHUM_L_matrix L, Pa
 	col_perm[current_pivot] %= n;
 	col = col_perm[current_pivot];
 	CSC     = &self->CSC[col];
+	if (CSC->format == ParSHUM_schur_dense ) 
+	  ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "dense column in L");
 	L->col[L_indice] = *CSC;
 	nb_elem = CSC->nb_elem - 1; 
 	vals    = CSC->val;
@@ -888,17 +944,54 @@ ParSHUM_CSC_update_col_max_array(CSC_struct *CSC, double *vals, int *rows,
 };
 
 void
+ParSHUM_CSC_format_dense(ParSHUM_dense_ctl dense_ctl, CSC_struct *CSC,
+			 ParSHUM_internal_mem mem, int alloc_size, 
+			 double *sparse_vals, int *sparse_rows, int sparse_size,
+			 long alignment, int *invr_row_pem, int m)
+{
+  int rdy;
+  double *vals;
+  int *rows;
+#pragma omp  atomic read  
+  rdy = dense_ctl->rdy;
+  
+  if (!rdy) {
+    omp_set_lock(&dense_ctl->lock);
+    if (!dense_ctl->rdy) {
+      int i, j; 
+      for( i = 0, j = 0; i < m; i++) 
+	if (invr_row_pem[i] == ParSHUM_UNUSED_PIVOT) 
+	  dense_ctl->rows[i] = j++;
+      dense_ctl->rdy = 1;
+      dense_ctl->size = alloc_size;
+    } 
+    omp_unset_lock(&dense_ctl->lock);
+  }
+  int i;
+
+  ParSHUM_CSC_dense_alloc(mem, CSC, dense_ctl->size, alignment);
+  vals = CSC->val;
+
+  rows = dense_ctl->rows;
+
+  for ( i = 0; i < sparse_size; i++) 
+    vals[rows[sparse_rows[i]]] = sparse_vals[i];
+}
+
+
+void
 ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHUM_U_matrix U,
 			      int *U_struct, int U_new_n, int *L_struct, int L_new_n,  
 			      int *row_perms, int *invr_col_perm, int *invr_row_perm, 
-			      int nb_pivots, int done_pivots, double value_tol, void **workspace)
+			      int nb_pivots, int done_pivots, double value_tol,
+			      double vector_density_tol, void **workspace)
 {
   int nb_threads = S->nb_threads;
   long S_new_nnz = 0;
   long U_new_nnz = 0;
   int start = done_pivots, end = done_pivots + nb_pivots;
-  
-#pragma omp parallel num_threads(nb_threads) shared(S_new_nnz, U_new_nnz, workspace, U_new_n, start, end, L_new_n, ) firstprivate(S, L, U, done_pivots, U_struct, invr_row_perm, value_tol, L_struct, invr_col_perm, row_perms) default(none)
+  int max_size = (S->n - done_pivots - nb_pivots) * vector_density_tol;
+#pragma omp parallel num_threads(nb_threads) shared(S_new_nnz, U_new_nnz, workspace, U_new_n, start, end, L_new_n, ) firstprivate(S, L, U, done_pivots, U_struct, invr_row_perm, value_tol, L_struct, invr_col_perm, row_perms, max_size, nb_pivots) default(none)
   {
   int me =  omp_get_thread_num();
   int m = S->m;
@@ -915,7 +1008,7 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   int col = U_struct[i];
   U_col *U_col = &U->col[col];
   
-  CSC_struct *CSC = &S->CSC[col];
+  CSC_struct *CSC   = &S->CSC[col];
   int S_col_nb_elem = CSC->nb_elem;
   int U_nb_elem     = m;
   int S_nb_elem     = 0;
@@ -924,10 +1017,11 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   int *U_rows;
   double *U_vals;
   int needed_size;
-  
+
+  if (CSC->format == ParSHUM_schur_sparse) {
   for ( k = 0; k < S_col_nb_elem; k++) {
     int S_row = S_rows[k];
-    if (invr_row_perm[S_row] != ParSHUM_UNUSED_PIVOT ) {
+     if (invr_row_perm[S_row] != ParSHUM_UNUSED_PIVOT ) {
       tmp_rows[--U_nb_elem] = S_row;
       tmp_vals[  U_nb_elem] = S_vals[k];
     } else { 
@@ -942,13 +1036,12 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   S_vals = tmp_vals;
   S_rows = tmp_rows;
   U_nb_elem = m - U_nb_elem; 
-  
 
   if (S_col_nb_elem != ( U_nb_elem + S_nb_elem ))
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__,"Something went wrong in the schur update");
-  
+
   U_new_nnz += (long) U_nb_elem;
-	
+
   for ( l = 0; l < U_nb_elem; l++) {
     int L_col  = invr_row_perm[U_rows[l]];
     CSC_struct *L_CSC = &L->col[L_col];
@@ -971,27 +1064,26 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
       }
     }
   }
-  
-  while(U_col->allocated - U_col->nb_elem  < U_nb_elem)
-    ParSHUM_U_col_realloc(U_col);
-  memcpy(&U_col->val[U_col->nb_elem], U_vals, U_nb_elem * sizeof(*U_vals));
-  memcpy(&U_col->row[U_col->nb_elem], U_rows, U_nb_elem * sizeof(*U_rows));
-  
-  U_col->nb_elem += U_nb_elem;
+
   S_new_nnz += (long) S_nb_elem - (long) CSC->nb_elem;
 
   CSC->nb_free += CSC->nb_elem;
   CSC->nb_elem = 0;
   needed_size = CSC->nb_free;
 
-  if (needed_size <  S_nb_elem)  {
-    while( needed_size < S_nb_elem  )
-      needed_size *= 2;
-    ParSHUM_CSC_alloc(S->internal_mem, CSC, needed_size, S->alignment);
+  if (S_nb_elem > max_size)  {
+    int size = S->m - done_pivots - nb_pivots;
+    /* printf("doing it with %d\n", size);     */
+    ParSHUM_CSC_format_dense(S->dense_ctl, CSC, S->internal_mem, size, S_vals, S_rows, S_nb_elem, S->alignment, invr_row_perm, m);
+  } else { 
+    if (needed_size <  S_nb_elem) {
+      while( needed_size < S_nb_elem  )
+	needed_size *= 2;
+      ParSHUM_CSC_alloc(S->internal_mem, CSC, needed_size, S->alignment);
+    }
+    ParSHUM_CSC_update_col_max_array(CSC, S_vals, S_rows, S_nb_elem, value_tol);
   }
-  
-  ParSHUM_CSC_update_col_max_array(CSC, S_vals, S_rows, S_nb_elem, value_tol);
-  
+
   int new = base + S_nb_elem;
   if (new < base ) {
     base = 1;
@@ -999,7 +1091,51 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   } else {
     base = new;
   }
+
   S->base[me] = base;
+  } else {
+
+  int *col_rows = S->dense_ctl->rows;
+  int pivot;
+  U_nb_elem = 0;
+  U_vals = tmp_vals;
+  U_rows = tmp_rows;
+
+
+  for ( k = 0, pivot = done_pivots; k < nb_pivots; k++, pivot++) {
+    int row      = row_perms[pivot];
+    int S_indx = col_rows[row];  
+    
+    if ( S_indx == ParSHUM_UNUSED_PIVOT ) 
+      ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "brrr");
+    if ( S_vals[S_indx] != 0.00 ) {
+      double U_val = S_vals[S_indx];
+      
+      int L_col  = invr_row_perm[row];
+      CSC_struct *L_CSC = &L->col[L_col];
+      int    *L_rows = L_CSC->row;
+      double *L_vals = L_CSC->val;
+      int  L_nb_elem = L_CSC->nb_elem; 
+      
+      U_vals[U_nb_elem  ] = U_val;
+      U_rows[U_nb_elem++] = row;
+      
+      for ( l = 0; l < L_nb_elem; l++) {
+	int L_row = L_rows[l];
+	double val = -U_val * L_vals[l];
+
+	S_vals[col_rows[L_row]] += val;
+      }
+    }
+  }
+  }
+
+  while(U_col->allocated - U_col->nb_elem  < U_nb_elem)
+    ParSHUM_U_col_realloc(U_col);
+  memcpy(&U_col->val[U_col->nb_elem], U_vals, U_nb_elem * sizeof(*U_vals));
+  memcpy(&U_col->row[U_col->nb_elem], U_rows, U_nb_elem * sizeof(*U_rows));
+
+  U_col->nb_elem += U_nb_elem;
   } // for
 
 #pragma omp for schedule(guided, 10)
@@ -1007,9 +1143,9 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   int k, l;
   int *schur_row_struct = S->data_struct[me];
   int base = S->base[me];
-  
+
   int row = L_struct[i];
-  
+
   CSR_struct *CSR = &S->CSR[row];
   int n = S->n;
   int *tmp = workspace[me];
@@ -1075,7 +1211,6 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   S->base[me] = base;
   }
 
-
 #pragma omp  for schedule(guided, 10)
   for(int i = start; i < end; i++)  {
     S->CSR[row_perms[i]].nb_free += S->CSR[row_perms[i]].nb_elem;
@@ -1102,7 +1237,7 @@ ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int done_pivots,
 
   self = ParSHUM_dense_matrix_create(n_schur, m_schur);
 
-  for(i = 0, k = done_pivots ; i < m && k < m; i++)
+  for(i = 0, k = done_pivots ; k < m; i++)
     if (invr_row_perm[i] == ParSHUM_UNUSED_PIVOT )  {
       row_perm[k] = i;
       invr_row_perm[i] = k++;
@@ -1110,23 +1245,33 @@ ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int done_pivots,
   if (k != m) 
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the conversion to dense matrix has failed");
 
-  for(i = 0, k = done_pivots ; i < n && k < n; i++)
+  for(i = 0, k = done_pivots ; k < n; i++)
     if (invr_col_perm[i] == ParSHUM_UNUSED_PIVOT )  {
       col_perm[k] = i;
       invr_col_perm[i] = k++;
     } 
-  if (k != n) 
-    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the conversion to dense matrix has failed");
  
-#pragma omp parallel for private(col, i) shared(S, invr_row_perm, col_perm) firstprivate(done_pivots, n, m_schur)
-  for(col = done_pivots;  col < n; col++){
+
+#pragma omp parallel for private(i, k) firstprivate(done_pivots, m_schur, S, invr_row_perm, col_perm, row_perm)
+  for(col = done_pivots; col < n; col++){
     CSC_struct *CSC = &S->CSC[col_perm[col]];
-    int local_row = (col - done_pivots) * m_schur;
-    int nb_elem = CSC->nb_elem;
-    double *CSC_vals = CSC->val;
-    int    *CSC_rows = CSC->row;
-    for( i=0; i < nb_elem; i++) 
-      self->val[local_row + invr_row_perm[CSC_rows[i]] - done_pivots] =  CSC_vals[i];
+    int local_col = (col - done_pivots) * m_schur;
+    double *CSC_vals = CSC->val; 
+
+    if (CSC->format == ParSHUM_schur_sparse) {
+      int nb_elem = CSC->nb_elem;
+      int    *CSC_rows = CSC->row;
+      for( i=0; i < nb_elem; i++) 
+	self->val[local_col + invr_row_perm[CSC_rows[i]] - done_pivots] =  CSC_vals[i];
+    } else {
+      int *col_rows = S->dense_ctl->rows;
+     
+      for( i=0, k = done_pivots; k < n; i++, k++) {
+	int row = row_perm[k];
+	int S_indx = col_rows[row];
+	self->val[local_col + i] = CSC_vals[S_indx];
+      }
+    }
   }
 
   return self;
@@ -1140,17 +1285,26 @@ ParSHUM_schur_matrix_print(ParSHUM_schur_matrix self, char *mess)
   int m = self->m;
   
   printf("%s\n", mess);
+  if (self->dense_ctl->rdy) 
+    print_int_array(self->dense_ctl->rows, n, "\ndense rows");
+
   printf("PRINTING THE CSC PART\n");
   for(int i = 0; i < n; i++)
     {
       CSC_struct *CSC = &self->CSC[i];
-      int *rows    = CSC->row;
       double *vals = CSC->val;
-      int nb_elem = CSC->nb_elem;
       printf("================%d======================\n", i);
       printf("Colum's max is %f\n", CSC->col_max);
-      for(int j = 0; j < nb_elem; j++)
-	printf("%d:(%e)  ", rows[j], vals[j]);
+      if (CSC->format == ParSHUM_schur_sparse) { 
+	int *rows    = CSC->row;
+	int nb_elem = CSC->nb_elem;
+	for(int j = 0; j < nb_elem; j++)
+	  printf("%d:(%e)  ", rows[j], vals[j]);
+      } else { 
+	printf("size = %d\n", self->dense_ctl->size);
+	for(int j = 0; j < self->dense_ctl->size; j++)
+	  printf("%d:(%e)  ", j, vals[j]);
+      }
       printf("\n");
     }
   
@@ -1189,6 +1343,9 @@ ParSHUM_schur_matrix_destroy(ParSHUM_schur_matrix self)
   for( i = 0; i < self->n; i++)
     omp_destroy_lock(&self->col_locks[i]);
   free(self->col_locks);
+  free(self->dense_ctl->rows);
+  omp_destroy_lock(&self->dense_ctl->lock);
+  free(self->dense_ctl);
 
   free(self);
 }

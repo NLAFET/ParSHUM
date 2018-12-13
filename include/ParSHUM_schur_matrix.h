@@ -15,12 +15,13 @@ typedef struct _CSC_struct CSC_struct;
 typedef struct _CSR_struct CSR_struct;
 
 typedef struct _ParSHUM_L_matrix *ParSHUM_L_matrix;
-
+typedef struct _ParSHUM_dense_ctl *ParSHUM_dense_ctl;
 
 struct _CSR_struct {
   int nb_elem;
   int nb_free;
   int *col;
+  ParSHUM_schur_format format;
 };
 
 struct _CSC_struct {
@@ -32,7 +33,9 @@ struct _CSC_struct {
 
   double *val;
   int    *row;
+  ParSHUM_schur_format format;
 };
+
 
 struct _ParSHUM_schur_matrix {
   CSC_struct *CSC;
@@ -43,11 +46,11 @@ struct _ParSHUM_schur_matrix {
 
   ParSHUM_internal_mem internal_mem;
   ParSHUM_verbose verbose;
+  ParSHUM_dense_ctl dense_ctl;
 
   long alignment;
   int **data_struct;
   int *base;
-
   int nb_threads;
   
   int n;
@@ -97,7 +100,8 @@ void
 ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHUM_U_matrix U,
 			      int *U_struct, int U_new_n, int *L_struct, int L_new_n,  
 			      int *row_perms, int *invr_col_perm, int *invr_row_perm, 
-			      int nb_pivots, int done_pivots, double value_tol, void **workspace);
+			      int nb_pivots, int done_pivots, double value_tol, 
+			      double vector_density_tol, void **workspace);
   
 void ParSHUM_schur_matrix_destroy(ParSHUM_schur_matrix self);
 

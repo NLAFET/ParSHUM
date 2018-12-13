@@ -24,7 +24,7 @@ main(int argc, char **argv)
   if (!strcmp(file_ext, ".mtl"))
     ParSHUM_read_mtl_file(A, argv[1]);
 #ifdef HAVE_SPRAL
-  else  if (!strcmp(file_ext, ".rsa"))
+  else  if (!strcmp(file_ext, ".rb"))
     ParSHUM_read_rutherford_boeing(A, argv[1]);
 #endif
   else

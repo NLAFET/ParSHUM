@@ -25,7 +25,7 @@ const char *usageStrign[] = {
   "            [--check_ParSHUM_with_plasma_perm] [--check_dense_with_ParSHUM_perm] [--print_each_step] [--check_GC]",
   "            [--group_run value_tol|marko_tol|schur_density|nb_candidates|min_pivots|nb_threads init inc nb_steps]",
   "            [--counters_size #double_counters] [--check_counters] [--check_schur_doubles] [--max_dense_schur size]",
-  "            [--luby_algorithm] [--singeltons_relaxation tol] [--trace]", 
+  "            [--luby_algorithm] [--singeltons_relaxation tol] [--vector_density_switch tol] [--trace]", 
   NULL,
 };
 
@@ -54,7 +54,8 @@ ParSHUM_solver_create()
   self->exe_parms->min_pivot_per_steps     = 20;
   self->exe_parms->density_tolerance       = 0.2;
   self->exe_parms->max_dense_schur         = 10000;
-  
+  self->exe_parms->vector_density_switch   = 0.1;
+
   self->verbose = ParSHUM_verbose_create(self->exe_parms);
   return self;
 }
@@ -317,6 +318,13 @@ ParSHUM_solver_parse_args(ParSHUM_solver self, int argc, char **argv, int exit_o
       continue;
     } else if (!strcmp(argv[i], "--singeltons_relaxation")) {
       self->exe_parms->singeltons_relaxation = atof(argv[++i]);
+    } else if (!strcmp(argv[i], "--vector_density_switch")) {
+      double tmp = atof(argv[++i]);
+      if (tmp > 1.00)
+	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "vector_density_switch should not be more then 1");
+      else if ( tmp < 0.00) 
+	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "vector_density_switch should not be less then 0");
+      self->exe_parms->vector_density_switch = tmp;
     } else if (!strcmp(argv[i], "--luby_algorithm")) {
       self->exe_parms->luby_algo = 1;
     } else if (!strcmp(argv[i], "--trace")) {
@@ -1051,7 +1059,6 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
     int *global_row_perms = &global_col_perms[nb_cols];
     int max_col_length = self->S->nnz /nb_cols ;
 
-
     ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GET_ELIGEBLE);
     best_markos[me] = ParSHUM_Luby_get_eligible(self->S, self->Luby, exe_parms->value_tol, self->invr_col_perm, self->invr_row_perm, self->cols, distributions[me], distributions[me + 1], max_col_length);
     ParSHUM_verbose_trace_stop_event(verbose);
@@ -1213,7 +1220,8 @@ ParSHUM_solver_update_matrix(ParSHUM_solver self)
 				self->n_U_structs, &self->row_perm[self->found_pivots],
 				self->n_L_structs, self->row_perm, self->invr_col_perm,
 				self->invr_row_perm, nb_pivots, self->done_pivots,
-				self->exe_parms->value_tol, self->workspace);
+				self->exe_parms->value_tol, self->exe_parms->vector_density_switch,
+				self->workspace);
 
   ParSHUM_verbose_stop_timing(&step->timing_update_S);
   

@@ -50,7 +50,8 @@ ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
       CSC_struct *CSC = &matrix->CSC[col];
 
       if ( global_invr_col_perms[col] != ParSHUM_UNUSED_PIVOT ||
-      	   CSC->nb_elem > max_col_length) {
+      	   CSC->nb_elem > max_col_length                      || 
+	   CSC->format == ParSHUM_schur_dense) {
       	continue;
       }
 
@@ -64,7 +65,8 @@ ParSHUM_Luby_get_eligible(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby,
 	{
 	  int row = rows[j];
 	  /* we have to test this because of singeltons */
-	  if (global_invr_row_perms[row] != ParSHUM_UNUSED_PIVOT ) 
+	  if (global_invr_row_perms[row] != ParSHUM_UNUSED_PIVOT || 
+	      matrix->CSR[row].format == ParSHUM_schur_dense) 
 	    continue;
 	  int row_degree = matrix->CSR[row].nb_elem - 1;
 	  if ( col_best_row > row_degree)  {
