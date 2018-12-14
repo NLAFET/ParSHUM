@@ -45,6 +45,7 @@ struct _ParSHUM_schur_matrix {
   omp_lock_t *col_locks;
 
   ParSHUM_internal_mem internal_mem;
+  ParSHUM_internal_mem dense_cols_mem;
   ParSHUM_verbose verbose;
   ParSHUM_dense_ctl dense_ctl;
 

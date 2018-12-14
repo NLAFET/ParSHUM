@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200112L
 #include <stdlib.h>
 #include <string.h>
 #include <omp.h>
@@ -21,26 +22,36 @@ struct _ParSHUM_internal_mem {
   int nb_mems;
   size_t init_size;
   size_t alignment;
+  ParSHUM_alloc type;
 };
 
-
 ParSHUM_internal_mem
-ParSHUM_internal_mem_create(size_t size, size_t alignment)
+ParSHUM_internal_mem_create(size_t size, size_t alignment, ParSHUM_alloc type)
 {
   ParSHUM_internal_mem self = calloc(1, sizeof(*self));
 
   self->init_size = size; 
 
   self->mem = malloc(sizeof(*self->mem));
-  posix_memalign(self->mem, alignment, size);
+
+  if (type == ParSHUM_malloc ) 
+    *self->mem = malloc(size);
+  else if ( type == ParSHUM_aligned) 
+    posix_memalign(self->mem, alignment, size);
+  else if (type == ParSHUM_calloc) 
+    *self->mem = calloc(size / sizeof(int), sizeof(int));
+ 
   self->unused = malloc(sizeof(*self->unused));
   *self->unused = calloc(1, sizeof(**self->unused));
   self->unused[0]->size = size;
 
   self->nb_mems = 1;
   self->alignment = alignment;
-  omp_init_lock(&self->lock);
+  
+  self->type = type;
 
+  omp_init_lock(&self->lock);
+  
   return self;
 }
 
@@ -58,7 +69,13 @@ ParSHUM_internal_mem_realloc(ParSHUM_internal_mem self)
   self->unused[self->nb_mems]->size = size;
 
   self->mem = realloc((void *) self->mem, (size_t) (self->nb_mems + 1) * sizeof(*self->mem));
-  posix_memalign(&self->mem[self->nb_mems++], self->alignment, size);
+
+  if (self->type == ParSHUM_malloc ) 
+    self->mem[self->nb_mems++] = malloc(size);
+  else if (self->type == ParSHUM_aligned) 
+    posix_memalign(&self->mem[self->nb_mems++], self->alignment, size);
+  else if (self->type == ParSHUM_calloc) 
+    self->mem[self->nb_mems++] = calloc(size / sizeof(int), sizeof(int));
 }
 
 size_t
@@ -99,7 +116,6 @@ ParSHUM_internal_mem_alloc(ParSHUM_internal_mem self, void **mem, size_t size)
     i++;
   }
 }
-
 
 void
 ParSHUM_internal_mem_destroy(ParSHUM_internal_mem self)

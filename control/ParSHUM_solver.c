@@ -1252,6 +1252,7 @@ int
 ParSHUM_continue_pivot_search(ParSHUM_schur_matrix S,
 			      int nb_done_pivots,
 			      int nb_needed_pivots,
+			      int previous_step_pivots,
 			      int *previous_pivots,
 			      int nb_previous_pivots,
 			      double density_tolerance,
@@ -1267,6 +1268,11 @@ ParSHUM_continue_pivot_search(ParSHUM_schur_matrix S,
        debug & ParSHUM_CHECK_DENSE_W_ParSHUM_PERM ) {
     verbose->reason = ParSHUM_reason_because;
     return 0;
+  }
+
+  if (nb_done_pivots && !previous_step_pivots) {
+    verbose->reason = ParSHUM_reason_no_pivots;
+    retval = 0;
   }
 
   n_schur = (long) S->n - nb_done_pivots;
@@ -1314,7 +1320,7 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
   ParSHUM_verbose_start_timing(&verbose->timing_facto);
   ParSHUM_verbose_start_timing(&verbose->timing_facto_sparse);
   while ( ParSHUM_continue_pivot_search(self->S, self->done_pivots, needed_pivots, 
-					previous_pivots, nb_previous_pivots,
+					self->previous_step_pivots, previous_pivots, nb_previous_pivots,
 					exe_parms->density_tolerance,
 					exe_parms->min_pivot_per_steps,
 					exe_parms->max_dense_schur,
