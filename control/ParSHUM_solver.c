@@ -32,7 +32,7 @@ const char *usageStrign[] = {
 int is_plasma_init;
 
 int  ParSHUM_solver_run_group(ParSHUM_solver solver, ParSHUM_parm_type type, 
-			 void *init_val, int nb_steps, void *inc);
+			      void *init_val, int nb_steps, void *inc);
 
 ParSHUM_solver 
 ParSHUM_solver_create()

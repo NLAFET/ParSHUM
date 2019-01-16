@@ -15,7 +15,6 @@ static void  ParSHUM_get_hypergraph(void *data, int sizeGID, int num_edges, int 
 				    int format, ZOLTAN_ID_PTR edgeGID, int *vtxPtr,
 				    ZOLTAN_ID_PTR vtxGID, int *ierr);
 
-
 typedef struct _row_block {
   int nb_blocks;
   int n;
@@ -33,6 +32,8 @@ typedef struct _col_block {
   int *perms;
   int *invr_perms;
   int *sizes;
+  int *BB_size;
+  int *BB_nnz;
 } *col_block;
 
 struct _Zoltan_Hypergraph  {
@@ -43,15 +44,15 @@ struct _Zoltan_Hypergraph  {
   MPI_Comm world;
   
   int numVertices;            /* number of all vertices */ 
-  int numMyVertices;        /* number of vertices that I own */
-  ZOLTAN_ID_TYPE *vtxGID;   /* global ID of these vertices */
+  int numMyVertices;          /* number of vertices that I own */
+  ZOLTAN_ID_TYPE *vtxGID;     /* global ID of these vertices */
   
   int numHEdges;              /* number of hyperedges */
-  int numMyHEdges;          /* number of my hyperedges */
-  int numAllNbors;          /* number of vertices in my hyperedges */
-  ZOLTAN_ID_TYPE *edgeGID;  /* global ID of each of my hyperedges */
-  int *nborIndex;           /* index into nborGID array of edge's vertices */
-  ZOLTAN_ID_TYPE *nborGID;  /* Vertices of edge edgeGID[i] begin at nborGID[nborIndex[i]] */
+  int numMyHEdges;            /* number of my hyperedges */
+  int numAllNbors;            /* number of vertices in my hyperedges */
+  ZOLTAN_ID_TYPE *edgeGID;    /* global ID of each of my hyperedges */
+  int *nborIndex;             /* index into nborGID array of edge's vertices */
+  ZOLTAN_ID_TYPE *nborGID;    /* Vertices of edge edgeGID[i] begin at nborGID[nborIndex[i]] */
 
   /* Data needed for the call of Zoltan_LB_Partition */
   int changes, numGidEntries, numLidEntries, numImport, numExport;
@@ -101,58 +102,63 @@ ParSHUM_Zoltan_create(MPI_Comm comm)
 
 int
 ParSHUM_Zoltan_init_distrubtion(Zoltan_Hypergraph self, 
-				ParSHUM_matrix matrix)
+				ParSHUM_schur_matrix matrix)
 {
   MPI_Comm comm = self->world;
   int rank = self->rank, MPI_size = self->MPI_size;
-  int i, j;
+  int i, j, k;
   MPI_Status status;
   
+  /* fields from send_metaData: 
+     0:m , 1:my_m, 2:first_m, 3:n, 4:my_n, 5:first_n, 6:my_nnz 
+  */
   if (rank == 0) {
     int send_metaData[MPI_size][7];
     int n = matrix->n, m = matrix->m;
-    int block_size = (n + MPI_size - 1) / MPI_size;
+    int block_size = (m + MPI_size - 1) / MPI_size;
     int start, end;
-    int  *row = matrix->row;
-    long *col_ptr  = matrix->col_ptr;
     
     for(i = 0, start = 0; i < MPI_size; i++)
       {
 	int this_block_size;
-	send_metaData[i][0] = start;
+	send_metaData[i][0] = m;
+	send_metaData[i][2] = start;
 
-	if (start + block_size <= n) 
+	if (start + block_size <= m) 
 	  this_block_size = block_size;
-	 else 
-	  this_block_size = n - start;
+	else 
+	  this_block_size = m - start;
 	send_metaData[i][1] = this_block_size;
 	start += this_block_size;
       }
 
-    block_size = (m + MPI_size - 1) / MPI_size;
+    block_size = (n + MPI_size - 1) / MPI_size;
     for(i = 0, start = 0; i < MPI_size; i++)
       {
 	int this_block_size;
-	send_metaData[i][2] = start;
-
-       if (start + block_size <= m) 
+	int block_nnz = 0;
+	send_metaData[i][3] = n;
+	send_metaData[i][5] = start;
+	
+	if (start + block_size <= n) 
 	  this_block_size = block_size;
-       else 
-	 this_block_size = m - start;
-       send_metaData[i][3] = this_block_size;
+	else 
+	  this_block_size = n - start;
+       send_metaData[i][4] = this_block_size;
        end = start + this_block_size;
-       send_metaData[i][4] = (int) col_ptr[end] - (int) col_ptr[start];
+       for( j = start; j < end; j++)
+	 block_nnz += matrix->CSC[j].nb_elem;
+       send_metaData[i][6] = block_nnz;
        
        start += this_block_size;
-       send_metaData[i][5] = m;
-       send_metaData[i][6] = n;
       }
     
+    self->numVertices   = send_metaData[0][0];
     self->numMyVertices = send_metaData[0][1];
-    self->numMyHEdges   = send_metaData[0][3];
-    self->numAllNbors   = send_metaData[0][4];
-    self->numVertices   = send_metaData[0][5];
-    self->numHEdges     = send_metaData[0][6];
+
+    self->numHEdges     = send_metaData[0][3];
+    self->numMyHEdges   = send_metaData[0][4];
+    self->numAllNbors   = send_metaData[0][6];
 
     if (self->numMyVertices) {
       self->vtxGID = malloc((size_t) self->numMyVertices * sizeof(*self->vtxGID));
@@ -161,67 +167,77 @@ ParSHUM_Zoltan_init_distrubtion(Zoltan_Hypergraph self,
     }
 
     if ( self->numMyHEdges) {
-      self->edgeGID = malloc((size_t) self->numMyHEdges * sizeof(*self->edgeGID));
+      self->edgeGID   = malloc((size_t) self->numMyHEdges * sizeof(*self->edgeGID));
       self->nborIndex = malloc((size_t) (self->numMyHEdges + 1) * sizeof(*self->nborIndex));
       
       for( i = 0; i < self->numMyHEdges; i++)
 	self->edgeGID[i] = i;
-      for( i = 0; i < self->numMyHEdges + 1; i++)
-	self->nborIndex[i] = (int) col_ptr[i];
+
+      *self->nborIndex = 0;
+      for( i = 0; i < self->numMyHEdges; i++)
+	self->nborIndex[i+1] = matrix->CSC[i].nb_elem + self->nborIndex[i];
 
       if ( self->numAllNbors) {
+	int nb = 0;
 	self->nborGID = malloc((size_t) self->numAllNbors * sizeof(*self->nborGID));
-	memcpy(self->nborGID, row, self->numAllNbors * sizeof(*self->nborGID));
+	for( i = 0; i < self->numMyHEdges; i++) { 
+	  int size = matrix->CSC[i].nb_elem;
+	  memcpy((void *) &self->nborGID[nb], (void *) matrix->CSC[i].row, size * sizeof(*self->nborGID));
+	  nb += size;
+	}
       }
     }
     
     for(i = 1; i < MPI_size; i++) { 
-      int size;
-      ZOLTAN_ID_TYPE *tmp_zoltan;
-      int *tmp_int;
-      
+      ZOLTAN_ID_TYPE *zoltan_buff;
+      int *int_buff, nb=0;
+
       MPI_Send(send_metaData[i], 7, MPI_INT, i, 0, comm);
-      
-      /* This have to be done because col_ptr is a long array */
-      tmp_int = malloc((size_t) (send_metaData[i][3] + 1) * sizeof(*tmp_int)) ;
-      for(j = 0; j < send_metaData[i][3] + 1; j++)
-	tmp_int[j] = (int) col_ptr[send_metaData[i][2] + j];
-      
-      MPI_Send(tmp_int, send_metaData[i][3] + 1, MPI_INT, i, 0, comm); 
-      
-      start = (int) col_ptr[send_metaData[i][2]];
-      end   = (int) col_ptr[send_metaData[i][2] + send_metaData[i][3]];
-      size  = end - start;
-      
-      /* This array is used beacuse we do not know the exact type of ZOLTAN_ID_TYPE */
-      tmp_zoltan = malloc((size_t) size * sizeof(*tmp_zoltan)) ;
-      for (j = 0; j < size; j++)
-	tmp_zoltan[j] = (ZOLTAN_ID_TYPE) row[start + j];
-      MPI_Send(tmp_zoltan, size, ZOLTAN_ID_MPI_TYPE, i, 0, comm); 
-    free(tmp_zoltan);
-    free(tmp_int);
+
+      if (send_metaData[i][4] > 0) {
+	int_buff  = malloc((size_t) (send_metaData[i][4] + 1) * sizeof(*int_buff)) ;
+	*int_buff = 0;
+	for(j = 0, k = send_metaData[i][5]; j < send_metaData[i][4] ; j++, k++)
+	  int_buff[j+1] = int_buff[j] + matrix->CSC[k].nb_elem;
+
+	MPI_Send(int_buff, send_metaData[i][4] + 1, MPI_INT, i, 0, comm); 
+	free(int_buff);
+
+	if (send_metaData[i][6] > 0) {
+	  zoltan_buff = malloc((size_t) send_metaData[i][6] * sizeof(*zoltan_buff));
+	  
+	  for(j = 0, k = send_metaData[i][5]; j < send_metaData[i][4]; j++, k++) {
+	    int size = matrix->CSC[k].nb_elem;
+	    memcpy((void *) &zoltan_buff[nb], (void *) matrix->CSC[k].row, size * sizeof(*zoltan_buff));
+	    nb+=size;
+	  }
+	
+	  MPI_Send(zoltan_buff, send_metaData[i][6], ZOLTAN_ID_MPI_TYPE, i, 0, comm); 
+	  free(zoltan_buff);
+	}
+      }
     }
   } else {
     int metaData[7];
     
     MPI_Recv(metaData, 7, MPI_INT, 0, 0, comm, &status);
     
+    self->numVertices   = metaData[0];
     self->numMyVertices = metaData[1];
-    self->numMyHEdges   = metaData[3];
-    self->numAllNbors   = metaData[4];
-    self->numVertices   = metaData[5];
-    self->numHEdges     = metaData[6];
+
+    self->numHEdges     = metaData[3];
+    self->numMyHEdges   = metaData[4];
+    self->numAllNbors   = metaData[6];
     
     if ( self->numMyVertices > 0 ) {
-      int start = metaData[0];
+      int start = metaData[2];
       self->vtxGID = malloc((size_t) self->numMyVertices * sizeof(*self->vtxGID));
       for( i = 0; i < self->numMyVertices; i++)
 	self->vtxGID[i] = start + i;
     }
     
     if ( self->numMyHEdges > 0 ) {
-      int start = metaData[2];
-      int first;
+      int start = metaData[5];
       self->edgeGID = malloc((size_t) self->numMyHEdges * sizeof(*self->edgeGID));
       self->nborIndex = malloc((size_t) (self->numMyHEdges + 1) * sizeof(*self->nborIndex));
       
@@ -229,9 +245,6 @@ ParSHUM_Zoltan_init_distrubtion(Zoltan_Hypergraph self,
 	self->edgeGID[i] = start + i;
 
       MPI_Recv(self->nborIndex, self->numMyHEdges + 1, MPI_INT, 0, 0, comm, &status);
-      first = *self->nborIndex;
-      for( i = 0; i < self->numMyVertices + 1; i++)
-      	self->nborIndex[i] -= first;
 
       if ( self->numAllNbors > 0 ) {
 	self->nborGID = malloc((size_t) self->numAllNbors * sizeof(*self->nborGID));
@@ -239,7 +252,7 @@ ParSHUM_Zoltan_init_distrubtion(Zoltan_Hypergraph self,
       }
     }
   }
-
+  
   return 0;
 }
 
@@ -263,8 +276,10 @@ ParSHUM_Zoltan_get_row_blocks(Zoltan_Hypergraph hypergraph)
   parts = malloc((size_t) m * sizeof(*parts));
   int_array_memset(parts, ParSHUM_UNUSED_PIVOT, m);
   
+  /* print_int_array(hypergraph->exportGlobalGids, hypergraph->numExport, "exportGlobalGids"); */
   for( i = 0; i < hypergraph->numExport; i++)
     parts[hypergraph->exportGlobalGids[i]] = hypergraph->exportToPart[i];  
+  /* print_int_array(parts, m, "parts"); */
 
   MPI_Reduce(parts, self->belongs, m, MPI_INT, MPI_MAX, 0, comm);
   free(parts);
@@ -288,12 +303,10 @@ ParSHUM_Zoltan_get_row_blocks(Zoltan_Hypergraph hypergraph)
 }
 
 static col_block
-ParSHUM_Zoltan_get_col_blocks(Zoltan_Hypergraph hypergraph, 
-			      ParSHUM_matrix A, 
+ParSHUM_Zoltan_get_col_blocks(ParSHUM_schur_matrix S, 
 			      row_block row_blocks)
 {
-  int n = A->n, nb_blocks = row_blocks->nb_blocks, block, i, j, k;
-  ParSHUM_schur_matrix S = ParSHUM_schur_matrix_create();
+  int n = S->n, nb_blocks = row_blocks->nb_blocks, block, i, j, k;
   col_block col_blocks = calloc(1, sizeof(*col_blocks));
   
   col_blocks->nb_blocks = nb_blocks;
@@ -302,14 +315,15 @@ ParSHUM_Zoltan_get_col_blocks(Zoltan_Hypergraph hypergraph,
   col_blocks->perms      = malloc((size_t) col_blocks->n * sizeof(*col_blocks->perms));
   col_blocks->invr_perms = malloc((size_t) col_blocks->n * sizeof(*col_blocks->invr_perms));
   col_blocks->sizes      = calloc((size_t) ( col_blocks->nb_blocks + 2 ), sizeof(*col_blocks->sizes));
+  /* col_blocks->BB_sizes   = calloc((size_t) col_blocks->nb_blocks, sizeof(*col_blocks->BB_sizes)); */
+  /* col_blocks->BB_nnz     = calloc((size_t) col_blocks->nb_blocks, sizeof(*col_blocks->BB_nnz)); */
+  
   int_array_memset(col_blocks->invr_perms, ParSHUM_UNUSED_PIVOT, n);
-
-  ParSHUM_schur_matrix_allocate(S, A->n, A->m, A->nnz, 0, 0, 0, 0.0, 0.0);
-  ParSHUM_schur_matrix_copy(A, S, 0.0);
 
   for( block = 0; block < nb_blocks; block++)
     {
       int col_block_size = col_blocks->sizes[block];
+
       for( i = row_blocks->sizes[block]; i < row_blocks->sizes[block+1]; i++)
 	{
 	  int row = row_blocks->perms[i];
@@ -319,17 +333,21 @@ ParSHUM_Zoltan_get_col_blocks(Zoltan_Hypergraph hypergraph,
 	  for ( j = 0; j < row_nb_elem; j++)
 	    {
 	      int col = cols[j];
+
 	      if (col_blocks->invr_perms[col] != ParSHUM_UNUSED_PIVOT) 
 		continue;
+
 	      CSC_struct *CSC = &S->CSC[col];
 	      int *rows       = CSC->row;
 	      int col_nb_elem     = CSC->nb_elem;
 	      int BB_col = 0;
-	      for ( k = 0; k < col_nb_elem; k++)
+	      
+	      for ( k = 0; k < col_nb_elem; k++) 
 		if ( row_blocks->belongs[rows[k]] !=  block)  {
 		  BB_col = 1;
 		  break;
 		}
+	      
 	      if (BB_col) {
 		col_blocks->perms[--col_blocks->nb_BB_cols] = col;
 		col_blocks->invr_perms[col] = col_blocks->nb_BB_cols;
@@ -337,25 +355,36 @@ ParSHUM_Zoltan_get_col_blocks(Zoltan_Hypergraph hypergraph,
 		col_blocks->perms[col_block_size] = col;
 		col_blocks->invr_perms[col] = col_block_size++;
 	      }
+	      
 	    }
 	}
+
       col_blocks->sizes[block+1] = col_block_size;
     }
+  
   col_blocks->sizes[block+1] = n;
-  col_blocks->nb_BB_cols = abs(col_blocks->nb_BB_cols - n);
-  ParSHUM_schur_matrix_destroy(S);
+  col_blocks->nb_BB_cols = n - col_blocks->nb_BB_cols ;
+  
   return col_blocks;
 }
 
-static void
+
+/* void */
+/* ParSUM_Zoltan_distribute(ParSHUM_schur_matrix matrix,  */
+/* 			 row_block row_blocks, */
+/* 			 col_block col_blocks)  */
+/* { */
+
+/* } */
+  
+void
 ParSHUM_Zoltan_print_stats(Zoltan_Hypergraph self,
-			   ParSHUM_matrix A, 
+			   ParSHUM_schur_matrix S, 
 			   row_block row_blocks,
 			   col_block col_blocks)
 {
   int i, j, m = self->numVertices, n = self->numHEdges; 
   int nb_blocks = col_blocks->nb_blocks;
-  /* int nnz = self->nborIndex[n]; */
   int min_n = INT_MAX, max_n = 0, min_nnz = INT_MAX, max_nnz = 0;
   int min_m = INT_MAX, max_m = 0;
   int BB_n, BB_nnz = 0;
@@ -378,7 +407,7 @@ ParSHUM_Zoltan_print_stats(Zoltan_Hypergraph self,
     int block_n = col_blocks->sizes[i+1] - col_blocks->sizes[i];
     block_nnz[i] = 0;
     for( j  = col_blocks->sizes[i]; j < col_blocks->sizes[i+1]; j++)
-      block_nnz[i] += A->col_ptr[col_blocks->perms[j] + 1] - A->col_ptr[col_blocks->perms[j]];
+      block_nnz[i] += S->CSC[col_blocks->perms[j]].nb_elem;
     
     std_n += (avg_n - block_n) * (avg_n - block_n);
     max_n = (block_n > max_n) ? block_n : max_n;
@@ -396,28 +425,25 @@ ParSHUM_Zoltan_print_stats(Zoltan_Hypergraph self,
 
   BB_n = col_blocks->sizes[nb_blocks+1] - col_blocks->sizes[nb_blocks]; 
   for( i = col_blocks->sizes[nb_blocks]; i < col_blocks->sizes[nb_blocks+1]; i++) 
-    BB_nnz += A->col_ptr[col_blocks->perms[i] + 1] - A->col_ptr[col_blocks->perms[i]];
+    BB_nnz += S->CSC[col_blocks->perms[i]].nb_elem;
 
   std_nnz /= nb_blocks;
   std_nnz  = sqrt(std_nnz);
   std_n   /= nb_blocks;
   std_n    = sqrt(std_n);
   if (MPI_size == 1)
-    printf("#blocks\tavg_m\t\tstd_m\t\tmax_m\tmin_m\tavg_n\t\tstd_n\t\tmax_n\tmin_n\tavg_nnz\t\tstd_nnz\t\tmax_nnz\tmin_nnz\tBB_n\tBB_nnz\n"); 
+    printf("#blocks\tavg_m\t\tstd_m\t\tmax_m\tmin_m\tavg_n\t\tstd_n\t\tmax_n\tmin_n\tavg_nnz\t\tstd_nnz\t\tmax_nnz\tmin_nnz\tBB_n\tBB_nnz\n");
   printf("%d\t%e\t%e\t%d\t%d\t%e\t%e\t%d\t%d\t%e\t%e\t%d\t%d\t%d\t%d\n", MPI_size, avg_m,   std_m,   max_m,   min_n,
 	                                                                           avg_n,   std_n,   max_n,   min_n,
 	                                                                           avg_nnz, std_nnz, max_nnz,min_nnz,
-	                                                                           BB_n,    BB_nnz);  
+	                                                                           BB_n,    BB_nnz);
 }
 
 static void 
-ParSHUM_Zoltan_check_blocks(ParSHUM_matrix A, row_block row_blocks, col_block col_blocks)
+ParSHUM_Zoltan_check_blocks(ParSHUM_schur_matrix S, row_block row_blocks, col_block col_blocks)
 {
   int nb_blocks = row_blocks->nb_blocks, n = row_blocks->n, block, i, j;
   char mess[2048];
-  ParSHUM_schur_matrix S = ParSHUM_schur_matrix_create();
-  ParSHUM_schur_matrix_allocate(S, A->n, A->m, A->nnz, 0, 0, 0, 0.0, 0.0);
-  ParSHUM_schur_matrix_copy(A, S, 0.0);
 
   check_vlaid_perms(row_blocks->perms, n, n);
   check_vlaid_perms(col_blocks->perms, n, n);
@@ -482,6 +508,7 @@ ParSHUM_Zoltan_check_blocks(ParSHUM_matrix A, row_block row_blocks, col_block co
       for ( j = 1; j < col_nb_elem; j++) 
 	if (row_blocks->belongs[rows[j]] != first_block)  {
 	  is_BB_col = 1;
+
 	  break;
 	}
       if (!is_BB_col) {
@@ -490,18 +517,15 @@ ParSHUM_Zoltan_check_blocks(ParSHUM_matrix A, row_block row_blocks, col_block co
 	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
       }
     }
-
-  ParSHUM_schur_matrix_destroy(S);
 }
 
 void
-ParSHUM_Zoltan_parition(Zoltan_Hypergraph self, ParSHUM_matrix A)
+ParSHUM_Zoltan_partition(Zoltan_Hypergraph self, ParSHUM_schur_matrix S)
 {
   int ret;
   row_block row_blocks;
   col_block col_blocks;
   int  rank = self->rank;
-
 
    /* Application defined query functions */
   Zoltan_Set_Num_Obj_Fn(self->Zoltan,    ParSHUM_get_number_of_vertices, self);
@@ -524,14 +548,15 @@ ParSHUM_Zoltan_parition(Zoltan_Hypergraph self, ParSHUM_matrix A)
 			    &self->exportProcs,       /* Process to which I send each of the vertices */
 			    &self->exportToPart);     /* Partition to which each vertex will belong */
   
+
   if (ret != ZOLTAN_OK)
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"Zoltan failed the paritioning");
   
   row_blocks = ParSHUM_Zoltan_get_row_blocks(self);
   if (!rank) {
-    col_blocks = ParSHUM_Zoltan_get_col_blocks(self, A, row_blocks);
-    ParSHUM_Zoltan_print_stats(self, A, row_blocks, col_blocks);
-    ParSHUM_Zoltan_check_blocks(A, row_blocks, col_blocks);
+    col_blocks = ParSHUM_Zoltan_get_col_blocks(S, row_blocks);
+    ParSHUM_Zoltan_check_blocks(S, row_blocks, col_blocks);
+    ParSHUM_Zoltan_print_stats(self, S, row_blocks, col_blocks);
   }
 }
 
@@ -559,7 +584,6 @@ ParSHUM_Zoltan_print_distribution(Zoltan_Hypergraph self)
       MPI_Barrier(comm);
     }
 }
-
 
 
 void

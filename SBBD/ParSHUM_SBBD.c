@@ -11,7 +11,7 @@ struct _ParSHUM_SBBD {
   
   Zoltan_Hypergraph hypergraph;
   ParSHUM_solver solver;
-  ParSHUM_matrix A;
+  ParSHUM_schur_matrix S;
   char *matrix_file;
 
   float Zoltan_version;
@@ -51,32 +51,39 @@ void
 ParSUHM_SBBD_read_matrix(ParSHUM_SBBD self)
 {
   if (!self->rank) {
+    ParSHUM_matrix A;
     char *file_ext = strrchr(self->matrix_file, '.');
-    self->A        = ParSHUM_matrix_create();
+    A = ParSHUM_matrix_create();
 
     if (!strcmp(file_ext, ".mtl"))
-      ParSHUM_read_mtl_file(self->A, self->matrix_file);
+      ParSHUM_read_mtl_file(A, self->matrix_file);
 #ifdef HAVE_SPRAL
     else if (!strcmp(file_ext, ".rb"))
-      ParSHUM_read_rutherford_boeing(self->A, self->matrix_file);
+      ParSHUM_read_rutherford_boeing(A, self->matrix_file);
 #endif
     else
       ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsupported matrix file");
+
+    self->S = ParSHUM_schur_matrix_create();
+    ParSHUM_schur_matrix_allocate(self->S, A->n, A->m, A->nnz, 0, 0, 0, 0.0, 0.0);
+    ParSHUM_schur_matrix_copy(A, self->S, 0.0);
+    ParSHUM_matrix_destroy(A);
   }
 }
 
 void
 ParSHUM_SBBD_partition(ParSHUM_SBBD self)
 {
-  ParSHUM_Zoltan_init_distrubtion(self->hypergraph, self->A);
-  ParSHUM_Zoltan_parition(self->hypergraph, self->A);
+  ParSHUM_Zoltan_init_distrubtion(self->hypergraph, self->S);
+
+  ParSHUM_Zoltan_partition(self->hypergraph, self->S);
 }
 
 void
 ParSHUM_SBBD_destroy(ParSHUM_SBBD self)
 {
-  if (!self->rank)
-    ParSHUM_matrix_destroy(self->A);
+  if (!self->rank) 
+    ParSHUM_schur_matrix_destroy(self->S);
 
   ParSHUM_Zoltan_destroy(self->hypergraph);
   
