@@ -20,6 +20,7 @@ typedef struct _row_block {
   int n;
   
   int *perms;
+  int *invr_perms;
   int *belongs;
   int *sizes;
 } *row_block;
@@ -268,39 +269,41 @@ ParSHUM_Zoltan_get_row_blocks(Zoltan_Hypergraph hypergraph)
   self->nb_blocks = MPI_size;
   self->n         = m;
   if (!rank) {
-    self->perms   = malloc((size_t) m * sizeof(*self->perms));
-    self->sizes   = calloc((size_t) (self->nb_blocks + 1), sizeof(*self->sizes));
+    self->perms        = malloc((size_t) m * sizeof(*self->perms));
+    self->invr_perms   = malloc((size_t) m * sizeof(*self->invr_perms));
+    self->sizes        = calloc((size_t) (self->nb_blocks + 2), sizeof(*self->sizes));
     self->belongs = malloc((size_t) m * sizeof(*self->belongs));
     int_array_memset(self->perms, ParSHUM_UNUSED_PIVOT, m);
   }
   parts = malloc((size_t) m * sizeof(*parts));
   int_array_memset(parts, ParSHUM_UNUSED_PIVOT, m);
   
-  /* print_int_array(hypergraph->exportGlobalGids, hypergraph->numExport, "exportGlobalGids"); */
   for( i = 0; i < hypergraph->numExport; i++)
     parts[hypergraph->exportGlobalGids[i]] = hypergraph->exportToPart[i];  
-  /* print_int_array(parts, m, "parts"); */
 
   MPI_Reduce(parts, self->belongs, m, MPI_INT, MPI_MAX, 0, comm);
   free(parts);
 
   if (!rank) {
     for( i = 0; i < self->n; i++)
-      self->sizes[self->belongs[i] + 1]++;
+      self->sizes[self->belongs[i] + 2]++;
 
-    for( i = 0; i < self->nb_blocks; i++)
+    for( i = 1; i <= self->nb_blocks; i++)
       self->sizes[i+1] += self->sizes[i];
 
     for( i = 0; i < self->n; i++)
-      self->perms[self->sizes[self->belongs[i]]++] = i;
+      self->perms[self->sizes[self->belongs[i] + 1]++] = i;
 
-    for(i = self->nb_blocks - 1; i > 0; i--)
-      self->sizes[i] -= self->sizes[i] - self->sizes[i-1];
-    *self->sizes = 0;
+    for( i = 0; i < self->n; i++)
+      self->invr_perms[i] = self->perms[i];
+
   }
 
+  /* free(belongs); */
   return self;
 }
+
+
 
 static col_block
 ParSHUM_Zoltan_get_col_blocks(ParSHUM_schur_matrix S, 
@@ -336,7 +339,7 @@ ParSHUM_Zoltan_get_col_blocks(ParSHUM_schur_matrix S,
 
 	      if (col_blocks->invr_perms[col] != ParSHUM_UNUSED_PIVOT) 
 		continue;
-
+	      
 	      CSC_struct *CSC = &S->CSC[col];
 	      int *rows       = CSC->row;
 	      int col_nb_elem     = CSC->nb_elem;
@@ -355,10 +358,8 @@ ParSHUM_Zoltan_get_col_blocks(ParSHUM_schur_matrix S,
 		col_blocks->perms[col_block_size] = col;
 		col_blocks->invr_perms[col] = col_block_size++;
 	      }
-	      
 	    }
 	}
-
       col_blocks->sizes[block+1] = col_block_size;
     }
   
@@ -374,7 +375,6 @@ ParSHUM_Zoltan_get_col_blocks(ParSHUM_schur_matrix S,
 /* 			 row_block row_blocks, */
 /* 			 col_block col_blocks)  */
 /* { */
-
 /* } */
   
 void
