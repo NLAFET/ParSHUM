@@ -131,7 +131,7 @@ void                ParSHUM_verbose_draw_graph_V0(ParSHUM_verbose verbose);
 void                ParSHUM_verbose_destroy_V0(ParSHUM_verbose self);
 void                ParSHUM_verbose_print_parms_raw(ParSHUM_exe_parms exe_parms, ParSHUM_parm_type type, FILE *file);
 void                ParSHUM_verbose_print_group_run(ParSHUM_verbose verbose, ParSHUM_parm_type type, void *val,
-					       int current_run, FILE *file);
+						    int current_run, FILE *file);
 void                ParSHUM_verbose_trace_start_event_V0(ParSHUM_verbose self, int id);
 void                ParSHUM_verbose_trace_stop_event_V0(ParSHUM_verbose self);
 
