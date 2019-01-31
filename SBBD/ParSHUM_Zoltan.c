@@ -494,7 +494,7 @@ ParSUM_get_block(ParSHUM_schur_matrix matrix, row_block row_blocks,
   return self;
 }
 
-void
+ParSHUM_matrix
 ParSUM_Zoltan_distribute(Zoltan_Hypergraph hypergraph, 
 			 ParSHUM_schur_matrix matrix,
 			 row_block row_blocks,
@@ -519,17 +519,17 @@ ParSUM_Zoltan_distribute(Zoltan_Hypergraph hypergraph,
     }
     ParSHUM_matrix_destroy(A);
   } else {
-    /* int local_sizes[4]; */
-    /* MPI_Status status; */
-    /* MPI_Recv(local_sizes, 4, MPI_INT, 0, 0, comm, &status); */
-    /* n     = local_sizes[0]; */
-    /* nb_BB = local_sizes[1]; */
-    /* m     = local_sizes[2]; */
-    /* nnz   = local_sizes[3]; */
-    /* A->n   = n + nb_BB; */
-    /* A->m   = m; */
-    /* A->nnz = nnz; */
-    /* ParSHUM_matrix_allocate(A, A->n, A->m, A->nnz, 1.0, ParSHUM_CSC_matrix); */
+    int local_sizes[4];
+    MPI_Status status;
+    MPI_Recv(local_sizes, 4, MPI_INT, 0, 0, comm, &status);
+    n     = local_sizes[0];
+    nb_BB = local_sizes[1];
+    m     = local_sizes[2];
+    nnz   = local_sizes[3];
+    A->n   = n + nb_BB;
+    A->m   = m;
+    A->nnz = nnz;
+    ParSHUM_matrix_allocate(A, A->n, A->m, A->nnz, 1.0, ParSHUM_CSC_matrix);
   }
 }
 
