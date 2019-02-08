@@ -2,18 +2,18 @@
 #define _ParSHUM_ZOLTAN_H 
 
 #include <zoltan.h>
+#include "ParSHUM_SBBD_util.h"
 #include "ParSHUM_schur_matrix.h" 
 
 typedef struct _Zoltan_Hypergraph *Zoltan_Hypergraph; 
 
-float ParSHUM_Zoltan_init(void);
+Zoltan_Hypergraph  ParSHUM_Zoltan_create(ParSHUM_MPI_info MPI_info);
 
-Zoltan_Hypergraph  ParSHUM_Zoltan_create(MPI_Comm comm);
-
-int  ParSHUM_Zoltan_init_distrubtion(Zoltan_Hypergraph self, ParSHUM_schur_matrix matrix);
-void ParSHUM_Zoltan_print_distribution(Zoltan_Hypergraph self);
+int  ParSHUM_Zoltan_register_data(Zoltan_Hypergraph self, ParSHUM_schur_matrix matrix);
 void ParSHUM_Zoltan_partition(Zoltan_Hypergraph self, ParSHUM_schur_matrix matrix);
+void ParSHUM_Zoltan_get_row_blocks(Zoltan_Hypergraph hypergraph, row_block row_blocks);
 
+void ParSHUM_Zoltan_print_distribution(Zoltan_Hypergraph self);
 void  ParSHUM_Zoltan_destroy(Zoltan_Hypergraph self);
 
 #endif // _ParSHUM_ZOLTAN_H 

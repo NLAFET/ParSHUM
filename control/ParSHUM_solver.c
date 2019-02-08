@@ -54,6 +54,7 @@ ParSHUM_solver_create()
   self->exe_parms->min_pivot_per_steps     = 20;
   self->exe_parms->density_tolerance       = 0.2;
   self->exe_parms->max_dense_schur         = 10000;
+  self->exe_parms->luby_algorithm          = 1;
   
   self->verbose = ParSHUM_verbose_create(self->exe_parms);
   return self;
@@ -715,6 +716,9 @@ ParSHUM_solver_init(ParSHUM_solver self)
   
   if ( !(self->debug & ParSHUM_CHECK_DENSE_W_ParSHUM_PERM) )
     ParSHUM_solver_alloc_internal(self);
+
+  setenv("OMP_WAIT_POLICY", "ACTIVE", 1);
+  setenv("OMP_PROC_BIND", "close", 1);
 
   ParSHUM_verbose_create_dirs(self->verbose->parms->output_dir);
 #pragma omp  parallel num_threads(self->exe_parms->nb_threads)
