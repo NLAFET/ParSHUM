@@ -37,7 +37,7 @@ ParSHUM_schur_matrix_allocate(ParSHUM_schur_matrix self, int n, int m, long nnz,
 
   self->extra_space = extra_space_inbetween;
   self->alignment = sysconf (_SC_LEVEL1_DCACHE_LINESIZE);
-  self->internal_mem = ParSHUM_internal_mem_create((size_t)  nnz * (1 + extra_space + extra_space_inbetween) * (sizeof(*self->CSC[0].val) + sizeof(*self->CSC[0].row) + sizeof(*self->CSR[0].col)) , (size_t) self->alignment);
+  self->internal_mem = ParSHUM_internal_mem_create((size_t)  nnz * (1 + extra_space + extra_space_inbetween) * (sizeof(*self->CSC[0].val) + sizeof(*self->CSC[0].row) + sizeof(*self->CSR[0].col)), (size_t) self->alignment);
 
   self->nnz   = 0;
   self->debug = debug;
@@ -464,8 +464,6 @@ delete_entry_from_CSR(ParSHUM_schur_matrix self, int col, int row)
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__,"even better, the entry is there!");
   }
 
-  /* TODO: this is stupid, we should somehow mark the unused enteris, not move all the memory */
-  /* TODO: instead od moving the rest, just move the last one to the free position */
   for(i = 0; i < nb_elem; i++) 
     if (cols[i] == col) {
 	found = 1;

@@ -2,6 +2,7 @@
 #include "ParSHUM_Zoltan.h"
 #include "ParSHUM_solver.h"
 #include "ParSHUM_auxiliary.h"
+#include "ParSHUM_SBBD_util.h"
 #include "ParSHUM_SBBD.h"
 
 
@@ -84,11 +85,11 @@ ParSHUM_SBBD_partition(ParSHUM_SBBD self)
     ParSHUM_get_col_blocks(self->A, self->col_blocks, self->row_blocks);
     
     ParSHUM_check_blocks(self->A, self->row_blocks, self->col_blocks);
-    ParSHUM_Zoltan_print_stats(self->A, self->row_blocks, self->col_blocks);
+    ParSHUM_blocks_print_stats(self->A, self->row_blocks, self->col_blocks);
   }
   self->solver->A = ParSUM_Zoltan_distribute(self->A, self->row_blocks, self->col_blocks, self->MPI_info);
-  
-  ParSHUM_solver_init(self->solver);
+  ParSHUM_matrix_print(self->solver->A, "matrix A");
+  /* ParSHUM_solver_init(self->solver); */
 }
 
 void 

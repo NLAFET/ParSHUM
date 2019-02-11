@@ -10,15 +10,6 @@
           and use it in the rest of the code. This makes it possible to 
 	  call ParSHUM SBBD in a subset of procs in a simulation for exmaple.
 	  This should be done by adding a root node in the MPI_info struct.  */
-#define  BLOCK_SIZES   4
-#define  BLOCK_COLS    0
-#define  BLOCK_BB_COLS 1
-#define  BLOCK_ROWS    2
-#define  BLOCK_NNZ     3
-
-static ParSHUM_matrix
-ParSHUM_get_block(ParSHUM_schur_matrix matrix, row_block row_blocks,
-		  col_block col_blocks, int block);
 
 
 void 
@@ -110,60 +101,8 @@ ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block r
   free(tmp);
 }
 
-ParSHUM_matrix
-ParSUM_Zoltan_distribute(ParSHUM_schur_matrix matrix, row_block row_blocks,
-			 col_block col_blocks, ParSHUM_MPI_info MPI_info)
-{
-  int rank = MPI_info->rank;
-  MPI_Comm comm = MPI_info->world;
-  int n, nb_BB, m, nnz;
-  ParSHUM_matrix A;
 
-  if (rank == 0) {
-    int block, nb_blocks = col_blocks->nb_blocks;
-
-    A = ParSHUM_get_block(matrix, row_blocks, col_blocks, 0);
-    
-    for (block = 1; block < nb_blocks; block++) {
-      ParSHUM_matrix block_matrix;  
-      int block_sizes[BLOCK_SIZES];
-      block_sizes[BLOCK_COLS]    = col_blocks->sizes[block+1] - col_blocks->sizes[block];
-      block_sizes[BLOCK_BB_COLS] = col_blocks->BB_size[block];
-      block_sizes[BLOCK_ROWS]    = row_blocks->sizes[block+1] - row_blocks->sizes[block];
-      block_sizes[BLOCK_NNZ]     = col_blocks->nnz[block];
-      MPI_Send(block_sizes, BLOCK_SIZES, MPI_INT, block, 0, comm);
-      
-      block_matrix = ParSHUM_get_block(matrix, row_blocks, col_blocks, block);
-
-      MPI_Send(block_matrix->row,       block_matrix->nnz, MPI_INT,    block, 0, comm);
-      MPI_Send(block_matrix->val,       block_matrix->nnz, MPI_DOUBLE, block, 0, comm);
-      MPI_Send(block_matrix->col_ptr, block_matrix->n + 1, MPI_LONG,   block, 0, comm);
-
-      ParSHUM_matrix_destroy(block_matrix);
-    }
-  } else {
-    int my_sizes[BLOCK_SIZES];
-    MPI_Status status;
-    MPI_Recv(my_sizes, 4, MPI_INT, 0, 0, comm, &status);
-    n      = my_sizes[BLOCK_COLS];
-    nb_BB  = my_sizes[BLOCK_BB_COLS];
-    m      = my_sizes[BLOCK_ROWS];
-    nnz    = my_sizes[BLOCK_NNZ];
-
-    A = ParSHUM_matrix_create();
-    A->n   = n + nb_BB;
-    A->m   = m;
-    A->nnz = nnz;
-    ParSHUM_matrix_allocate(A, A->n, A->m, A->nnz, 1.0, ParSHUM_CSC_matrix);
-    MPI_Recv(A->row,     A->nnz,   MPI_INT,    0, 0, comm, &status);
-    MPI_Recv(A->val,     A->nnz,   MPI_DOUBLE, 0, 0, comm, &status);
-    MPI_Recv(A->col_ptr, A->n + 1, MPI_LONG,   0, 0, comm, &status);
-  }
-
-  return A;
-}
-
-static ParSHUM_matrix 
+ParSHUM_matrix 
 ParSHUM_get_block(ParSHUM_schur_matrix matrix, row_block row_blocks,
 		  col_block col_blocks, int block)
 {
@@ -252,7 +191,7 @@ ParSHUM_get_block(ParSHUM_schur_matrix matrix, row_block row_blocks,
 }
 
 void
-ParSHUM_Zoltan_print_stats(ParSHUM_schur_matrix A, row_block row_blocks, col_block col_blocks)
+ParSHUM_blocks_print_stats(ParSHUM_schur_matrix A, row_block row_blocks, col_block col_blocks)
 {
   int i, j, m = A->m, n = A->n ;
   int nb_blocks = col_blocks->nb_blocks;

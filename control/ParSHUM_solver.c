@@ -54,7 +54,7 @@ ParSHUM_solver_create()
   self->exe_parms->min_pivot_per_steps     = 20;
   self->exe_parms->density_tolerance       = 0.2;
   self->exe_parms->max_dense_schur         = 10000;
-  self->exe_parms->luby_algorithm          = 1;
+  self->exe_parms->luby_algo               = 1;
   
   self->verbose = ParSHUM_verbose_create(self->exe_parms);
   return self;
