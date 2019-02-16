@@ -76,6 +76,7 @@ ParSUHM_SBBD_read_matrix(ParSHUM_SBBD self)
 void
 ParSHUM_SBBD_partition(ParSHUM_SBBD self)
 {
+  char mess[2048];
   ParSHUM_Zoltan_register_data(self->hypergraph, self->A);
 
   ParSHUM_Zoltan_partition(self->hypergraph, self->A);
@@ -86,16 +87,52 @@ ParSHUM_SBBD_partition(ParSHUM_SBBD self)
     
     ParSHUM_check_blocks(self->A, self->row_blocks, self->col_blocks);
     ParSHUM_blocks_print_stats(self->A, self->row_blocks, self->col_blocks);
+    /* ParSHUM_print_blocks(self->row_blocks, self->col_blocks); */
   }
   self->solver->A = ParSUM_Zoltan_distribute(self->A, self->row_blocks, self->col_blocks, self->MPI_info);
-  ParSHUM_matrix_print(self->solver->A, "matrix A");
-  /* ParSHUM_solver_init(self->solver); */
+  /* for ( i = 0; i < self->MPI_info->MPI_size; i++)  */
+  /*   if ( i == self->MPI_info->rank) { */
+  /*     snprintf(mess, 2048, "matrix A on proc %d", self->MPI_info->rank); */
+  /*     ParSHUM_matrix_print(self->solver->A, mess); */
+  /*     MPI_Barrier(self->MPI_info->world); */
+  /*   } */
+  ParSHUM_solver_init(self->solver);
 }
 
 void 
 ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
 {
+  ParSHUM_vector X, B, SOL;
+
+  X    = ParSHUM_vector_create(self->solver->A->n);
+  SOL  = ParSHUM_vector_create(self->solver->A->m);  
+  B    = ParSHUM_vector_create(self->solver->A->m);  
+  
+  ParSHUM_vector_read_file(X, self->solver->exe_parms->RHS_file); 
+  /* ParSHUM_vector_print(X, "the real X"); */
+  fflush(stdout);
+  ParSHUM_matrix_SpMV(self->solver->A, X, SOL);
+  
+  /* copy the vector SOL in B */
+  ParSHUM_vector_copy(SOL, B);
+  
+  self->solver->debug |= ParSHUM_CHECK_PIVOTS;
+  self->solver->debug |= ParSHUM_CHECK_SCHUR_MEMORY;
+  self->solver->debug |= ParSHUM_CHECK_SCHUR_SYMETRY;
+  self->solver->debug |= ParSHUM_CHECK_COUNTERS;
+  /* self->solver->exe_parms->density_tolerance = 1.0; */
+  /* self->solver->exe_parms->min_pivot_per_steps = 5; */
+
   ParSHUM_solver_factorize(self->solver);
+  
+  /* Perform the solve operation */
+  /* ParSHUM_solver_solve(self->solver, B); */
+  /* ParSHUM_vector_print(B, "computed solution"); */
+  /* fflush(stdout);       */
+  /* compute the norms */
+  /* ParSHUM_solver_compute_norms(self->solver, B, SOL); */
+  
+  ParSHUM_solver_finalize(self->solver);
 }
 
 void

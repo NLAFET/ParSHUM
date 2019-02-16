@@ -80,7 +80,7 @@ void ParSHUM_schur_matrix_print(ParSHUM_schur_matrix self, char *mess);
 void ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int previous_step_pivots,
 				  double val_tol, int *nb_col_singletons, int *nb_row_singletons,
 				  int *cols, int *rows, int *distributions,
-				  int nb_done_pivots, int *col_perm, int *row_perm,
+				  int nb_BB_cols, int *col_perm, int *row_perm,
 				  int *invr_col_perm, int *invr_row_perm, void **workspace);
 
 void ParSHUM_schur_matrix_update_LD(ParSHUM_schur_matrix S, ParSHUM_L_matrix L,

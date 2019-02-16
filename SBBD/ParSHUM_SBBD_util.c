@@ -122,8 +122,8 @@ ParSHUM_get_block(ParSHUM_schur_matrix matrix, row_block row_blocks,
   end   = col_blocks->sizes[block+1];
   n     = end - start;
 
-  self->n = col_blocks->sizes[block+1] - col_blocks->sizes[block] + local_BB;
-  self->m = n;
+  self->n = n + local_BB;
+  self->m = row_blocks->sizes[block+1] - row_blocks->sizes[block];
   self->nnz = nnz;
   ParSHUM_matrix_allocate(self, self->n, self->m, self->nnz, 1.0, ParSHUM_CSC_matrix);
 
@@ -188,6 +188,24 @@ ParSHUM_get_block(ParSHUM_schur_matrix matrix, row_block row_blocks,
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"did not found all the enteries in the block matrix");
 
   return self;
+}
+
+void
+ParSHUM_print_blocks(row_block row_blocks, col_block col_blocks)
+{
+  printf("row_block:\nn =  %d \nnb_block %d \n",
+	 row_blocks->n, row_blocks->nb_blocks);
+  print_int_array(row_blocks->perms,      row_blocks->n, "row permutation");
+  print_int_array(row_blocks->invr_perms, row_blocks->n, "row inverse permutation");
+  print_int_array(row_blocks->sizes,      row_blocks->nb_blocks + 1, "row block sizes");
+
+  printf("\n\ncol_block:\nn= %d \nnb_blocks= %d\nnb_BB_cols = %d\n",
+	 col_blocks->n, col_blocks->nb_blocks, col_blocks->nb_BB_cols);
+  print_int_array(col_blocks->perms,      col_blocks->n, "col permutation");
+  print_int_array(col_blocks->invr_perms, col_blocks->n, "col inverse permutation");
+  print_int_array(col_blocks->nnz,        col_blocks->nb_blocks, "col block non-zero elements");
+  print_int_array(col_blocks->sizes,      col_blocks->nb_blocks+2, "col block sizes");
+  print_int_array(col_blocks->BB_size,    col_blocks->nb_blocks, "col local border-block sizes");
 }
 
 void

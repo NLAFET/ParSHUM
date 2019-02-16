@@ -81,6 +81,7 @@ struct _ParSHUM_solver {
   int n_L_structs;  
   int nnz_L_structs;  
   int previous_step_pivots;
+  int BB_cols;
 
   int debug;
   int step;

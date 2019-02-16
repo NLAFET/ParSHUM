@@ -17,7 +17,7 @@ struct _ParSHUM_Luby_ {
   int n;
 };
  
-ParSHUM_Luby  ParSHUM_Luby_create(ParSHUM_schur_matrix matrix);
+ParSHUM_Luby  ParSHUM_Luby_create(int n);
 
 void ParSHUM_Luby_destroy(ParSHUM_Luby self);
 

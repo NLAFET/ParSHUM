@@ -289,6 +289,8 @@ ParSUM_Zoltan_distribute(ParSHUM_schur_matrix matrix, row_block row_blocks,
     int block, nb_blocks = col_blocks->nb_blocks;
 
     A = ParSHUM_get_block(matrix, row_blocks, col_blocks, 0);
+    A->n -=  *col_blocks->BB_size;
+    A->nnz = A->col_ptr[A->n];
     
     for (block = 1; block < nb_blocks; block++) {
       ParSHUM_matrix block_matrix;  
@@ -324,6 +326,8 @@ ParSUM_Zoltan_distribute(ParSHUM_schur_matrix matrix, row_block row_blocks,
     MPI_Recv(A->row,     A->nnz,   MPI_INT,    0, 0, comm, &status);
     MPI_Recv(A->val,     A->nnz,   MPI_DOUBLE, 0, 0, comm, &status);
     MPI_Recv(A->col_ptr, A->n + 1, MPI_LONG,   0, 0, comm, &status);
+    A->n -= nb_BB;
+    A->nnz = A->col_ptr[A->n];
   }
 
   return A;

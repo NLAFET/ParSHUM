@@ -91,10 +91,10 @@ ParSHUM_CSR_alloc(ParSHUM_internal_mem mem, CSR_struct *CSR, int nb_elem, long a
 void
 ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int previous_step_pivots, double val_tol,
 			     int *nb_col_singletons, int *nb_row_singletons, int *cols, int *rows,
-			     int *distributions, int nb_doane_pivots, int *col_perm, int *row_perm, 
+			     int *distributions, int nb_BB_cols, int *col_perm, int *row_perm, 
 			     int *invr_col_perm, int *invr_row_perm, void **workspace)
 {
-  int n = self->n - done_pivots + previous_step_pivots;
+  int n = self->n - done_pivots + previous_step_pivots - nb_BB_cols;
   int m = self->m - done_pivots + previous_step_pivots;
   int i, _done_pivots = done_pivots;
   int needed_pivots = self->n < self->m ? self->n : self->m;
@@ -137,8 +137,8 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
 	continue;
       }
 
-      if ( self->CSR[row].nb_elem == 1 )
-	row_singeltons[nb_singeltons++] = row; 
+      /* if ( self->CSR[row].nb_elem == 1 ) */
+      /* 	row_singeltons[nb_singeltons++] = row;  */
       j++;
     }
 
@@ -258,8 +258,8 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
 	cols[j] = cols[--end];
 	continue;
       }
-      if (self->CSC[col].nb_elem == 1)  
-	col_singeltons[nb_singeltons++] = col;
+      /* if (self->CSC[col].nb_elem == 1)   */
+      /* 	col_singeltons[nb_singeltons++] = col; */
 
       j++;
     }

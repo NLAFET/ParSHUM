@@ -148,19 +148,29 @@ ParSHUM_dense_matrix_create(int n, int m)
 
 
 void
-ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int nb_threads)
+ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int BB_cols, int nb_threads)
 {
   int ret = 0;
   char mess[2048];
   omp_set_num_threads(nb_threads);
   if (self->n && self->m) { 
-    ret = plasma_dgetrf(self->m, self->n, self->val, self->m, self->pivots);  
+    ret = plasma_dgetrf(self->m, self->n - BB_cols, self->val, self->m, self->pivots);  
   }
   if (ret)  {
     snprintf(mess, 2048,"The factorization of the dense schur is completed, but the entry U(%d,%d) has a zero on it.\n", ret, ret);
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
   }
+  if (BB_cols) {
+    plasma_dlaswp(PlasmaRowwise, self->m, BB_cols,  &self->val[(self->n-BB_cols) * self->m], self->m,
+		  self->pivots, 1); 
 
+    plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaNonUnit, self->n - BB_cols, BB_cols, 1.0,
+		 self->val, self->m, &self->val[(self->n - BB_cols) * self->m], self->m);
+
+    plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, BB_cols, BB_cols, self->n - BB_cols, 1.0, 
+		 &self->val[self->m - BB_cols], self->m, &self->val[(self->n - BB_cols) * self->m], self->m, 
+ 		 -1,  &self->val[(self->n - BB_cols) * self->m + self->m - BB_cols], self->m);
+  }
 }
 
 

@@ -9,10 +9,9 @@
 #include "ParSHUM_Luby.h"
  
 ParSHUM_Luby 
-ParSHUM_Luby_create(ParSHUM_schur_matrix matrix)
+ParSHUM_Luby_create(int n)
 {
   ParSHUM_Luby self = calloc(1, sizeof(*self));
-  int n = matrix->n;
 
   self->n = n;
   

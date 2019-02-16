@@ -11,8 +11,9 @@ main(int argc, char **argv)
   ParSHUM_SBBD_parse_args(solver, argc, argv);
   ParSUHM_SBBD_read_matrix(solver);
   ParSHUM_SBBD_partition(solver);
-  /* ParSHUM_SBBD_factorize(solver);   */
-  ParSHUM_SBBD_destroy(solver);
+
+  ParSHUM_SBBD_factorize(solver);
+  /* ParSHUM_SBBD_destroy(solver); */
 
   MPI_Finalize();
 
