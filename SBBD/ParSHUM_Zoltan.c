@@ -278,7 +278,7 @@ ParSHUM_Zoltan_partition(Zoltan_Hypergraph self, ParSHUM_schur_matrix A)
 
 ParSHUM_matrix
 ParSUM_Zoltan_distribute(ParSHUM_schur_matrix matrix, row_block row_blocks,
-			 col_block col_blocks, ParSHUM_MPI_info MPI_info)
+			 col_block col_blocks, ParSHUM_solver solver, ParSHUM_MPI_info MPI_info)
 {
   int rank = MPI_info->rank;
   MPI_Comm comm = MPI_info->world;
@@ -289,8 +289,9 @@ ParSUM_Zoltan_distribute(ParSHUM_schur_matrix matrix, row_block row_blocks,
     int block, nb_blocks = col_blocks->nb_blocks;
 
     A = ParSHUM_get_block(matrix, row_blocks, col_blocks, 0);
-    A->n -=  *col_blocks->BB_size;
+    /* A->n -=  *col_blocks->BB_size; */
     A->nnz = A->col_ptr[A->n];
+    solver->BB_cols = *col_blocks->BB_size;
     
     for (block = 1; block < nb_blocks; block++) {
       ParSHUM_matrix block_matrix;  
@@ -322,14 +323,15 @@ ParSUM_Zoltan_distribute(ParSHUM_schur_matrix matrix, row_block row_blocks,
     A->n   = n + nb_BB;
     A->m   = m;
     A->nnz = nnz;
+
     ParSHUM_matrix_allocate(A, A->n, A->m, A->nnz, 1.0, ParSHUM_CSC_matrix);
     MPI_Recv(A->row,     A->nnz,   MPI_INT,    0, 0, comm, &status);
     MPI_Recv(A->val,     A->nnz,   MPI_DOUBLE, 0, 0, comm, &status);
     MPI_Recv(A->col_ptr, A->n + 1, MPI_LONG,   0, 0, comm, &status);
-    A->n -= nb_BB;
+    /* A->n -= nb_BB; */
     A->nnz = A->col_ptr[A->n];
+    solver->BB_cols = nb_BB;
   }
-
   return A;
 }
 

@@ -35,7 +35,7 @@ int ParSHUM_Luby_assign_score(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix,
 			      int *col_perm, int *row_perm, 
 			      int *cols, int first_col, int last_col);
 
-void ParSHUM_Luby_first_pass(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix,
+void ParSHUM_Luby_first_pass(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix, int nb_cols, 
 			     int *col_perm, int *row_perm, int nb_candidates);
 
 int ParSHUM_Luby_second_pass(ParSHUM_schur_matrix matrix, ParSHUM_Luby Luby, 

@@ -14,6 +14,7 @@ struct _ParSHUM_SBBD {
   ParSHUM_solver solver;
   ParSHUM_schur_matrix A;
   char *matrix_file;
+  ParSHUM_dense_matrix Schur;
 };
 
 ParSHUM_SBBD
@@ -87,15 +88,17 @@ ParSHUM_SBBD_partition(ParSHUM_SBBD self)
     
     ParSHUM_check_blocks(self->A, self->row_blocks, self->col_blocks);
     ParSHUM_blocks_print_stats(self->A, self->row_blocks, self->col_blocks);
+    self->Schur = ParSHUM_dense_matrix_create(self->col_blocks->nb_BB_cols, self->col_blocks->nb_BB_cols);
     /* ParSHUM_print_blocks(self->row_blocks, self->col_blocks); */
   }
-  self->solver->A = ParSUM_Zoltan_distribute(self->A, self->row_blocks, self->col_blocks, self->MPI_info);
+  self->solver->A = ParSUM_Zoltan_distribute(self->A, self->row_blocks, self->col_blocks, self->solver, self->MPI_info);
   /* for ( i = 0; i < self->MPI_info->MPI_size; i++)  */
   /*   if ( i == self->MPI_info->rank) { */
   /*     snprintf(mess, 2048, "matrix A on proc %d", self->MPI_info->rank); */
   /*     ParSHUM_matrix_print(self->solver->A, mess); */
   /*     MPI_Barrier(self->MPI_info->world); */
   /*   } */
+  
   ParSHUM_solver_init(self->solver);
 }
 
@@ -103,6 +106,9 @@ void
 ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
 {
   ParSHUM_vector X, B, SOL;
+  ParSHUM_dense_matrix local_S;
+  int nb_BB_cols = self->solver->BB_cols;
+  int rank = self->MPI_info->rank;
 
   X    = ParSHUM_vector_create(self->solver->A->n);
   SOL  = ParSHUM_vector_create(self->solver->A->m);  
@@ -117,14 +123,24 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
   ParSHUM_vector_copy(SOL, B);
   
   self->solver->debug |= ParSHUM_CHECK_PIVOTS;
-  self->solver->debug |= ParSHUM_CHECK_SCHUR_MEMORY;
-  self->solver->debug |= ParSHUM_CHECK_SCHUR_SYMETRY;
-  self->solver->debug |= ParSHUM_CHECK_COUNTERS;
+  /* self->solver->debug |= ParSHUM_CHECK_SCHUR_MEMORY; */
+  /* self->solver->debug |= ParSHUM_CHECK_SCHUR_SYMETRY; */
+  /* self->solver->debug |= ParSHUM_CHECK_COUNTERS; */
   /* self->solver->exe_parms->density_tolerance = 1.0; */
   /* self->solver->exe_parms->min_pivot_per_steps = 5; */
 
   ParSHUM_solver_factorize(self->solver);
+
+  local_S = self->solver->S_dense;
+  /* if (rank ) { */
+  /*   ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m], NULL, NULL,  */
+  /* 			     local_S->m, nb_BB_cols, self->MPI_info); */
+  /* } else {  */
+  /*   ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m], self->Schur->val, */
+  /* 			     self->col_blocks,  local_S->m, nb_BB_cols, self->MPI_info); */
+  /* } */
   
+
   /* Perform the solve operation */
   /* ParSHUM_solver_solve(self->solver, B); */
   /* ParSHUM_vector_print(B, "computed solution"); */

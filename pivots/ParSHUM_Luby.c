@@ -123,7 +123,7 @@ ParSHUM_Luby_assign_score(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix,
 }
 
 void
-ParSHUM_Luby_first_pass(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix,
+ParSHUM_Luby_first_pass(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix, int nb_cols, 
 			int *col_perm, int *row_perm, int nb_candidates)
 {
   int i, j;
@@ -143,6 +143,9 @@ ParSHUM_Luby_first_pass(ParSHUM_Luby Luby, ParSHUM_schur_matrix matrix,
       for ( j = 0; j < nb_elem; j++) 
 	{
 	  int col = cols[j];
+	  /* This happnes only with BB cols */
+	  if (col >= nb_cols)
+	    continue;
 	  if ( chosen[col] == potential_pivot || chosen[col] == discarded_pivot  ) {
 	    if ( piv_score > scores[col] ) { 
 	      chosen[col] = discarded_pivot;

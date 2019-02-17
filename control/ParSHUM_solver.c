@@ -822,6 +822,55 @@ ParSHUM_solver_get_pivots(ParSHUM_solver self, ParSHUM_pivot_set set)
 }
 
 void 
+ParSHUM_check_logical_sum(ParSHUM_solver self, int new_Luby_pivots)
+{
+  ParSHUM_schur_matrix S = self->S ;
+  int n = S->n, m = S->m, i, j, pivot;
+  int *logical_rows   = calloc(m, sizeof(*logical_rows));
+  int *logical_cols   = calloc(n, sizeof(*logical_rows));
+  int *invr_row_perms = self->invr_row_perm;
+  int *invr_col_perms = self->invr_col_perm;
+  int *row_perms      = self->row_perm;
+  int *col_perms      = self->col_perm;
+  int start_pivots    = self->done_pivots;
+  int end_pivots      = self->done_pivots + self->nb_row_singletons + self->nb_col_singletons + new_Luby_pivots;
+  int nb_logical_rows = 0;
+  int nb_logical_cols = 0;
+ 
+  for( pivot = start_pivots; pivot < end_pivots; pivot++) { 
+    int col_pivot = col_perms[pivot];
+    CSC_struct *CSC = &S->CSC[col_pivot];
+    int *rows = CSC->row; 
+    int nb_elem = CSC->nb_elem;
+    for ( i = 0; i < nb_elem; i++) 
+      if (invr_row_perms[rows[i]] == ParSHUM_UNUSED_PIVOT)
+      logical_rows[rows[i]] = 1;
+
+    int row_pivot = row_perms[pivot];
+    CSR_struct *CSR = &S->CSR[row_pivot];
+    int *cols = CSR->col;
+    nb_elem = CSR->nb_elem;
+    for(i = 0; i < nb_elem; i++) 
+      if (invr_col_perms[cols[i]] == ParSHUM_UNUSED_PIVOT)
+      logical_cols[cols[i]] = 1;
+  }
+  for ( i = 0; i < n; i++) 
+    if (logical_cols[i]) 
+      nb_logical_cols++;
+
+  for ( i = 0; i < m; i++) 
+    if (logical_rows[i]) 
+      nb_logical_rows++;
+
+  if (nb_logical_cols != self->n_U_structs) 
+      ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "n_U_struct not correct");
+  if (nb_logical_rows != self->n_L_structs) 
+      ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "n_L_struct not correct");
+
+  free(logical_rows); free(logical_cols);
+}
+
+void 
 ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_Luby_pivots)
 {
   ParSHUM_schur_matrix S = self->S;
@@ -847,6 +896,7 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
 
   int *cols = self->cols;
   int *rows = self->rows;
+  int step  = self->step;
 
   self->previous_step_pivots = new_pivots;
 
@@ -870,7 +920,7 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
     distribution_m[i] = (nb_rows / nb_threads) * i;
   distribution_m[nb_threads] = nb_rows;
 
-#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, base, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, verbose)
+#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, step, verbose) firstprivate(base)
   {
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GETTING_PIVOTS);
   int i, j;
@@ -889,7 +939,6 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
     }
 
 #pragma omp barrier
-
   /* Updte the logical arrays with the  non-singelton pivots */
   for ( i = start; i < end; i++)
     {
@@ -994,12 +1043,12 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
   } else { 
     memcpy(&col_perms[all_pivots], my_col_perms, (size_t) col_sizes[me] * sizeof(*col_perms));
     memcpy(&row_perms[all_pivots], my_row_perms, (size_t) row_sizes[me] * sizeof(*row_perms));
-    for( i = n - nb_BB_cols; i < n; i++) 
+    for( i = n - nb_BB_cols; i < n; i++)
       if (logical_cols[i] == base && invr_col_perms[i] == ParSHUM_UNUSED_PIVOT)
-	col_perms[all_pivots + self->n_U_structs++] = i; 
+    	col_perms[all_pivots + self->n_U_structs++] = i;
+    
   }
   ParSHUM_verbose_trace_stop_event(verbose);
-  /* BB_COLS TODO: here the BB cols should be examined and the col_perms should be updated  */
   }
 
   self->found_pivots = all_pivots;
@@ -1025,7 +1074,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
   ParSHUM_verbose verbose = self->verbose;
   int nb_threads = self->exe_parms->nb_threads;
   int needed_pivots = self->A->n < self->A->m ? self->A->n : self->A->m;
-  needed_pivots -= self->done_pivots + self->BB_cols;
+  needed_pivots -= self->done_pivots + self->BB_cols + 1;
   int new_pivots = 0;
 
   ParSHUM_verbose_start_timing(&step->timing_extracting_candidates);
@@ -1034,7 +1083,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
 			       self->exe_parms->value_tol * self->exe_parms->singeltons_relaxation,
 			       &self->nb_col_singletons, &self->nb_row_singletons, self->cols,
 			       self->rows, self->distributions, self->BB_cols, self->col_perm,
-			       self->row_perm, self->invr_col_perm, self->invr_row_perm, self->workspace);
+			       self->row_perm, self->invr_col_perm, self->invr_row_perm, (int *) *self->workspace);
   /* We should check if we have found more then enought singletons */
   needed_pivots -= self->nb_col_singletons + self->nb_row_singletons;
   ParSHUM_verbose_trace_stop_event(verbose);
@@ -1052,7 +1101,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
       distributions[i] = (nb_cols / nb_threads) * i;
     distributions[nb_threads] = nb_cols;
 
-#pragma omp parallel num_threads(nb_threads) shared(nb_cols, best_marko, distributions)
+#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols, best_marko, distributions)
     {
     int me = omp_get_thread_num();
     int *my_col_perms = (int *) self->workspace[me];
@@ -1109,10 +1158,11 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
       distributions[i] = (step->nb_candidates / nb_threads) * i;
     distributions[nb_threads] = step->nb_candidates;
     
-#pragma omp parallel num_threads(nb_threads) shared(nb_cols)
+#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols)
     {
     ParSHUM_verbose_trace_start_event(verbose, ParSHUM_FIRST_PASS);
     int me = omp_get_thread_num();
+    int non_BB_cols = self->S->n - self->BB_cols;
     int my_size = distributions[me + 1] - distributions[me];
     int *tmp = (int *) self->workspace[0];
     int *my_col_perms = &tmp[distributions[me]];
@@ -1120,7 +1170,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
     int *global_col_perms = &self->col_perm[self->done_pivots + self->nb_col_singletons + self->nb_row_singletons];
     int *global_row_perms = &self->row_perm[self->done_pivots + self->nb_col_singletons + self->nb_row_singletons];
 
-    ParSHUM_Luby_first_pass(self->Luby, self->S, my_col_perms, my_row_perms, my_size);
+    ParSHUM_Luby_first_pass(self->Luby, self->S, non_BB_cols, my_col_perms, my_row_perms, my_size);
     ParSHUM_verbose_trace_stop_event(verbose);
 
 #pragma omp barrier
@@ -1154,6 +1204,8 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
   }
   
   ParSHUM_solver_get_Luby_pivots(self, self->Luby, new_pivots);
+  /* ParSHUM_check_logical_sum(self, new_pivots); */
+
   ParSHUM_verbose_stop_timing(&step->timing_merging_pivots);
   if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) {
     char mess[2048];
@@ -1308,6 +1360,7 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
   int *previous_pivots   = self->previous_pivots;
   int nb_previous_pivots = exe_parms->nb_previous_pivots;
   int nb_pivot_blocks = 0;
+  needed_pivots -= self->BB_cols + 1;
 
   if (self->debug &  ParSHUM_CHECK_SCHUR_DOUBLES)
     ParSHUM_schur_check_doubles(self->S);  
@@ -1364,7 +1417,7 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
   } else {
     ParSHUM_dense_matrix_factorize(self->S_dense, self->BB_cols, exe_parms->nb_threads);
 
-    self->dense_pivots = needed_pivots - self->done_pivots - self->BB_cols;
+    self->dense_pivots = needed_pivots + self->BB_cols + 1 - self->done_pivots;
     ParSHUM_verbose_update_dense_pivots(verbose, self->dense_pivots);
 
     verbose->nnz_final   = self->L->nnz + self->U->nnz + self->D->n + 

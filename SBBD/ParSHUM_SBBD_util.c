@@ -16,7 +16,7 @@ void
 ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block row_blocks)
 {
   int n = A->n, nb_blocks = row_blocks->nb_blocks, block, i, j, k;
-  int *tmp; 
+  int *tmp, *BB_index; 
   
   col_blocks->nb_blocks = nb_blocks;
   col_blocks->nb_BB_cols = n;
@@ -25,8 +25,10 @@ ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block r
   col_blocks->invr_perms = malloc((size_t) n * sizeof(*col_blocks->invr_perms));
   col_blocks->sizes      = calloc((size_t) (nb_blocks + 2 ), sizeof(*col_blocks->sizes));
   col_blocks->nnz        = calloc((size_t) nb_blocks, sizeof(*col_blocks->nnz));
+  col_blocks->BB_index   = calloc((size_t) nb_blocks, sizeof(*col_blocks->BB_index));
   col_blocks->BB_size    = calloc((size_t) nb_blocks, sizeof(*col_blocks->BB_size));
   tmp = malloc((size_t) col_blocks->n * sizeof(*tmp));
+  BB_index = malloc((size_t) col_blocks->n * sizeof(*BB_index));
 
   int_array_memset(col_blocks->invr_perms, ParSHUM_UNUSED_PIVOT, n);
   int_array_memset(tmp, ParSHUM_UNUSED_PIVOT, n);
@@ -53,7 +55,7 @@ ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block r
 		  if (tmp[col] > block || tmp[col] < 0) 
 		    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"something is wrong");
 		  if ( tmp[col] < block) { 
-		    col_blocks->BB_size[block]++;
+		    BB_index[col_blocks->BB_size[block]++] = col;
 		    tmp[col] = block;
 		  }
 		}
@@ -74,7 +76,7 @@ ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block r
 	      if (BB_col) {
 		col_blocks->perms[--col_blocks->nb_BB_cols] = col;
 		col_blocks->invr_perms[col] = col_blocks->nb_BB_cols;
-		col_blocks->BB_size[block]++;
+		BB_index[col_blocks->BB_size[block]++] = col;
 		tmp[col] = block;
 	      } else {
 		col_blocks->perms[col_block_size] = col;
@@ -83,10 +85,29 @@ ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block r
 	    }
 	}
       col_blocks->sizes[block+1] = col_block_size;
+      col_blocks->BB_index[block] = malloc((size_t) col_blocks->BB_size[block] * sizeof(BB_index));
+      memcpy((void *) col_blocks->BB_index[block], BB_index, (size_t) col_blocks->BB_size[block] * sizeof(BB_index));
     }
-  col_blocks->nb_BB_cols = n - col_blocks->nb_BB_cols ;
+  col_blocks->nb_BB_cols = n - col_blocks->nb_BB_cols;
   col_blocks->sizes[nb_blocks+1] = n;
-  
+
+  /* make BB_index local to BB */
+  for(block = 0; block < nb_blocks; block++) {   
+    int base = n - col_blocks->nb_BB_cols;
+    int *_BB_index = col_blocks->BB_index[block];
+    for (i = 0; i < col_blocks->BB_size[block]; i++)
+      _BB_index[i] = col_blocks->invr_perms[_BB_index[i]] - base;
+  }
+
+  for(block = 0; block < nb_blocks; block++)  {
+    int *_BB_index = col_blocks->BB_index[block];
+    for (i = 0; i < col_blocks->BB_size[block]; i++) {
+      int col = _BB_index[i];
+      if (col >= col_blocks->nb_BB_cols || col < 0) 
+	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"BB_index is not correct");
+    }
+  }
+
   if (col_blocks->sizes[nb_blocks] + col_blocks->nb_BB_cols != n)
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"col_block sizes are not correct");
 
@@ -99,6 +120,7 @@ ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block r
       ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"tmp is wrong before");
 
   free(tmp);
+  free(BB_index);
 }
 
 
@@ -354,3 +376,55 @@ ParSHUM_check_blocks(ParSHUM_schur_matrix A, row_block row_blocks, col_block col
       }
     }
 }
+
+void
+ParSHUM_collect_BB_block(double *local_schur, double *global_schur, col_block col_blocks,
+			 int m, int BB_cols, ParSHUM_MPI_info MPI_info) 
+{
+  double *buff = NULL; 
+  int i; 
+  int rank = MPI_info->rank;
+  MPI_Comm comm = MPI_info->world;
+
+  if (rank) {
+    buff         = malloc((size_t) BB_cols * BB_cols * sizeof(*buff));
+    
+    for( i = 0; i < BB_cols; i++) 
+      memcpy((void *) &buff[i*BB_cols], (void *) &local_schur[i*m + m - BB_cols], (size_t) BB_cols * sizeof(*buff));
+    
+    MPI_Send(buff, BB_cols*BB_cols, MPI_DOUBLE, 0, 0, comm);
+  } else { 
+    int BB_global   = col_blocks->nb_BB_cols;
+    int nb_blocks   = col_blocks->nb_blocks;
+    int *BB_indices = *col_blocks->BB_index;
+    MPI_Status status;
+    int max_BB = 0 ;
+    int block, current_row = 0;
+    
+    for (block = 1; block < nb_blocks; block++) {
+      int local_size = col_blocks->BB_size[block];
+      max_BB = max_BB > local_size ? max_BB : local_size;
+    }
+    buff = malloc((size_t) max_BB * sizeof(*buff));
+
+    /* first habdle my block */
+    for ( i = 0; i < BB_cols; i++) 
+      memcpy((void *) &global_schur[BB_indices[i]*BB_global], (void *) &local_schur[i*BB_cols], 
+	     (size_t) BB_cols * sizeof(*global_schur));
+    current_row += BB_cols;
+
+    for (block = 1; block < nb_blocks; block++) {
+      int block_BB = col_blocks->BB_size[i]; 
+      BB_indices = col_blocks->BB_index[block];
+      MPI_Recv(buff, block_BB * block_BB, MPI_DOUBLE, block, 0, comm, &status);
+
+      for ( i = 0; i < block_BB; i++) 
+      memcpy((void *) &global_schur[BB_indices[i]*BB_global + current_row], (void *) &buff[i*BB_cols], 
+	     (size_t) block_BB * sizeof(*global_schur));
+      current_row += block_BB;
+    }
+  }    
+
+  free(buff);
+}
+

@@ -4,7 +4,7 @@
 #include <signal.h>
 #include <ParSHUM_enum.h>
 
-#define GDB_BREAK   raise(SIGINT)
+#define GDB_BREAK   /* raise(SIGINT) */
 
 void  ParSHUM_fatal_error(const char *func, char *filename, const int line, const char *msg);
 void  ParSHUM_warning    (const char *func, char *filename, const int line, const char *msg);
