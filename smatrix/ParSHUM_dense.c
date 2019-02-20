@@ -136,16 +136,33 @@ ParSHUM_dense_matrix
 ParSHUM_dense_matrix_create(int n, int m)
 {
   ParSHUM_dense_matrix self = calloc((size_t) 1,  sizeof(*self));
-
+  int i;
   self->val = calloc((size_t) n * m, sizeof(*self->val));
-  self->pivots        = malloc((size_t) m * sizeof(*self->pivots));
-  int_array_memset(self->pivots, ParSHUM_UNUSED_PIVOT, m); 
+  self->pivots        = calloc((size_t) m, sizeof(*self->pivots));
+  for (i = 0; i < m; i++) 
+    self->pivots[i] = i+1;
+
   self->n = n;
   self->m = m;
 
   return self;
 }
 
+/* void  */
+/* tmp(double *vect, int m, int n, int lda, int *piv) */
+/* { */
+/*   int i, j; */
+
+/*   for(i = 0; i < n; i++) { */
+/*     double *tmp_vect = &vect[i*lda]; */
+/*     for (j = 0; j < m; j++) { */
+/*       double tmp = tmp_vect[j]; */
+/*       int perm   = piv[j] - 1; */
+/*       tmp_vect[j] = tmp_vect[perm]; */
+/*       tmp_vect[perm] = tmp; */
+/*     } */
+/*   }       */
+/* } */
 
 void
 ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int BB_cols, int nb_threads)
@@ -153,6 +170,7 @@ ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int BB_cols, int nb_th
   int ret = 0;
   char mess[2048];
   omp_set_num_threads(nb_threads);
+  /* printf("m = %d n = %d BB_cols = %d\n", self->m, self->n, BB_cols); */
   if (self->n && self->m) { 
     ret = plasma_dgetrf(self->m, self->n - BB_cols, self->val, self->m, self->pivots);  
   }
@@ -160,16 +178,25 @@ ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int BB_cols, int nb_th
     snprintf(mess, 2048,"The factorization of the dense schur is completed, but the entry U(%d,%d) has a zero on it.\n", ret, ret);
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
   }
+  /* print_int_array(self->pivots, self->m, "pivots"); */
+  /* ParSHUM_dense_matrix_print(self, "after facto"); */
+
   if (BB_cols) {
     plasma_dlaswp(PlasmaRowwise, self->m, BB_cols,  &self->val[(self->n-BB_cols) * self->m], self->m,
-		  self->pivots, 1); 
+    		  self->pivots, 1);
+    /* ParSHUM_dense_matrix_print(self, "after swao"); */
+    /* tmp( &self->val[(self->n-BB_cols) * self->m], self->m, BB_cols,  self->m, self->pivots); */
+    
+    
+    /* printf("local_m = %d nrhs = %d n = %d m = %d\n", self->m - self->n + BB_cols, BB_cols,self->n, self->m);  */
+    plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaUnit, self->m - self->n + BB_cols, BB_cols, 1.0,
+    		 self->val, self->m, &self->val[(self->n - BB_cols) * self->m], self->m);
+    /* ParSHUM_dense_matrix_print(self, "after trsm"); */
 
-    plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaNonUnit, self->n - BB_cols, BB_cols, 1.0,
-		 self->val, self->m, &self->val[(self->n - BB_cols) * self->m], self->m);
-
-    plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, BB_cols, BB_cols, self->n - BB_cols, 1.0, 
-		 &self->val[self->m - BB_cols], self->m, &self->val[(self->n - BB_cols) * self->m], self->m, 
- 		 -1,  &self->val[(self->n - BB_cols) * self->m + self->m - BB_cols], self->m);
+    plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, self->m - self->n + BB_cols, BB_cols, self->n - BB_cols, 1.0, 
+		 &self->val[self->m - self->n + BB_cols], self->m, &self->val[(self->n - BB_cols) * self->m], self->m, 
+ 		 -1,  &self->val[(self->n - BB_cols) * self->m + self->m - self->n + BB_cols], self->m);
+    /* ParSHUM_dense_matrix_print(self, "after gemm"); */
   }
 }
 
@@ -239,7 +266,7 @@ ParSHUM_dense_matrix_print(ParSHUM_dense_matrix self, char *mess)
   for(row = 0; row < m; row++)
     {
       for(col = 0; col < n; col++) 
-	printf("[%d,%d]:(%3f)\t", row, col, self->val[col*n + row]);
+	printf("[%d,%d]:(%3f)\t", col, row, self->val[col*m + row]);
       printf("\n");
     }
   printf("\n");

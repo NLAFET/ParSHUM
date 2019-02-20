@@ -27,6 +27,7 @@ ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block r
   col_blocks->nnz        = calloc((size_t) nb_blocks, sizeof(*col_blocks->nnz));
   col_blocks->BB_index   = calloc((size_t) nb_blocks, sizeof(*col_blocks->BB_index));
   col_blocks->BB_size    = calloc((size_t) nb_blocks, sizeof(*col_blocks->BB_size));
+  col_blocks->local_schur_m = calloc((size_t) nb_blocks + 1, sizeof(*col_blocks->local_schur_m));
   tmp = malloc((size_t) col_blocks->n * sizeof(*tmp));
   BB_index = malloc((size_t) col_blocks->n * sizeof(*BB_index));
 
@@ -87,6 +88,9 @@ ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block r
       col_blocks->sizes[block+1] = col_block_size;
       col_blocks->BB_index[block] = malloc((size_t) col_blocks->BB_size[block] * sizeof(BB_index));
       memcpy((void *) col_blocks->BB_index[block], BB_index, (size_t) col_blocks->BB_size[block] * sizeof(BB_index));
+      col_blocks->local_schur_m[block+1] = col_blocks->local_schur_m[block] + 
+	(row_blocks->sizes[block+1] - row_blocks->sizes[block]) - 
+	(col_blocks->sizes[block+1] - col_blocks->sizes[block]);
     }
   col_blocks->nb_BB_cols = n - col_blocks->nb_BB_cols;
   col_blocks->sizes[nb_blocks+1] = n;
@@ -107,6 +111,9 @@ ParSHUM_get_col_blocks(ParSHUM_schur_matrix A, col_block col_blocks, row_block r
 	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"BB_index is not correct");
     }
   }
+
+  if ( col_blocks->local_schur_m[nb_blocks] != col_blocks->nb_BB_cols) 
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"local_schur_m is not correct");
 
   if (col_blocks->sizes[nb_blocks] + col_blocks->nb_BB_cols != n)
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"col_block sizes are not correct");
@@ -379,51 +386,63 @@ ParSHUM_check_blocks(ParSHUM_schur_matrix A, row_block row_blocks, col_block col
 
 void
 ParSHUM_collect_BB_block(double *local_schur, double *global_schur, col_block col_blocks,
-			 int m, int BB_cols, ParSHUM_MPI_info MPI_info) 
+			 row_block row_blocks,int m, int n, int BB_cols, ParSHUM_MPI_info MPI_info) 
 {
-  double *buff = NULL; 
-  int i; 
+  double *buff = NULL;
+  int i;
   int rank = MPI_info->rank;
   MPI_Comm comm = MPI_info->world;
 
   if (rank) {
-    buff         = malloc((size_t) BB_cols * BB_cols * sizeof(*buff));
+    int schur_m = m - n + BB_cols;
+    buff         = malloc((size_t) BB_cols * schur_m * sizeof(*buff));
+
+    for( i = 0; i < BB_cols; i++)
+      memcpy((void *) &buff[i*schur_m], (void *) &local_schur[i*m + m - schur_m], (size_t) schur_m * sizeof(*buff));
     
-    for( i = 0; i < BB_cols; i++) 
-      memcpy((void *) &buff[i*BB_cols], (void *) &local_schur[i*m + m - BB_cols], (size_t) BB_cols * sizeof(*buff));
-    
-    MPI_Send(buff, BB_cols*BB_cols, MPI_DOUBLE, 0, 0, comm);
-  } else { 
+    /* printf("%d sending %d elements\n", rank, BB_cols*schur_m); */
+    MPI_Send(buff, BB_cols*schur_m, MPI_DOUBLE, 0, 0, comm);
+  } else {
     int BB_global   = col_blocks->nb_BB_cols;
     int nb_blocks   = col_blocks->nb_blocks;
     int *BB_indices = *col_blocks->BB_index;
-    MPI_Status status;
-    int max_BB = 0 ;
+    int *local_schur_m = col_blocks->local_schur_m;
+    int max_nnz = 0, local_n, local_m, local_nnz;
     int block, current_row = 0;
+    MPI_Status status;
     
     for (block = 1; block < nb_blocks; block++) {
-      int local_size = col_blocks->BB_size[block];
-      max_BB = max_BB > local_size ? max_BB : local_size;
+      local_n = col_blocks->BB_size[block];
+      local_m = local_schur_m[block+1] - local_schur_m[block];
+      local_nnz = local_n * local_m;
+      
+      max_nnz = max_nnz > local_nnz ? max_nnz : local_nnz;
     }
-    buff = malloc((size_t) max_BB * sizeof(*buff));
+    buff = malloc((size_t) max_nnz * sizeof(*buff));
 
+    local_m = m - n + BB_cols;
     /* first habdle my block */
-    for ( i = 0; i < BB_cols; i++) 
-      memcpy((void *) &global_schur[BB_indices[i]*BB_global], (void *) &local_schur[i*BB_cols], 
-	     (size_t) BB_cols * sizeof(*global_schur));
-    current_row += BB_cols;
+    for ( i = 0; i < BB_cols; i++)
+      memcpy((void *) &global_schur[BB_indices[i]*BB_global], (void *) &local_schur[i*local_m],
+  	     (size_t) local_m * sizeof(*global_schur));
+    current_row += local_m;
 
     for (block = 1; block < nb_blocks; block++) {
-      int block_BB = col_blocks->BB_size[i]; 
+      local_n = col_blocks->BB_size[block];
+      local_m = local_schur_m[block+1] - local_schur_m[block]; 
       BB_indices = col_blocks->BB_index[block];
-      MPI_Recv(buff, block_BB * block_BB, MPI_DOUBLE, block, 0, comm, &status);
 
-      for ( i = 0; i < block_BB; i++) 
-      memcpy((void *) &global_schur[BB_indices[i]*BB_global + current_row], (void *) &buff[i*BB_cols], 
-	     (size_t) block_BB * sizeof(*global_schur));
-      current_row += block_BB;
+      /* printf("recieving fro %d  %d elements\n", block, local_n * local_m); */
+      MPI_Recv(buff, local_n * local_m, MPI_DOUBLE, block, 0, comm, &status);
+
+      for ( i = 0; i < local_n; i++)
+	memcpy((void *) &global_schur[BB_indices[i]*BB_global + current_row], (void *) &buff[i*local_m],
+	       (size_t) local_m * sizeof(*global_schur));
+      current_row += local_m;
     }
-  }    
+    if (current_row != BB_global) 
+      printf("KO with BB_global = %d and current_row %d\n", BB_global, current_row);
+  }
 
   free(buff);
 }

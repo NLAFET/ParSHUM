@@ -896,7 +896,6 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
 
   int *cols = self->cols;
   int *rows = self->rows;
-  int step  = self->step;
 
   self->previous_step_pivots = new_pivots;
 
@@ -920,7 +919,7 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
     distribution_m[i] = (nb_rows / nb_threads) * i;
   distribution_m[nb_threads] = nb_rows;
 
-#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, step, verbose) firstprivate(base)
+#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, verbose) firstprivate(base)
   {
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GETTING_PIVOTS);
   int i, j;
@@ -1345,7 +1344,8 @@ ParSHUM_continue_pivot_search(ParSHUM_schur_matrix S,
   }
   
   if ( !retval && max_dense_schur < (nb_needed_pivots - nb_done_pivots) ) {
-    verbose->reason |= ParSHUM_reason_dense_too_large;
+    verbose->reason |= ParSHUM_reason_dense_too_large; 
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "dense schur too large");
   }
   return retval;
 }
@@ -1404,8 +1404,14 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
     verbose->schur_density = 
       (double) self->S->nnz / ((n - self->done_pivots) * (m - self->done_pivots));
 
-    if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) 
-      ParSHUM_dense_matrix_print(self->S_dense, "dense schur after conversion");
+    /* if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL))  { */
+    /*   printf("done pivots = %d \n", self->done_pivots); */
+    /*   ParSHUM_dense_matrix_print(self->S_dense, "dense schur after conversion"); */
+    /*   print_int_array(self->col_perm, self->A->n, "col_perms"); */
+    /*   print_int_array(self->row_perm, self->A->m, "row_perms"); */
+    /*   print_int_array(self->invr_col_perm, self->A->n, "invr_col_perms"); */
+    /*   print_int_array(self->invr_row_perm, self->A->m, "invr_row_perms"); */
+    /* } */
   }
   ParSHUM_verbose_trace_stop_event(verbose);
   ParSHUM_verbose_stop_timing(&verbose->timing_convert_schur);
@@ -1416,7 +1422,7 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
     ParSHUM_dense_2D_facto(self->A_debug);
   } else {
     ParSHUM_dense_matrix_factorize(self->S_dense, self->BB_cols, exe_parms->nb_threads);
-
+    
     self->dense_pivots = needed_pivots + self->BB_cols + 1 - self->done_pivots;
     ParSHUM_verbose_update_dense_pivots(verbose, self->dense_pivots);
 
@@ -1477,7 +1483,7 @@ ParSHUM_solver_solve(ParSHUM_solver self, ParSHUM_vector RHS)
 	 double *dense_RHS = (double *) *self->workspace;
 
 	 ParSHUM_dense_matrix_get_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals, ParSHUM_perm_both);
-
+	 
 	 plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaUnit,  self->S_dense->n, 1, 1.0, self->S_dense->val,self->S_dense->m, dense_RHS, self->S_dense->m);
 
 	 plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, diff_size, 1, self->S_dense->n, -1.0, &self->S_dense->val[self->S_dense->m - diff_size], self->S_dense->m,  dense_RHS, self->S->m, 1.0,  &dense_RHS[self->S_dense->n], self->S->m);

@@ -45,8 +45,8 @@ ParSHUM_SBBD_create(MPI_Comm world)
 void
 ParSHUM_SBBD_parse_args(ParSHUM_SBBD self, int argc, char **argv)
 {
-  /* ParSHUM_solver_parse_args(self->solver, argc, argv, 0); */
-  self->matrix_file = argv[1];
+  ParSHUM_solver_parse_args(self->solver, argc, argv, 1);
+  self->matrix_file = self->solver->exe_parms->matrix_file;
 }
 
 void
@@ -122,7 +122,7 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
   /* copy the vector SOL in B */
   ParSHUM_vector_copy(SOL, B);
   
-  self->solver->debug |= ParSHUM_CHECK_PIVOTS;
+  /* self->solver->debug |= ParSHUM_CHECK_PIVOTS; */
   /* self->solver->debug |= ParSHUM_CHECK_SCHUR_MEMORY; */
   /* self->solver->debug |= ParSHUM_CHECK_SCHUR_SYMETRY; */
   /* self->solver->debug |= ParSHUM_CHECK_COUNTERS; */
@@ -132,14 +132,31 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
   ParSHUM_solver_factorize(self->solver);
 
   local_S = self->solver->S_dense;
-  /* if (rank ) { */
-  /*   ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m], NULL, NULL,  */
-  /* 			     local_S->m, nb_BB_cols, self->MPI_info); */
-  /* } else {  */
-  /*   ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m], self->Schur->val, */
-  /* 			     self->col_blocks,  local_S->m, nb_BB_cols, self->MPI_info); */
-  /* } */
-  
+  if (rank ) {
+    ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m], NULL, NULL, NULL,
+  			     local_S->m, local_S->n, nb_BB_cols, self->MPI_info);
+  } else {
+    ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m],
+			     self->Schur->val, self->col_blocks, self->row_blocks,
+			     local_S->m, local_S->n, nb_BB_cols, self->MPI_info);
+    /* ParSHUM_dense_matrix_print(self->Schur, "dense global schur"); */
+
+    int i, j, m = self->Schur->m, n = self->Schur->n; 
+    printf("n = %d and m = %d\n", n, m);
+    for(i = 0; i < n; i++) {
+      double *tmp = &self->Schur->val[i*m];
+      int found = 0;
+      for(j = 0; j < m; j++) 
+	if (tmp[j] != 0)
+	  found++;
+      if (!found) 
+	printf("KO!\n");
+    }
+				     
+    ParSHUM_dense_matrix_factorize(self->Schur, 0, self->solver->exe_parms->nb_threads);
+  }
+
+
 
   /* Perform the solve operation */
   /* ParSHUM_solver_solve(self->solver, B); */
@@ -148,13 +165,13 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
   /* compute the norms */
   /* ParSHUM_solver_compute_norms(self->solver, B, SOL); */
   
-  ParSHUM_solver_finalize(self->solver);
+  /* ParSHUM_solver_finalize(self->solver); */
 }
 
 void
 ParSHUM_SBBD_finalize(ParSHUM_SBBD self)
 {
-  ParSHUM_solver_finalize(self->solver);
+  /* ParSHUM_solver_finalize(self->solver); */
 }
 
 void

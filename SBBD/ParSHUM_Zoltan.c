@@ -265,15 +265,6 @@ ParSHUM_Zoltan_partition(Zoltan_Hypergraph self, ParSHUM_schur_matrix A)
 
   if (ret != ZOLTAN_OK)
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"Zoltan failed the paritioning");
-  
-  /* self->row_blocks = ParSHUM_Zoltan_get_row_blocks(self); */
-  /* if (!rank) { */
-  /*   self->col_blocks = ParSHUM_Zoltan_get_col_blocks(self, A, self->row_blocks); */
-  /*   ParSHUM_Zoltan_check_blocks(A, self->row_blocks, self->col_blocks); */
-  /*   ParSHUM_Zoltan_print_stats(self, A, self->row_blocks, self->col_blocks); */
-  /* } */
-
-  /* ParSUM_Zoltan_distribute(self, A, self->row_blocks, self->col_blocks); */
 }
 
 ParSHUM_matrix
@@ -289,7 +280,6 @@ ParSUM_Zoltan_distribute(ParSHUM_schur_matrix matrix, row_block row_blocks,
     int block, nb_blocks = col_blocks->nb_blocks;
 
     A = ParSHUM_get_block(matrix, row_blocks, col_blocks, 0);
-    /* A->n -=  *col_blocks->BB_size; */
     A->nnz = A->col_ptr[A->n];
     solver->BB_cols = *col_blocks->BB_size;
     
@@ -328,10 +318,10 @@ ParSUM_Zoltan_distribute(ParSHUM_schur_matrix matrix, row_block row_blocks,
     MPI_Recv(A->row,     A->nnz,   MPI_INT,    0, 0, comm, &status);
     MPI_Recv(A->val,     A->nnz,   MPI_DOUBLE, 0, 0, comm, &status);
     MPI_Recv(A->col_ptr, A->n + 1, MPI_LONG,   0, 0, comm, &status);
-    /* A->n -= nb_BB; */
     A->nnz = A->col_ptr[A->n];
     solver->BB_cols = nb_BB;
   }
+
   return A;
 }
 
