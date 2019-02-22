@@ -24,6 +24,55 @@ ParSHUM_U_matrix_create(ParSHUM_matrix A, double extra_space)
 }
 
 void 
+ParSHUM_U_BB_matrix_solve(ParSHUM_U_matrix U, ParSHUM_matrix D, ParSHUM_vector rhs, double *BB_rhs,
+			  int *col_perms, int *row_perms, int nb_dense_pivots, int BB_cols)
+{
+  int col, n = U->n, i, j;
+  double *rhs_val = rhs->vect;
+  
+  for( col = n-1, j = BB_cols - 1; col >= n - BB_cols; col--, j--)
+    {
+      int permuted_col = col_perms[col];
+      U_col *u_col = &U->col[permuted_col];
+      int nb_elem = u_col->nb_elem;
+      double *u_val = u_col->val;
+      int *u_rows = u_col->row;
+      double tmp = BB_rhs[j];
+      for( i = 0; i < nb_elem; i++)
+  	rhs_val[u_rows[i]] -= u_val[i] * tmp;
+    } 
+
+
+  for( ; col >= n - nb_dense_pivots; col--)
+    {
+      int permuted_col = col_perms[col];
+      U_col *u_col = &U->col[permuted_col];
+      int nb_elem = u_col->nb_elem;
+      double *u_val = u_col->val;
+      int *u_rows = u_col->row;
+      double tmp = rhs_val[row_perms[col]];
+      for( i = 0; i < nb_elem; i++)
+  	rhs_val[u_rows[i]] -= u_val[i] * tmp;
+    } 
+  
+  /* printf("entering with %d\n", col); */
+  for( ; col >= 0; col--)
+    {
+      int permuted_col = col_perms[col];
+      U_col *u_col = &U->col[permuted_col];
+      int nb_elem = u_col->nb_elem;
+      double *u_val = u_col->val;
+      int *u_rows = u_col->row;
+
+      rhs_val[row_perms[col]] /= D->val[col];
+      double tmp = rhs_val[row_perms[col]];
+      for( i = 0; i < nb_elem; i++)
+  	rhs_val[u_rows[i]] -= u_val[i] * tmp;
+    }
+}
+
+
+void 
 ParSHUM_U_matrix_solve(ParSHUM_U_matrix U, ParSHUM_matrix D, ParSHUM_vector rhs,
 		       int *col_perms, int *row_perms, int nb_dense_pivots)
 {

@@ -48,6 +48,16 @@ print_int_array(int *array, int n, char *mess)
   printf("\n");
 }
 
+void 
+print_double_array(double *array, int n, char *mess)
+{
+  int i;
+  printf("%s\n", mess);
+  for(i = 0; i < n; i++)
+    printf("%f   ", array[i]);
+  printf("\n");
+}
+
 void
 update_counter(int *counter, int *index, int n, int base)
 {

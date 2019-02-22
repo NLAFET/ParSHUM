@@ -141,6 +141,7 @@ ParSHUM_get_block(ParSHUM_schur_matrix matrix, row_block row_blocks,
   int global_BB = col_blocks->nb_BB_cols, local_BB = col_blocks->BB_size[block];
   int *col_perms = col_blocks->perms;
   int *invr_row_perms = row_blocks->invr_perms;
+  int *BB_indices = col_blocks->BB_index[block];
   int start_block = row_blocks->sizes[block];
   int end_block   = row_blocks->sizes[block+1];
   double *vals;
@@ -178,38 +179,56 @@ ParSHUM_get_block(ParSHUM_schur_matrix matrix, row_block row_blocks,
     col_ptr[++l] = (long) end_;
   }
 
-  start = col_blocks->n - global_BB;
-  end   = col_blocks->n;
-  for( j = start; j < end; j++)  {
-    CSC_struct *CSC  = &matrix->CSC[col_perms[j]];
+  for(j = 0; j < local_BB; j++){
+    CSC_struct *CSC  = &matrix->CSC[col_perms[BB_indices[j] + col_blocks->sizes[col_blocks->nb_blocks]]];
     int *CSC_rows    = CSC->row;
     double *CSC_vals = CSC->val;
     int nb_elem      = CSC->nb_elem;
-    int BB_col       = 0;
+    long col_index = col_ptr[l];
 
-    for( k = 0; k < nb_elem; k++) {
+    for(k = 0 ; k < nb_elem; k++) {
       int local_row = invr_row_perms[CSC_rows[k]];
       if (local_row >= start_block && local_row < end_block) {
-	BB_col = 1;
-	break;
+	if (col_index + 1 > (long) nnz) 
+	  ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"block has more entries then expected");
+	rows[col_index  ] = local_row - start_block;
+	vals[col_index++] = CSC_vals[k];
       }
     }
-    if (BB_col) {
-      long col_index = col_ptr[l];
-      for( ; k < nb_elem; k++) {
-	int local_row = invr_row_perms[CSC_rows[k]];
-	if (local_row >= start_block && local_row < end_block) {
-	  if (col_index + 1 > (long) nnz) 
-	    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"block has more entries then expected");
-	  rows[col_index  ] = local_row - start_block;
-	  vals[col_index++] = CSC_vals[k];
-	}
-      }
-      if (++l > local_BB + n)  
-	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"block has more columns then expected");
-      col_ptr[l] = col_index;
-    }
+
+    col_ptr[++l] = col_index;
   }
+  
+  /* for( j = start; j < end; j++)  { */
+  /*   CSC_struct *CSC  = &matrix->CSC[col_perms[j]]; */
+  /*   int *CSC_rows    = CSC->row; */
+  /*   double *CSC_vals = CSC->val; */
+  /*   int nb_elem      = CSC->nb_elem; */
+  /*   int BB_col       = 0; */
+
+  /*   for( k = 0; k < nb_elem; k++) { */
+  /*     int local_row = invr_row_perms[CSC_rows[k]]; */
+  /*     if (local_row >= start_block && local_row < end_block) { */
+  /* 	BB_col = 1; */
+  /* 	break; */
+  /*     } */
+  /*   } */
+  /*   if (BB_col) { */
+  /*     long col_index = col_ptr[l]; */
+  /*     for( ; k < nb_elem; k++) { */
+  /* 	int local_row = invr_row_perms[CSC_rows[k]]; */
+  /* 	if (local_row >= start_block && local_row < end_block) { */
+  /* 	  if (col_index + 1 > (long) nnz) */
+  /* 	    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"block has more entries then expected"); */
+  /* 	  rows[col_index  ] = local_row - start_block; */
+  /* 	  vals[col_index++] = CSC_vals[k]; */
+  /* 	} */
+  /*     } */
+  /*     if (++l > local_BB + n) */
+  /* 	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"block has more columns then expected"); */
+  /*     col_ptr[l] = col_index; */
+  /*   } */
+  /* } */
 
   if (l != n + local_BB) 
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"did not found all the columns in the block matrix");
@@ -394,13 +413,20 @@ ParSHUM_collect_BB_block(double *local_schur, double *global_schur, col_block co
   MPI_Comm comm = MPI_info->world;
 
   if (rank) {
-    int schur_m = m - n + BB_cols;
+    int schur_m = m - n + BB_cols, j;
     buff         = malloc((size_t) BB_cols * schur_m * sizeof(*buff));
 
     for( i = 0; i < BB_cols; i++)
       memcpy((void *) &buff[i*schur_m], (void *) &local_schur[i*m + m - schur_m], (size_t) schur_m * sizeof(*buff));
     
     /* printf("%d sending %d elements\n", rank, BB_cols*schur_m); */
+    /* for ( i = 0; i < BB_cols; i++) { */
+    /*   for (j = 0; j < schur_m; j++) {  */
+    /* 	printf("%f\t", buff[i*schur_m + j]); */
+    /*   } */
+    /*   printf("\n"); */
+    /* } */
+
     MPI_Send(buff, BB_cols*schur_m, MPI_DOUBLE, 0, 0, comm);
   } else {
     int BB_global   = col_blocks->nb_BB_cols;
@@ -419,12 +445,11 @@ ParSHUM_collect_BB_block(double *local_schur, double *global_schur, col_block co
       max_nnz = max_nnz > local_nnz ? max_nnz : local_nnz;
     }
     buff = malloc((size_t) max_nnz * sizeof(*buff));
-
+    
     local_m = m - n + BB_cols;
     /* first habdle my block */
     for ( i = 0; i < BB_cols; i++)
-      memcpy((void *) &global_schur[BB_indices[i]*BB_global], (void *) &local_schur[i*local_m],
-  	     (size_t) local_m * sizeof(*global_schur));
+      memcpy((void *) &global_schur[BB_indices[i]*BB_global], (void *) &local_schur[i*m + m - local_m], (size_t) local_m * sizeof(*global_schur));
     current_row += local_m;
 
     for (block = 1; block < nb_blocks; block++) {

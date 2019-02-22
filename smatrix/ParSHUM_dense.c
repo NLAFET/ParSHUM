@@ -184,19 +184,19 @@ ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int BB_cols, int nb_th
   if (BB_cols) {
     plasma_dlaswp(PlasmaRowwise, self->m, BB_cols,  &self->val[(self->n-BB_cols) * self->m], self->m,
     		  self->pivots, 1);
-    /* ParSHUM_dense_matrix_print(self, "after swao"); */
+    /* ParSHUM_dense_matrix_print(self, "after swap"); */
     /* tmp( &self->val[(self->n-BB_cols) * self->m], self->m, BB_cols,  self->m, self->pivots); */
     
     
-    /* printf("local_m = %d nrhs = %d n = %d m = %d\n", self->m - self->n + BB_cols, BB_cols,self->n, self->m);  */
-    plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaUnit, self->m - self->n + BB_cols, BB_cols, 1.0,
+    /* printf("local_m = %d nrhs = %d n = %d m = %d\n", self->m - self->n + BB_cols, BB_cols,self->n, self->m); */
+    plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaUnit, self->n - BB_cols, BB_cols, 1.0,
     		 self->val, self->m, &self->val[(self->n - BB_cols) * self->m], self->m);
     /* ParSHUM_dense_matrix_print(self, "after trsm"); */
 
-    plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, self->m - self->n + BB_cols, BB_cols, self->n - BB_cols, 1.0, 
-		 &self->val[self->m - self->n + BB_cols], self->m, &self->val[(self->n - BB_cols) * self->m], self->m, 
- 		 -1,  &self->val[(self->n - BB_cols) * self->m + self->m - self->n + BB_cols], self->m);
-    /* ParSHUM_dense_matrix_print(self, "after gemm"); */
+    plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, self->m - self->n + BB_cols, BB_cols, self->n - BB_cols, -1.0, 
+		 &self->val[self->n - BB_cols], self->m, &self->val[(self->n - BB_cols) * self->m], self->m, 
+ 		 1,  &self->val[(self->n - BB_cols) * self->m + self->n - BB_cols], self->m);
+    /* ParSHUM_dense_matrix_print(self, "gemm"); */
   }
 }
 
@@ -229,7 +229,7 @@ ParSHUM_dense_matrix_get_RHS(ParSHUM_dense_matrix self, double *dense_RHS,
       dense_RHS[i] = RHS[row_perms[i]];
   
   if (perms_type == ParSHUM_perm_both)  
-    for(i = 0; i < n; i++) { 
+    for(i = 0; i < m; i++) { 
       double tmp = dense_RHS[i];
       /*  plasma is in freaking fortran  */
       int perm   = plasma_perm[i] - 1;

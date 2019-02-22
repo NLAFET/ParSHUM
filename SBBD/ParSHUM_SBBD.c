@@ -6,16 +6,6 @@
 #include "ParSHUM_SBBD.h"
 
 
-struct _ParSHUM_SBBD {  
-  ParSHUM_MPI_info MPI_info;
-  Zoltan_Hypergraph hypergraph;
-  row_block row_blocks;
-  col_block col_blocks;
-  ParSHUM_solver solver;
-  ParSHUM_schur_matrix A;
-  char *matrix_file;
-  ParSHUM_dense_matrix Schur;
-};
 
 ParSHUM_SBBD
 ParSHUM_SBBD_create(MPI_Comm world)
@@ -53,24 +43,23 @@ void
 ParSUHM_SBBD_read_matrix(ParSHUM_SBBD self)
 {
   if (!self->MPI_info->rank) {
-    ParSHUM_matrix input_A;
     char *file_ext = strrchr(self->matrix_file, '.');
-    input_A = ParSHUM_matrix_create();
+    self->input_A = ParSHUM_matrix_create();
 
     if (!strcmp(file_ext, ".mtl"))
-      ParSHUM_read_mtl_file(input_A, self->matrix_file);
+      ParSHUM_read_mtl_file(self->input_A, self->matrix_file);
 #ifdef HAVE_SPRAL
     else if (!strcmp(file_ext, ".rb"))
-      ParSHUM_read_rutherford_boeing(input_A, self->matrix_file);
+      ParSHUM_read_rutherford_boeing(self->input_A, self->matrix_file);
 #endif
     else
       ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsupported matrix file");
 
     self->A = ParSHUM_schur_matrix_create();
 
-    ParSHUM_schur_matrix_allocate(self->A, input_A->n, input_A->m, input_A->nnz, 0, 0, 0, 0.0, 0.0);
-    ParSHUM_schur_matrix_copy(input_A, self->A, 0.0);
-    ParSHUM_matrix_destroy(input_A);
+    ParSHUM_schur_matrix_allocate(self->A, self->input_A->n, self->input_A->m, self->input_A->nnz, 0,0,0,0.0,0.0);
+    ParSHUM_schur_matrix_copy(self->input_A, self->A, 0.0);
+    /* ParSHUM_matrix_destroy(input_A); */
   }
 }
 
@@ -92,6 +81,8 @@ ParSHUM_SBBD_partition(ParSHUM_SBBD self)
     /* ParSHUM_print_blocks(self->row_blocks, self->col_blocks); */
   }
   self->solver->A = ParSUM_Zoltan_distribute(self->A, self->row_blocks, self->col_blocks, self->solver, self->MPI_info);
+  /* if (self->solver->A->m < self->solver->A->n )  */
+  /*   ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"not possible"); */
   /* for ( i = 0; i < self->MPI_info->MPI_size; i++)  */
   /*   if ( i == self->MPI_info->rank) { */
   /*     snprintf(mess, 2048, "matrix A on proc %d", self->MPI_info->rank); */
@@ -105,22 +96,19 @@ ParSHUM_SBBD_partition(ParSHUM_SBBD self)
 void 
 ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
 {
-  ParSHUM_vector X, B, SOL;
+  /* ParSHUM_vector X, B, SOL; */
   ParSHUM_dense_matrix local_S;
   int nb_BB_cols = self->solver->BB_cols;
   int rank = self->MPI_info->rank;
 
-  X    = ParSHUM_vector_create(self->solver->A->n);
-  SOL  = ParSHUM_vector_create(self->solver->A->m);  
-  B    = ParSHUM_vector_create(self->solver->A->m);  
   
-  ParSHUM_vector_read_file(X, self->solver->exe_parms->RHS_file); 
+  /* ParSHUM_vector_read_file(X, self->solver->exe_parms->RHS_file);  */
   /* ParSHUM_vector_print(X, "the real X"); */
   fflush(stdout);
-  ParSHUM_matrix_SpMV(self->solver->A, X, SOL);
+  /* ParSHUM_matrix_SpMV(self->solver->A, X, SOL); */
   
   /* copy the vector SOL in B */
-  ParSHUM_vector_copy(SOL, B);
+  /* ParSHUM_vector_copy(SOL, B); */
   
   /* self->solver->debug |= ParSHUM_CHECK_PIVOTS; */
   /* self->solver->debug |= ParSHUM_CHECK_SCHUR_MEMORY; */
@@ -152,7 +140,7 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
       if (!found) 
 	printf("KO!\n");
     }
-				     
+    /* ParSHUM_dense_matrix_print(self->Schur, "global schur"); */
     ParSHUM_dense_matrix_factorize(self->Schur, 0, self->solver->exe_parms->nb_threads);
   }
 
@@ -167,6 +155,69 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
   
   /* ParSHUM_solver_finalize(self->solver); */
 }
+
+void
+ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS)
+{
+  ParSHUM_solver solver = self->solver;
+  ParSHUM_matrix A = self->input_A;
+  ParSHUM_vector tmp;
+  int nb_blocks = self->MPI_info->MPI_size, block;
+  int rank = self->MPI_info->rank;
+  MPI_Comm comm = self->MPI_info->world;
+  MPI_Status status;
+  int size = solver->A->m;
+  ParSHUM_vector schur_RHS;
+  tmp = ParSHUM_vector_create(size);
+
+  if (!rank)  { 
+    int *row_perm = self->row_blocks->perms;
+    int *block_sizes = self->row_blocks->sizes;
+    /* ParSHUM_vector_print(RHS, "global RHS"); */
+
+    ParSHUM_vector_permute(RHS, row_perm, self->input_A->n);
+    
+    memcpy(tmp->vect, RHS->vect, size * sizeof(*tmp->vect));
+
+    for(block = 1; block < nb_blocks; block++) {
+      size = block_sizes[block+1] - block_sizes[block];
+      MPI_Send(&RHS->vect[block_sizes[block]], size, MPI_DOUBLE, block, 0,  comm);
+    }
+  } else { 
+    MPI_Recv(tmp->vect, size, MPI_DOUBLE, 0, 0, comm, &status);
+  }
+
+  if (!rank) { 
+    schur_RHS = ParSHUM_vector_create(self->col_blocks->nb_BB_cols);
+    /* ParSHUM_vector_print(tmp, "before SBBD solve"); */
+    ParSHUM_solver_SBBD_solve(solver, tmp, schur_RHS, self->Schur,  self->col_blocks->local_schur_m,  
+			      self->col_blocks->BB_index, self->col_blocks->BB_size, self->MPI_info);
+  } else {
+    /* ParSHUM_vector_print(tmp, "before SBBD  solve"); */
+    ParSHUM_solver_SBBD_solve(solver, tmp, NULL, NULL, NULL, NULL, NULL, self->MPI_info);
+  }
+  /* ParSHUM_vector_print(tmp, "after  SBBD solve"); */
+
+  if (!rank) { 
+    int  block, nb_blocks = self->col_blocks->nb_blocks;
+    int j = 0;
+    int *col_sizes = self->col_blocks->sizes, *row_sizes = self->row_blocks->sizes;
+    int i; 
+
+    memcpy(&RHS->vect[RHS->n - schur_RHS->n], 
+		      schur_RHS->vect, schur_RHS->n * sizeof(*RHS->vect));
+    
+    memcpy(RHS->vect, tmp->vect, (col_sizes[1] - col_sizes[0]) * sizeof(*RHS->vect));
+    for (block = 1; block < nb_blocks; block++) 
+      MPI_Recv(&RHS->vect[col_sizes[block]], col_sizes[block+1] - col_sizes[block],  MPI_DOUBLE, block, 0, comm, &status);
+    /* ParSHUM_vector_print(RHS, "before permutation X"); */
+    ParSHUM_vector_permute(RHS, self->col_blocks->invr_perms, RHS->n);
+    /* ParSHUM_vector_print(RHS, "final X"); */
+  } else {
+    MPI_Send(tmp->vect, self->solver->A->m - self->solver->A->n + self->solver->BB_cols, MPI_DOUBLE, 0, 0, comm);
+  }
+}
+
 
 void
 ParSHUM_SBBD_finalize(ParSHUM_SBBD self)

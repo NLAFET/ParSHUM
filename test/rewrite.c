@@ -24,11 +24,11 @@ main(int argc, char **argv)
   if (!strcmp(file_ext, ".mtl"))
     ParSHUM_read_mtl_file(A, argv[1]);
 #ifdef HAVE_SPRAL
-  else  if (!strcmp(file_ext, ".rsa"))
+  else  if (!strcmp(file_ext, ".rb"))
     ParSHUM_read_rutherford_boeing(A, argv[1]);
 #endif
   else
-    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"the input matrix should be in mtl format");
+    ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"unsuported matrix type");
 
   file = fopen(argv[2], "w+");
   if (!file)
