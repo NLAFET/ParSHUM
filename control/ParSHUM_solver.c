@@ -616,10 +616,12 @@ ParSHUM_solver_alloc_internal(ParSHUM_solver self)
 {
   double total_extra_space = 1 + self->exe_parms->extra_space_inbetween + self->exe_parms->extra_space;
   int n = self->A->n, m = self->A->m, i;
-  int needed_pivots = n < m ? n : m;
+  /* TOCORRECT */
+  /* int needed_pivots = n < m ? n : m; */
+  int needed_pivots = n - self->BB_cols - 1;
   int larger_size = n > m ? n : m;
  
-  needed_pivots -= self->BB_cols;
+  /* needed_pivots -= self->BB_cols; */
   self->S    = ParSHUM_schur_matrix_create();
   self->D    = ParSHUM_matrix_create();
 
@@ -1072,8 +1074,11 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
   ParSHUM_verbose_per_step step = ParSHUM_verbose_get_step(self->verbose);
   ParSHUM_verbose verbose = self->verbose;
   int nb_threads = self->exe_parms->nb_threads;
-  int needed_pivots = self->A->n < self->A->m ? self->A->n : self->A->m;
-  needed_pivots -= self->done_pivots + self->BB_cols + 1;
+  /* TOCORRECT */
+  /* int needed_pivots = self->A->n < self->A->m ? self->A->n : self->A->m; */
+  int needed_pivots = self->A->n - self->BB_cols - 1;
+
+  needed_pivots -= self->done_pivots;
   int new_pivots = 0;
 
   ParSHUM_verbose_start_timing(&step->timing_extracting_candidates);
@@ -1360,7 +1365,10 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
   int *previous_pivots   = self->previous_pivots;
   int nb_previous_pivots = exe_parms->nb_previous_pivots;
   int nb_pivot_blocks = 0;
-  needed_pivots -= self->BB_cols + 1;
+  /* TOCORRECT */
+  /* needed_pivots -= self->BB_cols + 1; */
+  /* if (n - self->BB_cols + 1 < needed_pivots)  */
+  needed_pivots = n - self->BB_cols - 1;
 
   if (self->debug &  ParSHUM_CHECK_SCHUR_DOUBLES)
     ParSHUM_schur_check_doubles(self->S);  
@@ -1403,10 +1411,10 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
 						 self->row_perm, self->invr_row_perm);
     verbose->schur_density = 
       (double) self->S->nnz / ((n - self->done_pivots) * (m - self->done_pivots));
-
+    
     /* if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL))  { */
     /*   printf("done pivots = %d \n", self->done_pivots); */
-      /* ParSHUM_dense_matrix_print(self->S_dense, "dense schur after conversion"); */
+    /*   ParSHUM_dense_matrix_print(self->S_dense, "dense schur after conversion"); */
     /*   print_int_array(self->col_perm, self->A->n, "col_perms"); */
     /*   print_int_array(self->row_perm, self->A->m, "row_perms"); */
     /*   print_int_array(self->invr_col_perm, self->A->n, "invr_col_perms"); */
@@ -1428,10 +1436,10 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
 
     verbose->nnz_final   = self->L->nnz + self->U->nnz + self->D->n + 
       (self->S_dense->n - self->BB_cols) * self->S_dense->m + self->BB_cols * (self->S_dense->m - self->BB_cols);
-
+    
     verbose->nnz_L       = self->L->nnz + ( self->S_dense->n - self->BB_cols ) * self->S_dense->m - 
       ((self->S_dense->n - self->BB_cols)*(self->S_dense->n - self->BB_cols) - self->S_dense->n + self->BB_cols ) / 2;
-
+    
     verbose->nnz_U       = self->U->nnz + self->D->n + 
       ((self->S_dense->n-self->BB_cols) * (self->S_dense->n-self->BB_cols) - self->S_dense->m + self->BB_cols)/2 
       + self->S_dense->n - self->BB_cols + self->BB_cols * (self->S_dense->m - self->BB_cols);
@@ -1569,10 +1577,10 @@ ParSHUM_solver_SBBD_solve(ParSHUM_solver self, ParSHUM_vector RHS,  ParSHUM_vect
     }
     plasma_dgetrs(global_schur->n, 1, global_schur->val, global_schur->n,
 		  global_schur->pivots, schur_RHS, global_schur->n);
-
-
-    /* ParSHUM_vector_print(schur_RHS_v, "global schur RHS"); */
-
+    
+    if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
+      ParSHUM_vector_print(schur_RHS_v, "global schur RHS");
+    
     for( block = 1; block < nb_blocks; block++) { 
       int local_size = BB_sizes[block];
       max_size = max_size > local_size ? max_size : local_size;
@@ -1610,7 +1618,7 @@ ParSHUM_solver_SBBD_solve(ParSHUM_solver self, ParSHUM_vector RHS,  ParSHUM_vect
   ParSHUM_U_BB_matrix_solve(self->U, self->D, RHS, BB_rhs, self->col_perm, self->row_perm,
   			    self->dense_pivots, BB_cols);
   
-  if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_VERBOSE_EACH_STEP))
+  if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
     ParSHUM_vector_print(RHS, "after backward solve");
   
   ParSHUM_vector_permute(RHS, self->row_perm, self->S->m);
@@ -1618,7 +1626,7 @@ ParSHUM_solver_SBBD_solve(ParSHUM_solver self, ParSHUM_vector RHS,  ParSHUM_vect
     ParSHUM_vector_print(RHS, "P RHS");
   
   ParSHUM_vector_permute(RHS, self->invr_col_perm, self->S->n - BB_cols);
-  if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_VERBOSE_EACH_STEP))
+  if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
     ParSHUM_vector_print(RHS, "after solve operation");
 }
 

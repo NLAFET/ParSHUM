@@ -307,7 +307,7 @@ ParSHUM_blocks_print_stats(ParSHUM_schur_matrix A, row_block row_blocks, col_blo
   std_n   /= nb_blocks;
   std_n    = sqrt(std_n);
   printf("#blocks\tavg_m\t\tstd_m\t\tmax_m\tmin_m\tavg_n\t\tstd_n\t\tmax_n\tmin_n\tavg_nnz\t\tstd_nnz\t\tmax_nnz\tmin_nnz\tBB_n\tBB_nnz\n");
-  printf("%d\t%e\t%e\t%d\t%d\t%e\t%e\t%d\t%d\t%e\t%e\t%d\t%d\t%d\t%d\n", nb_blocks, avg_m,   std_m,   max_m,   min_n,
+  printf("%d\t%e\t%e\t%d\t%d\t%e\t%e\t%d\t%d\t%e\t%e\t%d\t%d\t%d\t%d\n", nb_blocks, avg_m,   std_m,   max_m,   min_m,
 	                                                                           avg_n,   std_n,   max_n,   min_n,
 	                                                                           avg_nnz, std_nnz, max_nnz,min_nnz,
 	                                                                           BB_n,    BB_nnz);

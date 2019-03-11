@@ -6,7 +6,6 @@
 #include "ParSHUM_SBBD.h"
 
 
-
 ParSHUM_SBBD
 ParSHUM_SBBD_create(MPI_Comm world)
 {
@@ -59,7 +58,8 @@ ParSUHM_SBBD_read_matrix(ParSHUM_SBBD self)
 
     ParSHUM_schur_matrix_allocate(self->A, self->input_A->n, self->input_A->m, self->input_A->nnz, 0,0,0,0.0,0.0);
     ParSHUM_schur_matrix_copy(self->input_A, self->A, 0.0);
-    /* ParSHUM_matrix_destroy(input_A); */
+    if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
+      ParSHUM_schur_matrix_print(self->A, "on reading");
   }
 }
 
@@ -70,7 +70,7 @@ ParSHUM_SBBD_partition(ParSHUM_SBBD self)
   ParSHUM_Zoltan_register_data(self->hypergraph, self->A);
 
   ParSHUM_Zoltan_partition(self->hypergraph, self->A);
-
+  
   ParSHUM_Zoltan_get_row_blocks(self->hypergraph, self->row_blocks);
   if (!self->MPI_info->rank)  {
     ParSHUM_get_col_blocks(self->A, self->col_blocks, self->row_blocks);
@@ -78,7 +78,8 @@ ParSHUM_SBBD_partition(ParSHUM_SBBD self)
     ParSHUM_check_blocks(self->A, self->row_blocks, self->col_blocks);
     ParSHUM_blocks_print_stats(self->A, self->row_blocks, self->col_blocks);
     self->Schur = ParSHUM_dense_matrix_create(self->col_blocks->nb_BB_cols, self->col_blocks->nb_BB_cols);
-    /* ParSHUM_print_blocks(self->row_blocks, self->col_blocks); */
+    if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
+      ParSHUM_print_blocks(self->row_blocks, self->col_blocks);
   }
   self->solver->A = ParSUM_Zoltan_distribute(self->A, self->row_blocks, self->col_blocks, self->solver, self->MPI_info);
   /* if (self->solver->A->m < self->solver->A->n )  */
@@ -119,6 +120,8 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
 
   ParSHUM_solver_factorize(self->solver);
 
+  //  printf("%d there were %d sparse and % dense pivots\n", rank, self->solver->done_pivots, self->solver->dense_pivots);
+
   local_S = self->solver->S_dense;
   if (rank ) {
     ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m], NULL, NULL, NULL,
@@ -130,7 +133,6 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
     /* ParSHUM_dense_matrix_print(self->Schur, "dense global schur"); */
 
     int i, j, m = self->Schur->m, n = self->Schur->n; 
-    printf("n = %d and m = %d\n", n, m);
     for(i = 0; i < n; i++) {
       double *tmp = &self->Schur->val[i*m];
       int found = 0;
@@ -140,7 +142,6 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
       if (!found) 
 	printf("KO!\n");
     }
-    /* ParSHUM_dense_matrix_print(self->Schur, "global schur"); */
     ParSHUM_dense_matrix_factorize(self->Schur, 0, self->solver->exe_parms->nb_threads);
   }
 
@@ -173,7 +174,8 @@ ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS)
   if (!rank)  { 
     int *row_perm = self->row_blocks->perms;
     int *block_sizes = self->row_blocks->sizes;
-    /* ParSHUM_vector_print(RHS, "global RHS"); */
+    if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
+      ParSHUM_vector_print(RHS, "global RHS");
 
     ParSHUM_vector_permute(RHS, row_perm, self->input_A->n);
     
@@ -187,16 +189,17 @@ ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS)
     MPI_Recv(tmp->vect, size, MPI_DOUBLE, 0, 0, comm, &status);
   }
 
+  if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
+    ParSHUM_vector_print(tmp, "before SBBD solve");
   if (!rank) { 
     schur_RHS = ParSHUM_vector_create(self->col_blocks->nb_BB_cols);
-    /* ParSHUM_vector_print(tmp, "before SBBD solve"); */
     ParSHUM_solver_SBBD_solve(solver, tmp, schur_RHS, self->Schur,  self->col_blocks->local_schur_m,  
 			      self->col_blocks->BB_index, self->col_blocks->BB_size, self->MPI_info);
   } else {
-    /* ParSHUM_vector_print(tmp, "before SBBD  solve"); */
     ParSHUM_solver_SBBD_solve(solver, tmp, NULL, NULL, NULL, NULL, NULL, self->MPI_info);
   }
-  /* ParSHUM_vector_print(tmp, "after  SBBD solve"); */
+  if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
+    ParSHUM_vector_print(tmp, "after  SBBD solve");
 
   if (!rank) { 
     int  block, nb_blocks = self->col_blocks->nb_blocks;
@@ -204,17 +207,18 @@ ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS)
     int *col_sizes = self->col_blocks->sizes, *row_sizes = self->row_blocks->sizes;
     int i; 
 
-    memcpy(&RHS->vect[RHS->n - schur_RHS->n], 
-		      schur_RHS->vect, schur_RHS->n * sizeof(*RHS->vect));
+    memcpy(&RHS->vect[RHS->n - schur_RHS->n], schur_RHS->vect, schur_RHS->n * sizeof(*RHS->vect));
     
     memcpy(RHS->vect, tmp->vect, (col_sizes[1] - col_sizes[0]) * sizeof(*RHS->vect));
     for (block = 1; block < nb_blocks; block++) 
       MPI_Recv(&RHS->vect[col_sizes[block]], col_sizes[block+1] - col_sizes[block],  MPI_DOUBLE, block, 0, comm, &status);
-    /* ParSHUM_vector_print(RHS, "before permutation X"); */
+    if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
+      ParSHUM_vector_print(RHS, " global X before permutation");
     ParSHUM_vector_permute(RHS, self->col_blocks->invr_perms, RHS->n);
-    /* ParSHUM_vector_print(RHS, "final X"); */
+    if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
+      ParSHUM_vector_print(RHS, "final X");
   } else {
-    MPI_Send(tmp->vect, self->solver->A->m - self->solver->A->n + self->solver->BB_cols, MPI_DOUBLE, 0, 0, comm);
+    MPI_Send(tmp->vect, self->solver->A->n - self->solver->BB_cols, MPI_DOUBLE, 0, 0, comm);
   }
 }
 
@@ -222,7 +226,7 @@ ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS)
 void
 ParSHUM_SBBD_finalize(ParSHUM_SBBD self)
 {
-  /* ParSHUM_solver_finalize(self->solver); */
+  ParSHUM_solver_finalize(self->solver);
 }
 
 void
