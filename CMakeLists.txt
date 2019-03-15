@@ -6,7 +6,7 @@ FIND_PACKAGE(OpenMP REQUIRED)
 pkg_search_module(PLASMA QUIET plasma)
 find_package(MPI REQUIRED)
 
-if ( NOT PLASMA_FOUND) 
+if (NOT PLASMA_FOUND) 
   MESSAGE(FATAL_ERROR "PLASMA is not found. We use pkg to find PLAsMA. Please install PLASMA and include the path to the plasma.pc file int PKG_CONFIG_PATH environment variable")
 endif()
 # Set the output folder where the program and libraries will be created
@@ -24,7 +24,6 @@ include_directories(include)
 # Plasma
 pkg_check_modules(Plasma REQUIRED plasma )
 
-
 # Verbosity
 set(ParSHUM_VERBOSITY 1 CACHE STRING "Controls the verbosity. Default is 1.")
 
@@ -41,7 +40,6 @@ target_link_libraries(ParSHUM pthread)
 
 target_include_directories(ParSHUM PUBLIC ${PLASMA_INCLUDE_DIRS})
 target_compile_options(ParSHUM PUBLIC ${PLASMA_CFLAGS_OTHER})
-
 include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 
 if( SPRAL_DIR )

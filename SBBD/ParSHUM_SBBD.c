@@ -223,10 +223,17 @@ ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS)
 }
 
 
+
 void
 ParSHUM_SBBD_finalize(ParSHUM_SBBD self)
 {
-  ParSHUM_solver_finalize(self->solver);
+  int rank = self->MPI_info->rank;
+  int size = self->MPI_info->MPI_size;
+  for( int i = 0; i < size; i++) { 
+    if (rank == i) 
+      ParSHUM_solver_finalize(self->solver);
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
 }
 
 void

@@ -320,10 +320,8 @@ ParSHUM_check_blocks(ParSHUM_schur_matrix A, row_block row_blocks, col_block col
   int  m = row_blocks->n, block, i, j;
   char mess[2048];
 
-  check_vlaid_perms(row_blocks->perms, m, m);
-  check_vlaid_perms(col_blocks->perms, n, n);
-  check_perms_and_invr_perms(row_blocks->perms, row_blocks->invr_perms, m, "row_block");
-  check_perms_and_invr_perms(col_blocks->perms, col_blocks->invr_perms, n, "col_block");
+  check_vlaid_perms(col_blocks->perms, col_blocks->invr_perms, n, n, "col");
+  check_vlaid_perms(row_blocks->perms, row_blocks->invr_perms, m, m, "row");
   
   if (*row_blocks->sizes)
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "the first row_block size is not zero");

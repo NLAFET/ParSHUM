@@ -28,6 +28,7 @@ void  ParSUHM_SBBD_read_matrix(ParSHUM_SBBD self);
 void  ParSHUM_SBBD_partition(ParSHUM_SBBD self);
 void  ParSHUM_SBBD_factorize(ParSHUM_SBBD self);
 void  ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS);
+void  ParSHUM_SBBD_finalize(ParSHUM_SBBD self);
 void  ParSHUM_SBBD_destroy(ParSHUM_SBBD self);
 
 #endif // _ParSHUM_SBBD_H 

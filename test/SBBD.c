@@ -39,8 +39,8 @@ main(int argc, char **argv)
     self->solver->A = self->input_A;
     ParSHUM_solver_compute_norms(self->solver, B, SOL);
   }
-  if (! MPI_info->rank)
-    /* ParSHUM_vector_print(B, "after solve"); */
+    
+  ParSHUM_SBBD_finalize(self);
 
   ParSHUM_SBBD_destroy(self);
 

@@ -200,7 +200,7 @@ main(int argc, char *argv[])
   }
 
   /******************************************************************
-  ** Visualize the hypergraph partitioning before and after calling Zoltan.
+   ** Visualize the hypergraph partitioning before and after calling Zoltan.
   ******************************************************************/
   parts = (int *)malloc(sizeof(int) * hg.numMyVertices);
   int_array_memset(parts, ParSHUM_UNUSED_PIVOT, hg.numMyVertices);

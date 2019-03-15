@@ -72,35 +72,78 @@ update_counter(int *counter, int *index, int n, int base)
 }
 
 void 
-check_vlaid_perms(int *perms, int n, int nb_pivots)
+check_vlaid_perms(int *perms, int *invr_perms, int n, int nb_pivots, char *name)
 {
-  int i;
-  
-  for(i = 0; i < n; i++) {
-    if (perms[i] == ParSHUM_UNUSED_PIVOT) {
-      continue;
-    } else if (perms[i] < 0) {
-      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "one of the pivots is negative ");
-      continue;
-    } else if (perms[i] >= n) { 
-      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "one of the pivots is larger then n ");
-      continue;
-    }      
-  }
-}
-
-void 
-check_perms_and_invr_perms(int *perms, int *invr_perms, int nb_pivots, char *name)
-{
-  int i;
+  int i, j, found_pivots = 0;
   char mess[2048];
-  
+
+  for(i = 0; i < nb_pivots; i++) {
+    int pivot = perms[i];
+    if (pivot < 0) {
+      snprintf(mess, 2048, "%s_perm[%d] = %d", name, i, pivot);
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      continue;
+    } else if (pivot >= n) { 
+      snprintf(mess, 2048, "%s_perm[%d] = %d", name, i, pivot);
+      ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      continue;
+    } else { 
+      for( j = i+1; j < nb_pivots; j++) 
+	if (perms[j] == pivot) 
+	  snprintf(mess, 2048, "%s_perm[%d] = %d and %s_perm[%d] = %d",
+		   name, i, pivot, name, j, perms[j]);
+    }
+
+  }
+
+  for(i = 0; i < n; i++) {
+    int pivot = invr_perms[i];
+    if (pivot == ParSHUM_UNUSED_PIVOT) {
+      continue;
+    } else {
+      found_pivots++;
+      if (pivot < 0) {
+	snprintf(mess, 2048, "invr_%s_perm[%d] = %d", name, i, pivot);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	continue;
+      } else if (pivot >= n) { 
+	snprintf(mess, 2048, "invr_%s_perm[%d] = %d", name, i, pivot);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+	continue;
+      }
+      for( j = i+1; j < n; j++) 
+	if (invr_perms[j] == pivot) 
+	  snprintf(mess, 2048, "invr_%s_perm[%d] = %d and invr_%s_perm[%d] = %d",
+		   name, i, pivot, name, j, invr_perms[j]);
+    }
+  }
+
+  if (found_pivots != nb_pivots) 
+    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "did not found all the pivots in the invr_pivots");
+
   for(i = 0; i < nb_pivots; i++) 
     if (invr_perms[perms[i]] != i ) {
       snprintf(mess, 2048, "%s_perm[%d] = %d but invr_%s_perm[%d] = %d",
 	       name, i, perms[i], name, perms[i], invr_perms[perms[i]]);
       ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
     }
+}
+
+void 
+check_vect_doubles(int *vect, int n, char *name)
+{
+  int i, j;
+  char mess[2048];
+
+  for(i = 0; i < n; i++) {
+    int tmp = vect[i];
+    for(j = i+1; j < n; j++) 
+      if (vect[j] == tmp) {
+	snprintf(mess, 2048, "in %s the entrie %d is doubled (vect[%d] = %d and vect[%d] = %d)", 
+		 name, tmp, i, tmp, j, vect[j]);
+	ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
+      }
+  }
 }
 
 void

@@ -659,7 +659,7 @@ ParSHUM_schur_matrix_update_LD_singeltons(ParSHUM_schur_matrix self, ParSHUM_mat
   }
   D->n += nb_pivots;
 
-#pragma omp parallel num_threads(nb_threads) private(step)
+#pragma omp parallel num_threads(nb_threads) shared(L_input_size, D_input_size) firstprivate(nb_threads, nb_pivots, col_perm, row_perm, self, L, D, nb_steps) private(step) default(none)
   {
     long S_nnz = 0;
     int me =  omp_get_thread_num();
@@ -732,7 +732,7 @@ ParSHUM_schur_matrix_update_LD(ParSHUM_schur_matrix self, ParSHUM_L_matrix L, Pa
   D->n += nb_pivots;
   L->n += nb_pivots;
 
-#pragma omp parallel for num_threads(nb_threads) shared(nb_pivots,L_input_size,D_input_size,nb_row_singeltons) reduction(+:S_nnz) reduction(+:L_nnz)
+#pragma omp parallel for num_threads(nb_threads) shared(nb_pivots,L_input_size,D_input_size,nb_row_singeltons) firstprivate(self, workspace, col_perm, L, D, U, invr_row_perm) reduction(+:S_nnz) reduction(+:L_nnz) default(none) 
     for( int current_pivot = 0; current_pivot < nb_pivots; current_pivot++) {
       /* TODO: ParSHUM_verbose_trace_start_event(verbose, ParSHUM_UPDATE_L); */
       int me =  omp_get_thread_num();
@@ -822,7 +822,7 @@ ParSHUM_schur_matrix_update_U_singletons(ParSHUM_schur_matrix S, ParSHUM_U_matri
     L->col_ptr[L->n] = sthg;
   }
 
-#pragma omp parallel num_threads(nb_threads) private(step)
+#pragma omp parallel num_threads(nb_threads) firstprivate(nb_threads, nb_pivots, col_perm, row_perm, S,D,U, nb_steps) private(step) default(none)
   {
     int me =  omp_get_thread_num();
     for ( step = 0; step < nb_steps; step++) 
@@ -1024,7 +1024,7 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   int *tmp = &tmp_rows[m];
   double *tmp_vals = (double *) tmp;
 
-#pragma omp for  reduction(+:S_new_nnz) reduction(+:U_new_nnz)   schedule(guided, 10)
+#pragma omp for  reduction(+:S_new_nnz) reduction(+:U_new_nnz)   schedule(guided, 10)  
   for ( int i = 0; i < U_new_n; i++) {
   int k, l;
   
@@ -1191,8 +1191,7 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   S->base[me] = base;
   }
 
-
-#pragma omp  for schedule(guided, 10)
+#pragma omp  for schedule(guided, 10)     
   for(int i = start; i < end; i++)  {
     S->CSR[row_perms[i]].nb_free += S->CSR[row_perms[i]].nb_elem;
     S->CSR[row_perms[i]].nb_elem = 0;
@@ -1367,12 +1366,8 @@ ParSHUM_schur_matrix_check_pivots(ParSHUM_schur_matrix self,
   int  i, j, n = self->n, m = self->m;
   char mess[2048];
   
-  check_vlaid_perms(row_perms,      m, nb_pivots);
-  check_vlaid_perms(invr_row_perms, m, nb_pivots);
-  check_vlaid_perms(col_perms,      n, nb_pivots);
-  check_vlaid_perms(invr_col_perms, n, nb_pivots);
-  check_perms_and_invr_perms(col_perms, invr_col_perms, nb_pivots, "col");
-  check_perms_and_invr_perms(row_perms, invr_row_perms, nb_pivots, "row");
+  check_vlaid_perms(col_perms, invr_col_perms, n, nb_pivots, "col");
+  check_vlaid_perms(row_perms, invr_row_perms, m, nb_pivots, "row");
   
   for( i = 0; i < nb_pivots; i++)
     {

@@ -723,7 +723,7 @@ ParSHUM_solver_init(ParSHUM_solver self)
   setenv("OMP_PROC_BIND", "close", 1);
 
   ParSHUM_verbose_create_dirs(self->verbose->parms->output_dir);
-#pragma omp  parallel num_threads(self->exe_parms->nb_threads)
+#pragma omp  parallel num_threads(self->exe_parms->nb_threads) default(none)
   {
   int me  = omp_get_thread_num();
   me++;
@@ -921,7 +921,7 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
     distribution_m[i] = (nb_rows / nb_threads) * i;
   distribution_m[nb_threads] = nb_rows;
 
-#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, verbose) firstprivate(base)
+#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, distribution_m, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, verbose) firstprivate(self, S, base, invr_col_perms, invr_row_perms, col_perms, row_perms, logical_cols, logical_rows, nb_threads, cols, rows, all_pivots) default(none)
   {
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GETTING_PIVOTS);
   int i, j;
@@ -957,7 +957,7 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
       }
     }
 #pragma omp barrier
-#pragma omp single
+#pragma omp single 
   {
   /* 
      Sequential updte the logical arrays with the col_singeltons. 
@@ -1105,7 +1105,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
       distributions[i] = (nb_cols / nb_threads) * i;
     distributions[nb_threads] = nb_cols;
 
-#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols, best_marko, distributions)
+#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols, best_marko, best_markos, distributions, candidates, step) firstprivate(verbose, exe_parms, i, nb_threads) default(none)
     {
     int me = omp_get_thread_num();
     int *my_col_perms = (int *) self->workspace[me];
@@ -1162,7 +1162,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
       distributions[i] = (step->nb_candidates / nb_threads) * i;
     distributions[nb_threads] = step->nb_candidates;
     
-#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols)
+#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols, distributions, candidates) firstprivate(verbose, i, nb_threads) default(none)
     {
     ParSHUM_verbose_trace_start_event(verbose, ParSHUM_FIRST_PASS);
     int me = omp_get_thread_num();
@@ -1208,7 +1208,9 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
   }
   
   ParSHUM_solver_get_Luby_pivots(self, self->Luby, new_pivots);
-  /* ParSHUM_check_logical_sum(self, new_pivots); */
+
+  if (self->debug &  ParSHUM_CHECK_PIVOTS)
+    ParSHUM_check_logical_sum(self, new_pivots);
 
   ParSHUM_verbose_stop_timing(&step->timing_merging_pivots);
   if (self->debug & (ParSHUM_DEBUG_VERBOSE_EACH_STEP | ParSHUM_DEBUG_GOSSIP_GIRL)) {
@@ -1368,6 +1370,7 @@ ParSHUM_solver_factorize(ParSHUM_solver self)
   /* TOCORRECT */
   /* needed_pivots -= self->BB_cols + 1; */
   /* if (n - self->BB_cols + 1 < needed_pivots)  */
+
   needed_pivots = n - self->BB_cols - 1;
 
   if (self->debug &  ParSHUM_CHECK_SCHUR_DOUBLES)
