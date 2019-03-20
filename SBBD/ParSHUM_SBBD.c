@@ -82,9 +82,9 @@ ParSHUM_SBBD_partition(ParSHUM_SBBD self)
       ParSHUM_print_blocks(self->row_blocks, self->col_blocks);
   }
   self->solver->A = ParSUM_Zoltan_distribute(self->A, self->row_blocks, self->col_blocks, self->solver, self->MPI_info);
-  /* if (self->solver->A->m < self->solver->A->n )  */
+  /* if (self->solver->A->m < self->solver->A->n ) */
   /*   ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"not possible"); */
-  /* for ( i = 0; i < self->MPI_info->MPI_size; i++)  */
+  /* for ( i = 0; i < self->MPI_info->MPI_size; i++) */
   /*   if ( i == self->MPI_info->rank) { */
   /*     snprintf(mess, 2048, "matrix A on proc %d", self->MPI_info->rank); */
   /*     ParSHUM_matrix_print(self->solver->A, mess); */
@@ -102,7 +102,6 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
   int nb_BB_cols = self->solver->BB_cols;
   int rank = self->MPI_info->rank;
 
-  
   /* ParSHUM_vector_read_file(X, self->solver->exe_parms->RHS_file);  */
   /* ParSHUM_vector_print(X, "the real X"); */
   fflush(stdout);
@@ -119,7 +118,6 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
   /* self->solver->exe_parms->min_pivot_per_steps = 5; */
 
   ParSHUM_solver_factorize(self->solver);
-
   //  printf("%d there were %d sparse and % dense pivots\n", rank, self->solver->done_pivots, self->solver->dense_pivots);
 
   local_S = self->solver->S_dense;

@@ -169,8 +169,10 @@ ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int BB_cols, int nb_th
 {
   int ret = 0;
   char mess[2048];
-  omp_set_num_threads(nb_threads);
+  /* omp_set_num_threads(1); */
   /* printf("m = %d n = %d BB_cols = %d\n", self->m, self->n, BB_cols); */
+
+  omp_set_num_threads(nb_threads);
   if (self->n && self->m) { 
     ret = plasma_dgetrf(self->m, self->n - BB_cols, self->val, self->m, self->pivots);  
   }

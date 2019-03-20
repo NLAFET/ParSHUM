@@ -921,7 +921,7 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
     distribution_m[i] = (nb_rows / nb_threads) * i;
   distribution_m[nb_threads] = nb_rows;
 
-#pragma omp parallel num_threads(nb_threads) shared(distribution_perms, distribution_n, distribution_m, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, verbose) firstprivate(self, S, base, invr_col_perms, invr_row_perms, col_perms, row_perms, logical_cols, logical_rows, nb_threads, cols, rows, all_pivots) default(none)
+#pragma omp parallel  num_threads(nb_threads) shared(distribution_perms, distribution_n, distribution_m, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, verbose) firstprivate(self, S, base, invr_col_perms, invr_row_perms, col_perms, row_perms, logical_cols, logical_rows, nb_threads, cols, rows, all_pivots) default(none)
   {
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GETTING_PIVOTS);
   int i, j;
@@ -1208,7 +1208,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
   }
   
   ParSHUM_solver_get_Luby_pivots(self, self->Luby, new_pivots);
-
+  
   if (self->debug &  ParSHUM_CHECK_PIVOTS)
     ParSHUM_check_logical_sum(self, new_pivots);
 
