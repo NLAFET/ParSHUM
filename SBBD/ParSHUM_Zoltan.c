@@ -75,7 +75,7 @@ ParSHUM_Zoltan_create(ParSHUM_MPI_info MPI_info)
   Zoltan_Set_Param(self->Zoltan, "EDGE_WEIGHT_DIM", "0");      /* use Zoltan default hyperedge weights */
   Zoltan_Set_Param(self->Zoltan, "RETURN_LISTS", "PART");      /* controls what is returned in the  output
 								  after the LB_partition call */
-  Zoltan_Set_Param(self->Zoltan, "LB_APPROACH", "PARTITION");    /* approach used (PARTITION, REPARTITION, REFINE) */
+  Zoltan_Set_Param(self->Zoltan, "LB_APPROACH", "REPARTITION");    /* approach used (PARTITION, REPARTITION, REFINE) */
   
   return self;
 }

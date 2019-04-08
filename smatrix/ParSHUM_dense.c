@@ -176,10 +176,10 @@ ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int BB_cols, int nb_th
   if (self->n && self->m) { 
     ret = plasma_dgetrf(self->m, self->n - BB_cols, self->val, self->m, self->pivots);  
   }
-  if (ret)  {
-    snprintf(mess, 2048,"The factorization of the dense schur is completed, but the entry U(%d,%d) has a zero on it.\n", ret, ret);
-    ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
-  }
+  /* if (ret)  { */
+  /*   snprintf(mess, 2048,"The factorization of the dense schur is completed, but the entry U(%d,%d) has a zero on it.\n", ret, ret); */
+  /*   ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess); */
+  /* } */
   /* print_int_array(self->pivots, self->m, "pivots"); */
   /* ParSHUM_dense_matrix_print(self, "after facto"); */
 

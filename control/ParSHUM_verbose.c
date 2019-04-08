@@ -344,7 +344,7 @@ ParSHUM_verbose_print_V0(ParSHUM_verbose self)
   fprintf(file,"[%s] The backward error is (%e) and the forward error is (%e)\n",
  	  prog_name, self->backward_error, self->forward_error);
 
-  ParSHUM_verbose_print_steps(self->stats_first, self->parms);
+  /* ParSHUM_verbose_print_steps(self->stats_first, self->parms); */
 }
 
 void

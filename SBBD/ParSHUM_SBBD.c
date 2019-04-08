@@ -67,21 +67,53 @@ void
 ParSHUM_SBBD_partition(ParSHUM_SBBD self)
 {
   char mess[2048];
-  ParSHUM_Zoltan_register_data(self->hypergraph, self->A);
+  double timing, total;
 
-  ParSHUM_Zoltan_partition(self->hypergraph, self->A);
-  
-  ParSHUM_Zoltan_get_row_blocks(self->hypergraph, self->row_blocks);
-  if (!self->MPI_info->rank)  {
-    ParSHUM_get_col_blocks(self->A, self->col_blocks, self->row_blocks);
+  ParSHUM_verbose_start_timing(&total);
+  ParSHUM_verbose_start_timing(&timing);
+  ParSHUM_Zoltan_register_data(self->hypergraph, self->A);
+  ParSHUM_verbose_stop_timing(&timing);
+  if (!self->MPI_info->rank)
+    printf("registering data \t\t %f\n", timing/1e6);
     
+  ParSHUM_verbose_start_timing(&timing);
+  ParSHUM_Zoltan_partition(self->hypergraph, self->A);
+  ParSHUM_verbose_stop_timing(&timing);
+  if (!self->MPI_info->rank)
+    printf("Zoltan partition \t\t %f\n", timing/1e6);
+  
+  ParSHUM_verbose_start_timing(&timing);
+  ParSHUM_Zoltan_get_row_blocks(self->hypergraph, self->row_blocks);
+  ParSHUM_verbose_stop_timing(&timing);
+  if (!self->MPI_info->rank)
+    printf("row_blocks \t\t %f\n", timing/1e6);
+
+  if (!self->MPI_info->rank)  { 
+    ParSHUM_verbose_start_timing(&timing);
+    ParSHUM_get_col_blocks(self->A, self->col_blocks, self->row_blocks);
+    ParSHUM_verbose_stop_timing(&timing);
+    printf("col_blocks \t\t %f\n", timing/1e6);
+    
+    ParSHUM_verbose_start_timing(&timing);
     ParSHUM_check_blocks(self->A, self->row_blocks, self->col_blocks);
+    ParSHUM_verbose_stop_timing(&timing);
+    printf("check_block \t\t %f\n", timing/1e6);
+
     ParSHUM_blocks_print_stats(self->A, self->row_blocks, self->col_blocks);
     self->Schur = ParSHUM_dense_matrix_create(self->col_blocks->nb_BB_cols, self->col_blocks->nb_BB_cols);
     if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
       ParSHUM_print_blocks(self->row_blocks, self->col_blocks);
   }
+
+  ParSHUM_verbose_start_timing(&timing);
   self->solver->A = ParSUM_Zoltan_distribute(self->A, self->row_blocks, self->col_blocks, self->solver, self->MPI_info);
+  ParSHUM_verbose_stop_timing(&timing);
+  if (!self->MPI_info->rank)
+    printf("distributing data \t\t %f\n", timing/1e6);
+  ParSHUM_verbose_stop_timing(&total);
+  if (!self->MPI_info->rank)
+    printf("total *****\t %f\n", total/1e6);
+
   /* if (self->solver->A->m < self->solver->A->n ) */
   /*   ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__,"not possible"); */
   /* for ( i = 0; i < self->MPI_info->MPI_size; i++) */
