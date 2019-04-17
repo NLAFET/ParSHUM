@@ -133,10 +133,12 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
   ParSHUM_dense_matrix local_S;
   int nb_BB_cols = self->solver->BB_cols;
   int rank = self->MPI_info->rank;
-
+  double timing;
+  long final_nnz = 0;
+  
   /* ParSHUM_vector_read_file(X, self->solver->exe_parms->RHS_file);  */
   /* ParSHUM_vector_print(X, "the real X"); */
-  fflush(stdout);
+  /* fflush(stdout); */
   /* ParSHUM_matrix_SpMV(self->solver->A, X, SOL); */
   
   /* copy the vector SOL in B */
@@ -148,7 +150,7 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
   /* self->solver->debug |= ParSHUM_CHECK_COUNTERS; */
   /* self->solver->exe_parms->density_tolerance = 1.0; */
   /* self->solver->exe_parms->min_pivot_per_steps = 5; */
-
+  ParSHUM_verbose_start_timing(&timing);
   ParSHUM_solver_factorize(self->solver);
   //  printf("%d there were %d sparse and % dense pivots\n", rank, self->solver->done_pivots, self->solver->dense_pivots);
 
@@ -162,19 +164,23 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
 			     local_S->m, local_S->n, nb_BB_cols, self->MPI_info);
     /* ParSHUM_dense_matrix_print(self->Schur, "dense global schur"); */
 
-    int i, j, m = self->Schur->m, n = self->Schur->n; 
-    for(i = 0; i < n; i++) {
-      double *tmp = &self->Schur->val[i*m];
-      int found = 0;
-      for(j = 0; j < m; j++) 
-	if (tmp[j] != 0)
-	  found++;
-      if (!found) 
-	printf("KO!\n");
-    }
+    /* int i, j, m = self->Schur->m, n = self->Schur->n;  */
+    /* for(i = 0; i < n; i++) { */
+    /*   double *tmp = &self->Schur->val[i*m]; */
+    /*   int found = 0; */
+    /*   for(j = 0; j < m; j++)  */
+    /* 	if (tmp[j] != 0) */
+    /* 	  found++; */
+    /*   if (!found)  */
+    /* 	printf("KO!\n"); */
+    /* } */
     ParSHUM_dense_matrix_factorize(self->Schur, 0, self->solver->exe_parms->nb_threads);
   }
+  ParSHUM_verbose_stop_timing(&timing);
 
+  MPI_Allreduce(&self->solver->verbose->nnz_final, &final_nnz, 1, MPI_LONG, MPI_SUM, self->MPI_info->world);
+  if (!self->MPI_info->rank)
+    printf("FACTO \t\t %f\t%f\n", timing/1e6, (double) final_nnz / self->input_A->nnz);
 
 
   /* Perform the solve operation */

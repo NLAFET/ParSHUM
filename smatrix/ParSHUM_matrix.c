@@ -258,8 +258,9 @@ ParSHUM_matrix_get_norm(ParSHUM_matrix self)
   int i;
   int m = self->m;
   long nnz = self->nnz;
-  double tmp[m], res = 0.00;
-
+  double res = 0.00;
+  double *tmp = malloc(m*sizeof(*tmp));
+  
   if (self->type != ParSHUM_CSC_matrix &&
       self->type != ParSHUM_Rutherford_matrix) 
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "unsuported format for the computing of the norm");
@@ -273,6 +274,7 @@ ParSHUM_matrix_get_norm(ParSHUM_matrix self)
   for(i = 0; i < m; i++)
     res = fmax(res, tmp[i]);
 
+  free(tmp);
   return res;
 }
 

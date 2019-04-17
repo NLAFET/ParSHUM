@@ -264,9 +264,12 @@ ParSHUM_blocks_print_stats(ParSHUM_schur_matrix A, row_block row_blocks, col_blo
   int min_n = INT_MAX, max_n = 0, min_nnz = INT_MAX, max_nnz = 0;
   int min_m = INT_MAX, max_m = 0;
   int BB_n, BB_nnz = 0;
-  double avg_n, std_n = 0, avg_nnz = 0, std_nnz = 0, total_nnz = 0, block_nnz[n];
+  double avg_n, std_n = 0, avg_nnz = 0, std_nnz = 0, total_nnz = 0;
   double avg_m, std_m = 0;
-
+  double *block_nnz;
+  block_nnz = malloc(n*sizeof(*block_nnz));
+  
+  
   avg_m = m / nb_blocks;
   for( i = 0; i < nb_blocks; i++) {
     int block_size = row_blocks->sizes[i+1] - row_blocks->sizes[i];
