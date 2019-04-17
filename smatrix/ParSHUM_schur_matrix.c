@@ -88,125 +88,6 @@ ParSHUM_CSR_alloc(ParSHUM_internal_mem mem, CSR_struct *CSR, int nb_elem, long a
   CSR->nb_free = nb_elem;
 }
 
-/* void */
-/* ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int previous_step_pivots, double val_tol, */
-/*                              int *nb_col_singletons, int *nb_row_singletons, int *cols, int *rows, */
-/*                              int *distributions, int nb_BB_cols, int *col_perm, int *row_perm, */
-/*                              int *invr_col_perm, int *invr_row_perm, int *workspace) */
-/* { */
-/*   int n = self->n - done_pivots + previous_step_pivots - nb_BB_cols; */
-/*   int m = self->m - done_pivots + previous_step_pivots; */
-/*   int i, j; */
-/*   int needed_pivots = self->n < self->m ? self->n : self->m; */
-/*   needed_pivots -= done_pivots + nb_BB_cols + 1;  */
-/*   int _nb_col_singletons = 0, _nb_row_singletons = 0; */
-/*   int __nb_col_singletons = 0, __nb_row_singletons = 0; */
-/*   int *row_singeltons = workspace; */
-/*   int *col_singeltons  = &row_singeltons[needed_pivots]; */
-
-/*   for(i = 0; i < m; )  { */
-/*     int row = rows[i]; */
-
-/*     if (invr_row_perm[row] != ParSHUM_UNUSED_PIVOT) {  */
-/*       rows[i] = rows[--m]; */
-/*       continue; */
-/*     } */
-    
-/*     /\* We need the first check only for rectangular matrices  *\/ */
-/*     /\* if ( self->CSR[row].nb_elem == 1  && _nb_row_singletons < needed_pivots ) *\/ */
-/*     /\*   { *\/ */
-/*     /\*  	int col = *self->CSR[row].col; *\/ */
-/*     /\* 	if (invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) { *\/ */
-/*     /\* 	  /\\* row_perm[done_pivots + _nb_row_singletons] = row; *\\/ *\/ */
-/*     /\* 	  /\\* invr_col_perm[col]  = _nb_row_singletons + done_pivots; *\\/ *\/ */
-/*     /\* 	  /\\* col_perm[done_pivots +_nb_row_singletons] = col; *\\/ *\/ */
-/*     /\* 	  /\\* invr_row_perm[row] = _nb_row_singletons++ + done_pivots; *\\/ *\/ */
-/*     /\* 	  row_singeltons[_nb_row_singletons  ] = row; *\/ */
-/*     /\* 	  col_singeltons[_nb_col_singletons++] = col; *\/ */
-/*     /\* 	} *\/ */
-/*     /\* 	CSC_struct *CSC = &self->CSC[col]; *\/ */
-/*     /\* 	int *rows = CSC->row, tmp_int; *\/ */
-/*     /\* 	double *vals = CSC->val, tmp_double; *\/ */
-/*     /\* 	int nb_elem = CSC->nb_elem; *\/ */
-/*     /\* 	for(j = 0; j < nb_elem; j++) { *\/ */
-/*     /\* 	  if ( rows[j] == row ) { *\/ */
-/*     /\* 	    tmp_int = rows[j]; *\/ */
-/*     /\* 	    rows[j] = rows[--nb_elem]; *\/ */
-/*     /\* 	    rows[nb_elem] = tmp_int; *\/ */
-/*     /\* 	    tmp_double = vals[j]; *\/ */
-/*     /\* 	    vals[j] = vals[nb_elem]; *\/ */
-/*     /\* 	    vals[nb_elem] = tmp_double; *\/ */
-/*     /\* 	    break; *\/ */
-/*     /\* 	  } *\/ */
-/*     /\* 	} *\/ */
-/*     /\*   } *\/ */
-/*     i++; */
-/*   } */
-/*   if (m != self->m - done_pivots)  */
-/*     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the rows are taken out from rows"); */
-
-/*   for(i = 0; i < n; ) { */
-/*     int col = cols[i]; */
-    
-/*     if (invr_col_perm[col] != ParSHUM_UNUSED_PIVOT )  { */
-/*       cols[i] = cols[--n]; */
-/*       continue; */
-/*     } */
-
-/*     /\* We need the first check only for rectangular matrices *\/ */
-/*     /\* if ( self->CSC[col].nb_elem == 1 && _nb_col_singletons + _nb_row_singletons < needed_pivots ) *\/ */
-/*     /\*   { *\/ */
-/*     /\* 	int row = *self->CSC[col].row; *\/ */
-/*     /\* 	/\\* double val = *self->CSC[col].val, col_max = self->CSC[col].col_max; *\\/ *\/ */
-/*     /\* 	if (invr_row_perm[row] == ParSHUM_UNUSED_PIVOT) { *\/ */
-/*     /\* 	  /\\* col_perm[done_pivots + _nb_col_singletons] = col; *\\/ *\/ */
-/*     /\* 	  /\\* invr_col_perm[col]  = _nb_col_singletons + done_pivots; *\\/ *\/ */
-/*     /\* 	  /\\* row_perm[done_pivots + _nb_col_singletons] = row; *\\/ *\/ */
-/*     /\* 	  /\\* invr_row_perm[row] = _nb_col_singletons++ + done_pivots; *\\/ *\/ */
-/*     /\* 	  row_singeltons[_nb_row_singletons + _nb_col_singletons  ] = row; *\/ */
-/*     /\* 	  col_singeltons[_nb_col_singletons + _nb_col_singletons++] = col; *\/ */
-/*     /\* 	} *\/ */
-/*     /\*   } *\/ */
-/*     i++; */
-/*   } */
-
-/*   if (n != self->n - done_pivots - nb_BB_cols)  */
-/*     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, "not all the cols are taken out from cols"); */
-
-/*   /\* for ( i = 0;  i < _nb_row_singletons; i++)  { *\/ */
-/*   /\*   int row = row_singeltons[i]; *\/ */
-/*   /\*   int col = col_singeltons[i]; *\/ */
-/*   /\*   if (invr_row_perm[row] == ParSHUM_UNUSED_PIVOT &&  *\/ */
-/*   /\* 	invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) {  *\/ */
-/*   /\* 	col_perm[done_pivots + __nb_col_singletons] = col; *\/ */
-/*   /\* 	invr_col_perm[col]  = __nb_col_singletons + done_pivots; *\/ */
-/*   /\* 	row_perm[done_pivots + __nb_col_singletons] = row; *\/ */
-/*   /\* 	invr_row_perm[row] = __nb_col_singletons++ + done_pivots; *\/ */
-/*   /\*     } *\/ */
-/*   /\* } *\/ */
-
-
-/*   /\* for ( i = _nb_row_singletons;  i < _nb_col_singletons + _nb_row_singletons; i++)  { *\/ */
-/*   /\*   int row = row_singeltons[i]; *\/ */
-/*   /\*   int col = col_singeltons[i]; *\/ */
-/*   /\*   if (invr_row_perm[row] == ParSHUM_UNUSED_PIVOT &&  *\/ */
-/*   /\* 	invr_col_perm[col] == ParSHUM_UNUSED_PIVOT) {  *\/ */
-/*   /\* 	col_perm[done_pivots + __nb_col_singletons + __nb_row_singletons] = col; *\/ */
-/*   /\* 	invr_col_perm[col]  = __nb_col_singletons + __nb_row_singletons + done_pivots; *\/ */
-/*   /\* 	row_perm[done_pivots + __nb_col_singletons + __nb_row_singletons] = row; *\/ */
-/*   /\* 	invr_row_perm[row] = __nb_col_singletons+ __nb_row_singletons++ + done_pivots; *\/ */
-/*   /\*     } *\/ */
-/*   /\* } *\/ */
-    
-/*   /\* *nb_col_singletons = __nb_col_singletons; *\/ */
-/*   /\* *nb_row_singletons = __nb_row_singletons; *\/ */
-/*   *nb_col_singletons = 0; */
-/*   *nb_row_singletons = 0; */
-/* } */
-
-
-
-
 void
 ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int previous_step_pivots, double val_tol,
 			     int *nb_col_singletons, int *nb_row_singletons, int *cols, int *rows,
@@ -256,8 +137,8 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
 	continue;
       }
 
-      /* if ( self->CSR[row].nb_elem == 1 ) */
-      /* 	row_singeltons[nb_singeltons++] = row;  */
+      if ( self->CSR[row].nb_elem == 1 )
+      	row_singeltons[nb_singeltons++] = row;
       j++;
     }
 
@@ -377,8 +258,8 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
 	cols[j] = cols[--end];
 	continue;
       }
-      /* if (self->CSC[col].nb_elem == 1)   */
-      /* 	col_singeltons[nb_singeltons++] = col; */
+      if (self->CSC[col].nb_elem == 1)
+      	col_singeltons[nb_singeltons++] = col;
 
       j++;
     }

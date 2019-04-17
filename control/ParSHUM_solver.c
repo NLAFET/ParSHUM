@@ -1653,7 +1653,6 @@ ParSHUM_solver_compute_norms(ParSHUM_solver self,
   b_norm  = ParSHUM_vector_2norm(rhs);
 
   self->verbose->backward_error /= A_norm * x_norm + b_norm;
-  printf("norm = (%e)\n", self->verbose->backward_error);
 
   ParSHUM_vector_destroy(r);
 }
