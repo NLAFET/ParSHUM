@@ -66,7 +66,6 @@ ParSUHM_SBBD_read_matrix(ParSHUM_SBBD self)
 void
 ParSHUM_SBBD_partition(ParSHUM_SBBD self)
 {
-  char mess[2048];
   double timing, total;
 
   ParSHUM_verbose_start_timing(&total);
@@ -197,7 +196,6 @@ void
 ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS)
 {
   ParSHUM_solver solver = self->solver;
-  ParSHUM_matrix A = self->input_A;
   ParSHUM_vector tmp;
   int nb_blocks = self->MPI_info->MPI_size, block;
   int rank = self->MPI_info->rank;
@@ -239,9 +237,7 @@ ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS)
 
   if (!rank) { 
     int  block, nb_blocks = self->col_blocks->nb_blocks;
-    int j = 0;
-    int *col_sizes = self->col_blocks->sizes, *row_sizes = self->row_blocks->sizes;
-    int i; 
+    int *col_sizes = self->col_blocks->sizes;
 
     memcpy(&RHS->vect[RHS->n - schur_RHS->n], schur_RHS->vect, schur_RHS->n * sizeof(*RHS->vect));
     

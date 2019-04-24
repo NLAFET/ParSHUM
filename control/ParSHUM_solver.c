@@ -3,9 +3,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <libgen.h>
-#include <plasma.h>
 #include <math.h>
 #include <limits.h>
+#ifdef USE_PLASMA
+#include <plasma.h>
+#else
+#include <mkl.h>
+#endif
 
 #include "ParSHUM_verbose.h"
 #include "ParSHUM_enum.h" 
@@ -29,12 +33,15 @@ const char *usageStrign[] = {
   NULL,
 };
 
+#ifdef USE_PLASMA
 int is_plasma_init;
+#endif
 
 int  ParSHUM_solver_run_group(ParSHUM_solver solver, ParSHUM_parm_type type, 
 			      void *init_val, int nb_steps, void *inc);
 
 ParSHUM_solver 
+
 ParSHUM_solver_create()
 {
   ParSHUM_solver self = calloc(1, sizeof(*self));
@@ -51,9 +58,9 @@ ParSHUM_solver_create()
   self->exe_parms->extra_space_inbetween   = 1.0;
   self->exe_parms->nb_candidates_per_block = 10;
   self->exe_parms->nb_previous_pivots      = 5;
-  self->exe_parms->min_pivot_per_steps     = 20;
+  self->exe_parms->min_pivot_per_steps     = 5;
   self->exe_parms->density_tolerance       = 0.2;
-  self->exe_parms->max_dense_schur         = 10000;
+  self->exe_parms->max_dense_schur         = 20000;
   self->exe_parms->luby_algo               = 1;
   
   self->verbose = ParSHUM_verbose_create(self->exe_parms);
@@ -711,19 +718,19 @@ ParSHUM_solver_init(ParSHUM_solver self)
   if (self->exe_parms->trace) 
     self->verbose->paje = ParSHUM_paje_create(self->exe_parms->nb_threads);
 
+#ifdef USE_PLASMA
   if (!is_plasma_init) {
     plasma_init(1);
     is_plasma_init = 1;
   }
+#endif
   
   if ( !(self->debug & ParSHUM_CHECK_DENSE_W_ParSHUM_PERM) )
     ParSHUM_solver_alloc_internal(self);
 
-  setenv("OMP_WAIT_POLICY", "ACTIVE", 1);
-  setenv("OMP_PROC_BIND", "close", 1);
-
-  ParSHUM_verbose_create_dirs(self->verbose->parms->output_dir);
-#pragma omp  parallel num_threads(self->exe_parms->nb_threads) default(none)
+  if (self->verbose->parms->verbosity > 1)
+    ParSHUM_verbose_create_dirs(self->verbose->parms->output_dir);
+#pragma omp  parallel num_threads(self->exe_parms->nb_threads) default(none) proc_bind(spread)
   {
   int me  = omp_get_thread_num();
   me++;
@@ -921,7 +928,7 @@ ParSHUM_solver_get_Luby_pivots(ParSHUM_solver self, ParSHUM_Luby Luby, int new_L
     distribution_m[i] = (nb_rows / nb_threads) * i;
   distribution_m[nb_threads] = nb_rows;
 
-#pragma omp parallel  num_threads(nb_threads) shared(distribution_perms, distribution_n, distribution_m, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, verbose) firstprivate(self, S, base, invr_col_perms, invr_row_perms, col_perms, row_perms, logical_cols, logical_rows, nb_threads, cols, rows, all_pivots) default(none)
+#pragma omp parallel  num_threads(nb_threads) shared(distribution_perms, distribution_n, distribution_m, nb_cols, col_sizes, row_sizes, n, nb_BB_cols, verbose) firstprivate(self, S, base, invr_col_perms, invr_row_perms, col_perms, row_perms, logical_cols, logical_rows, nb_threads, cols, rows, all_pivots) default(none) proc_bind(spread)
   {
   ParSHUM_verbose_trace_start_event(verbose, ParSHUM_GETTING_PIVOTS);
   int i, j;
@@ -1105,7 +1112,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
       distributions[i] = (nb_cols / nb_threads) * i;
     distributions[nb_threads] = nb_cols;
 
-#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols, best_marko, best_markos, distributions, candidates, step) firstprivate(verbose, exe_parms, i, nb_threads) default(none)
+#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols, best_marko, best_markos, distributions, candidates, step) firstprivate(verbose, exe_parms, i, nb_threads) default(none) proc_bind(spread)
     {
     int me = omp_get_thread_num();
     int *my_col_perms = (int *) self->workspace[me];
@@ -1162,7 +1169,7 @@ ParSHUM_solver_find_pivot_set(ParSHUM_solver self)
       distributions[i] = (step->nb_candidates / nb_threads) * i;
     distributions[nb_threads] = step->nb_candidates;
     
-#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols, distributions, candidates) firstprivate(verbose, i, nb_threads) default(none)
+#pragma omp parallel num_threads(nb_threads) shared(self, nb_cols, distributions, candidates) firstprivate(verbose, i, nb_threads) default(none) proc_bind(spread)
     {
     ParSHUM_verbose_trace_start_event(verbose, ParSHUM_FIRST_PASS);
     int me = omp_get_thread_num();
@@ -1486,21 +1493,34 @@ ParSHUM_solver_solve(ParSHUM_solver self, ParSHUM_vector RHS)
   	double *dense_RHS = (double *) *self->workspace;
   	ParSHUM_dense_matrix_get_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals, ParSHUM_perm_global);
 
+#ifdef USE_PLASMA
 	plasma_dgetrs(self->S_dense->n, 1, self->S_dense->val, self->S_dense->n,
 		      self->S_dense->pivots, dense_RHS, self->S_dense->n);
-	 ParSHUM_dense_matrix_update_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals);
-       } else if ( self->S_dense->n < self->S_dense->m )  {
+#else
+	LAPACKE_dgetrs(LAPACK_COL_MAJOR, 'N', self->S_dense->n, 1, self->S_dense->val, self->S_dense->n, self->S_dense->pivots, dense_RHS, self->S_dense->n);
+#endif
+
+	ParSHUM_dense_matrix_update_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals);
+
+      } else if ( self->S_dense->n < self->S_dense->m )  {
 	 int diff_size = self->S_dense->m - self->S_dense->n;
 	 double *dense_RHS = (double *) *self->workspace;
 
 	 ParSHUM_dense_matrix_get_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals, ParSHUM_perm_both);
 	 
+#ifdef USE_PLASMA
 	 plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaUnit,  self->S_dense->n, 1, 1.0, self->S_dense->val,self->S_dense->m, dense_RHS, self->S_dense->m);
 
 	 plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, diff_size, 1, self->S_dense->n, -1.0, &self->S_dense->val[self->S_dense->m - diff_size], self->S_dense->m,  dense_RHS, self->S->m, 1.0,  &dense_RHS[self->S_dense->n], self->S->m);
 
 	 plasma_dtrsm(PlasmaLeft, PlasmaUpper, PlasmaNoTrans, PlasmaNonUnit,  self->S_dense->n, 1, 1.0, self->S_dense->val,  self->S_dense->m, dense_RHS, self->S_dense->m);
-	
+#else
+	 cblas_dtrsm(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasUnit, self->S_dense->n, 1, 1.0, self->S_dense->val,self->S_dense->m, dense_RHS, self->S_dense->m);
+
+	 cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, diff_size, 1, self->S_dense->n, -1.0, &self->S_dense->val[self->S_dense->m - diff_size], self->S_dense->m,  dense_RHS, self->S->m, 1.0,  &dense_RHS[self->S_dense->n], self->S->m);
+
+	 cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, self->S_dense->n, 1, 1.0, self->S_dense->val,  self->S_dense->m, dense_RHS, self->S_dense->m);
+#endif
   	ParSHUM_dense_matrix_update_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals);
       } else {
   	ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "not implemeted");
@@ -1536,101 +1556,117 @@ ParSHUM_solver_SBBD_solve(ParSHUM_solver self, ParSHUM_vector RHS,  ParSHUM_vect
 			  ParSHUM_dense_matrix global_schur, int *distribution, 
 			  int **BB_index, int *BB_sizes, ParSHUM_MPI_info MPI_info)
 {
-  double *RHS_vals = RHS->vect;
-  int rank = MPI_info->rank;
-  MPI_Comm comm = MPI_info->world;
-  int BB_cols = self->BB_cols;
-  int nb_blocks = MPI_info->MPI_size;
-  int square_n = self->S_dense->n - BB_cols;
-  int rest_m    = self->S_dense->m - square_n;
-  double *dense_RHS = (double *) *self->workspace;
-  double *BB_rhs = malloc(BB_cols * sizeof(*BB_rhs));
-  MPI_Status status;
+/*   double *RHS_vals = RHS->vect; */
+/*   int rank = MPI_info->rank; */
+/*   MPI_Comm comm = MPI_info->world; */
+/*   int BB_cols = self->BB_cols; */
+/*   int nb_blocks = MPI_info->MPI_size; */
+/*   int square_n = self->S_dense->n - BB_cols; */
+/*   int rest_m    = self->S_dense->m - square_n; */
+/*   double *dense_RHS = (double *) *self->workspace; */
+/*   double *BB_rhs = malloc(BB_cols * sizeof(*BB_rhs)); */
+/*   MPI_Status status; */
   
-  /* if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
-  /*   ParSHUM_vector_print(RHS, "Init RHS"); */
+/*   if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
+/*     ParSHUM_vector_print(RHS, "Init RHS"); */
 
-  ParSHUM_L_matrix_solve(self->L, RHS, self->row_perm);
+/*   ParSHUM_L_matrix_solve(self->L, RHS, self->row_perm); */
   
-  /* if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
-  /*   ParSHUM_vector_print(RHS, "after forward solve"); */
+/*   if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
+/*     ParSHUM_vector_print(RHS, "after forward solve"); */
   
-  ParSHUM_dense_matrix_get_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals, ParSHUM_perm_both);
+/*   ParSHUM_dense_matrix_get_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals, ParSHUM_perm_both); */
+/* #ifdef USE_PLASMA */
+/*   plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaUnit,  square_n, 1, 1.0,  */
+/* 	       self->S_dense->val, self->S_dense->m, dense_RHS, self->S_dense->m); */
   
-  plasma_dtrsm(PlasmaLeft, PlasmaLower, PlasmaNoTrans, PlasmaUnit,  square_n, 1, 1.0, 
-	       self->S_dense->val, self->S_dense->m, dense_RHS, self->S_dense->m);
-  /* print_double_array(dense_RHS, self->S_dense->m, "dense_RHS afer trsm"); */
+/*   plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, rest_m, 1, square_n, -1.0,  */
+/* 	       &self->S_dense->val[square_n], self->S_dense->m,   */
+/* 	       dense_RHS, self->S->m, 1.0, &dense_RHS[square_n], self->S->m); */
+/* #else */
+/*   cblas_dtrsm(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasUnit, square_n,  */
+/* 	      1, 1.0, self->S_dense->val, self->S_dense->m, dense_RHS, self->S_dense->m); */
+/*   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, rest_m, 1, square_n, -1.0, */
+/* 	      &self->S_dense->val[square_n], self->S_dense->m, */
+/* 	      dense_RHS, self->S->m, 1.0, &dense_RHS[square_n], self->S->m); */
+/* #endif */
   
-  plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, rest_m, 1, square_n, -1.0, 
-	       &self->S_dense->val[square_n], self->S_dense->m,  
-	       dense_RHS, self->S->m, 1.0, &dense_RHS[square_n], self->S->m);
-  /* print_double_array(dense_RHS, self->S_dense->m, "dense_RHS afer gemm"); */
+/*   if (rank == 0) { */
+/*     int block, i; */
+/*     double *send_buff; */
+/*     int max_size = 0; */
+/*     double *schur_RHS = schur_RHS_v->vect; */
+/*     memcpy(schur_RHS, &dense_RHS[square_n], rest_m * sizeof(*schur_RHS)); */
 
-  /* HERE */
-  if (rank == 0) {
-    int block, i;
-    double *send_buff;
-    int max_size = 0;
-    double *schur_RHS = schur_RHS_v->vect;
-    memcpy(schur_RHS, &dense_RHS[square_n], rest_m * sizeof(*schur_RHS));
-
-    for( block = 1; block < nb_blocks; block++)  {
-      MPI_Recv(&schur_RHS[distribution[block]], distribution[block+1] - distribution[block], 
-	       MPI_DOUBLE, block, 0, comm, &status);
-    }
-    plasma_dgetrs(global_schur->n, 1, global_schur->val, global_schur->n,
-		  global_schur->pivots, schur_RHS, global_schur->n);
+/*     for( block = 1; block < nb_blocks; block++)  { */
+/*       MPI_Recv(&schur_RHS[distribution[block]], distribution[block+1] - distribution[block],  */
+/* 	       MPI_DOUBLE, block, 0, comm, &status); */
+/*     } */
+/* #ifdef USE_PLASMA */
+/*     plasma_dgetrs(global_schur->n, 1, global_schur->val, global_schur->n, */
+/* 		  global_schur->pivots, schur_RHS, global_schur->n); */
+/* #else */
+/*     LAPACKE_dgetrs(LAPACK_COL_MAJOR, 'N', global_schur->n, 1, global_schur->val, global_schur->n, global_schur->pivots, schur_RHS, global_schur->n); */
+      
+/* #endif */
+/*     if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
+/*       ParSHUM_vector_print(schur_RHS_v, "global schur RHS"); */
     
-    if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
-      ParSHUM_vector_print(schur_RHS_v, "global schur RHS");
-    
-    for( block = 1; block < nb_blocks; block++) { 
-      int local_size = BB_sizes[block];
-      max_size = max_size > local_size ? max_size : local_size;
-    }    
-    send_buff = malloc(max_size * sizeof(*send_buff));
+/*     for( block = 1; block < nb_blocks; block++) {  */
+/*       int local_size = BB_sizes[block]; */
+/*       max_size = max_size > local_size ? max_size : local_size; */
+/*     }     */
+/*     send_buff = malloc(max_size * sizeof(*send_buff)); */
 
-    for( block = 1; block < nb_blocks; block++) { 
-      int *indices = BB_index[block];
-      for ( i =0;  i < BB_sizes[block]; i++) 
-	send_buff[i] = schur_RHS[indices[i]];
+/*     for( block = 1; block < nb_blocks; block++) {  */
+/*       int *indices = BB_index[block]; */
+/*       for ( i =0;  i < BB_sizes[block]; i++)  */
+/* 	send_buff[i] = schur_RHS[indices[i]]; */
 
-      MPI_Send(send_buff, BB_sizes[block], MPI_DOUBLE, block, 0, comm);
-    }
+/*       MPI_Send(send_buff, BB_sizes[block], MPI_DOUBLE, block, 0, comm); */
+/*     } */
 
-    int *indices = *BB_index;
-    for(i = 0; i < BB_cols; i++) 
-      BB_rhs[i] = schur_RHS[indices[i]];
-  } else { 
-    MPI_Send(&dense_RHS[square_n], rest_m, MPI_DOUBLE, 0, 0, comm);
-    MPI_Recv(BB_rhs, BB_cols, MPI_DOUBLE, 0, 0, comm, &status);
-  }
+/*     int *indices = *BB_index; */
+/*     for(i = 0; i < BB_cols; i++)  */
+/*       BB_rhs[i] = schur_RHS[indices[i]]; */
+/*   } else {  */
+/*     MPI_Send(&dense_RHS[square_n], rest_m, MPI_DOUBLE, 0, 0, comm); */
+/*     MPI_Recv(BB_rhs, BB_cols, MPI_DOUBLE, 0, 0, comm, &status); */
+/*   } */
   
-  plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, square_n, 1, BB_cols, -1.0, 
-	       &self->S_dense->val[square_n*self->S_dense->m], self->S_dense->m,  
-	       BB_rhs, BB_cols, 1.0, dense_RHS, self->S->m);
+/* #ifdef USE_PLASMA */
+/*   plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, square_n, 1, BB_cols, -1.0,  */
+/* 	       &self->S_dense->val[square_n*self->S_dense->m], self->S_dense->m,   */
+/* 	       BB_rhs, BB_cols, 1.0, dense_RHS, self->S->m); */
   
-  plasma_dtrsm(PlasmaLeft, PlasmaUpper, PlasmaNoTrans, PlasmaNonUnit,  square_n, 1, 1.0, 
-	       self->S_dense->val,  self->S_dense->m, dense_RHS, self->S_dense->m);
+/*   plasma_dtrsm(PlasmaLeft, PlasmaUpper, PlasmaNoTrans, PlasmaNonUnit,  square_n, 1, 1.0,  */
+/* 	       self->S_dense->val,  self->S_dense->m, dense_RHS, self->S_dense->m); */
+/* #else */
+/*   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, square_n, 1, BB_cols, -1.0, */
+/* 	      &self->S_dense->val[square_n*self->S_dense->m], self->S_dense->m, */
+/* 	      BB_rhs, BB_cols, 1.0, dense_RHS, self->S->m); */
+
+/*   cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, square_n, 1, 1.0, */
+/* 	       self->S_dense->val,  self->S_dense->m, dense_RHS, self->S_dense->m); */
+/* #endif */
+/*   ParSHUM_dense_matrix_update_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals); */
   
-  ParSHUM_dense_matrix_update_RHS(self->S_dense, dense_RHS, &self->row_perm[self->done_pivots], RHS_vals);
+/*   if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
+/*     ParSHUM_vector_print(RHS, "after dense solve"); */
   
-  /* if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
-  /*   ParSHUM_vector_print(RHS, "after dense solve"); */
+/*   ParSHUM_U_BB_matrix_solve(self->U, self->D, RHS, BB_rhs, self->col_perm, self->row_perm, */
+/*   			    self->dense_pivots, BB_cols); */
   
-  ParSHUM_U_BB_matrix_solve(self->U, self->D, RHS, BB_rhs, self->col_perm, self->row_perm,
-  			    self->dense_pivots, BB_cols);
+/*   if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
+/*     ParSHUM_vector_print(RHS, "after backward solve"); */
   
-  if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
-    ParSHUM_vector_print(RHS, "after backward solve");
+/*   ParSHUM_vector_permute(RHS, self->row_perm, self->S->m); */
+/*   if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
+/*     ParSHUM_vector_print(RHS, "P RHS"); */
   
-  ParSHUM_vector_permute(RHS, self->row_perm, self->S->m);
-  if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
-    ParSHUM_vector_print(RHS, "P RHS");
-  
-  ParSHUM_vector_permute(RHS, self->invr_col_perm, self->S->n - BB_cols);
-  if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
-    ParSHUM_vector_print(RHS, "after solve operation");
+/*   ParSHUM_vector_permute(RHS, self->invr_col_perm, self->S->n - BB_cols); */
+/*   if (self->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP) */
+/*     ParSHUM_vector_print(RHS, "after solve operation"); */
 }
 
 void
@@ -1697,11 +1733,12 @@ ParSHUM_solver_compute_norms(ParSHUM_solver self,
 void 
 ParSHUM_solver_finalize(ParSHUM_solver self)
 {
+#ifdef USE_PLASMA
   if (is_plasma_init) {
     plasma_finalize();
     is_plasma_init = 0;
   }
-  
+#endif  
   ParSHUM_verbose_print(self->verbose);
   ParSHUM_verbose_draw_graph(self->verbose);
 }

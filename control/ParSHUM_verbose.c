@@ -18,7 +18,7 @@ ParSHUM_verbose_default_parms()
 
   output_dir = getcwd(output_dir, (PATH_LENGTH + 1) * sizeof(*output_dir));
 
-  self->prog_name       = "ParSHUM_solver";
+  self->prog_name       = "ParSHUM";
   self->output_dir      = output_dir;
   self->user_out_dir    = 0;
   self->outfiles_prefix = NULL;
@@ -286,8 +286,9 @@ ParSHUM_verbose_print_V0(ParSHUM_verbose self)
   FILE *file             = self->parms->out_file;
   char *prog_name        = self->parms->prog_name;
   ParSHUM_exe_parms exe_parms = self->exe_parms;
+  int verbosity = self->parms->verbosity;
   
-  fprintf(file,"[%s] \n", prog_name);
+  if (verbosity > 0) {
   fprintf(file,"[%s] Parameters:\n", prog_name);
   if (exe_parms->matrix_file)
     fprintf(file,"[%s] matrix: %s\n", prog_name, exe_parms->matrix_file);
@@ -343,8 +344,10 @@ ParSHUM_verbose_print_V0(ParSHUM_verbose self)
   if(self->computed_norms)
   fprintf(file,"[%s] The backward error is (%e) and the forward error is (%e)\n",
  	  prog_name, self->backward_error, self->forward_error);
-
-  /* ParSHUM_verbose_print_steps(self->stats_first, self->parms); */
+  }
+  
+  if (verbosity > 1) 
+    ParSHUM_verbose_print_steps(self->stats_first, self->parms);
 }
 
 void
@@ -354,7 +357,8 @@ create_plot_file(char *plot_file, char *data_file,
 {
   FILE *file = fopen(plot_file, "w+");
   int i ;  
- fprintf(file, "set terminal eps\n");
+
+  fprintf(file, "set terminal eps\n");
   fprintf(file, "set style data  histogram\n");
   fprintf(file, "set style fill solid border\n");
   fprintf(file, "set style histogram rowstacked\n");
@@ -367,6 +371,7 @@ create_plot_file(char *plot_file, char *data_file,
   for(i = 2; i <= nb_graphs; i++)
     fprintf(file, ",  \'\' u %d t columnheader",i);
   fprintf(file, "\n");
+
   fclose(file);
 }
 
@@ -446,27 +451,30 @@ ParSHUM_verbose_draw_graph_V0(ParSHUM_verbose verbose)
   char data_file[2048];
   char plot_file[2048];
   char fig_file[2048];
+  int verbosity = parms->verbosity;
 
-  /* Handle the time graphs */
-  snprintf(plot_file, 2048, "%s/plot/%s_time.gplt", output_dir, parms->outfiles_prefix);
-  snprintf(data_file, 2048, "../data/%s_time.dat",  parms->outfiles_prefix);
-  snprintf(fig_file,  2048, "../fig/%s_time.eps",   parms->outfiles_prefix);
 
-  create_plot_file(plot_file, data_file, fig_file, "time per pivot set", "time", 3);
-  snprintf(data_file, 2048, "%s/data/%s_time.dat", output_dir, parms->outfiles_prefix);
-  create_time_data(data_file, verbose);
-
-  /* Handle the #pivots graphs */
-  snprintf(plot_file, 2048, "%s/plot/%s_pivots.gplt", output_dir, parms->outfiles_prefix);
-  snprintf(data_file, 2048, "../data/%s_pivots.dat",  parms->outfiles_prefix);
-  snprintf(fig_file,  2048, "../fig/%s_pivots.eps",   parms->outfiles_prefix);
-
-  create_plot_file(plot_file, data_file, fig_file, "#pivots per pivot set", "#pivots", 2);
-  snprintf(data_file, 2048, "%s/data/%s_pivots.dat", output_dir, parms->outfiles_prefix);
-  create_pivots_data(data_file, verbose);
-
-  ParSHUM_verbose_print_raw(verbose);
-
+  if (verbosity > 1) {
+    /* Handle the time graphs */
+    snprintf(plot_file, 2048, "%s/plot/%s_time.gplt", output_dir, parms->outfiles_prefix);
+    snprintf(data_file, 2048, "../data/%s_time.dat",  parms->outfiles_prefix);
+    snprintf(fig_file,  2048, "../fig/%s_time.eps",   parms->outfiles_prefix);
+    
+    create_plot_file(plot_file, data_file, fig_file, "time per pivot set", "time", 3);
+    snprintf(data_file, 2048, "%s/data/%s_time.dat", output_dir, parms->outfiles_prefix);
+    create_time_data(data_file, verbose);
+    
+    /* Handle the #pivots graphs */
+    snprintf(plot_file, 2048, "%s/plot/%s_pivots.gplt", output_dir, parms->outfiles_prefix);
+    snprintf(data_file, 2048, "../data/%s_pivots.dat",  parms->outfiles_prefix);
+    snprintf(fig_file,  2048, "../fig/%s_pivots.eps",   parms->outfiles_prefix);
+    
+    create_plot_file(plot_file, data_file, fig_file, "#pivots per pivot set", "#pivots", 2);
+    snprintf(data_file, 2048, "%s/data/%s_pivots.dat", output_dir, parms->outfiles_prefix);
+    create_pivots_data(data_file, verbose);
+    ParSHUM_verbose_print_raw(verbose);
+  }
+  
   if (verbose->exe_parms->trace) 
     ParSHUM_paje_create_file(verbose->paje, output_dir, parms->outfiles_prefix);
 }

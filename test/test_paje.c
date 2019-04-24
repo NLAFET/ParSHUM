@@ -23,7 +23,7 @@ main(int argc, char **argv)
   ParSHUM_solver_init(self);
   printf("%d !\n",omp_get_thread_num());
 
-#pragma omp parallel num_threads(self->exe_parms->nb_threads)
+#pragma omp parallel num_threads(self->exe_parms->nb_threads) proc_bind(spread)
   {
     ParSHUM_verbose_trace_start_event(self->verbose, 0);
     sleep(1);

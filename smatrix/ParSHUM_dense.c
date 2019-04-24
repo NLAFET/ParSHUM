@@ -3,7 +3,11 @@
 #include <string.h>
 #include <math.h>
 #include <omp.h>
+#ifdef USE_PLASMA
 #include <plasma.h>
+#else
+#include <mkl.h>
+#endif
 
 #include "ParSHUM_matrix.h"
 #include "ParSHUM_auxiliary.h"
@@ -156,15 +160,20 @@ ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int BB_cols, int nb_th
   char mess[2048];
 
   omp_set_num_threads(nb_threads);
-  if (self->n && self->m) { 
+  if (self->n && self->m)  
+#ifdef USE_PLASMA
     ret = plasma_dgetrf(self->m, self->n - BB_cols, self->val, self->m, self->pivots);  
-  }
+#else
+  ret = LAPACKE_dgetrf(LAPACK_COL_MAJOR, self->m, self->n - BB_cols, self->val, self->m, self->pivots);
+#endif
+  
   if (ret)  {
     snprintf(mess, 2048,"The factorization of the dense schur is completed, but the entry U(%d,%d) has a zero on it.\n", ret, ret);
     ParSHUM_warning(__FUNCTION__, __FILE__, __LINE__, mess);
   }
 
   if (BB_cols) {
+#ifdef USE_PLASMA
     plasma_dlaswp(PlasmaRowwise, self->m, BB_cols,  &self->val[(self->n-BB_cols) * self->m], self->m,
     		  self->pivots, 1);
     
@@ -175,6 +184,9 @@ ParSHUM_dense_matrix_factorize(ParSHUM_dense_matrix self, int BB_cols, int nb_th
     plasma_dgemm(PlasmaNoTrans, PlasmaNoTrans, self->m - self->n + BB_cols, BB_cols, self->n - BB_cols, -1.0, 
 		 &self->val[self->n - BB_cols], self->m, &self->val[(self->n - BB_cols) * self->m], self->m, 
  		 1,  &self->val[(self->n - BB_cols) * self->m + self->n - BB_cols], self->m);
+#else
+
+#endif
   }
 }
 
@@ -200,7 +212,7 @@ void
 ParSHUM_dense_matrix_get_RHS(ParSHUM_dense_matrix self, double *dense_RHS,
 			     int *row_perms, double *RHS, ParSHUM_perm_type perms_type)
 {
-  int i,  m = self->m, n = self->n; 
+  int i,  m = self->m; 
   int *plasma_perm = self->pivots;
   if (perms_type != ParSHUM_perm_none)  
     for(i = 0; i < m; i++) 

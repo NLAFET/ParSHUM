@@ -138,7 +138,7 @@ ParSHUM_get_block(ParSHUM_schur_matrix matrix, row_block row_blocks,
   int i, j, k, l, start, end, n;
 
   int nnz = col_blocks->nnz[block], *rows;
-  int global_BB = col_blocks->nb_BB_cols, local_BB = col_blocks->BB_size[block];
+  int  local_BB = col_blocks->BB_size[block];
   int *col_perms = col_blocks->perms;
   int *invr_row_perms = row_blocks->invr_perms;
   int *BB_indices = col_blocks->BB_index[block];
@@ -320,7 +320,7 @@ void
 ParSHUM_check_blocks(ParSHUM_schur_matrix A, row_block row_blocks, col_block col_blocks)
 {
   int  nb_blocks = row_blocks->nb_blocks, n = col_blocks->n;
-  int  m = row_blocks->n, block, i, j;
+  int  block, i, j;
   char mess[2048];
 
   /* check_vlaid_perms(col_blocks->perms, col_blocks->invr_perms, n, n, "col"); */
@@ -414,20 +414,12 @@ ParSHUM_collect_BB_block(double *local_schur, double *global_schur, col_block co
   MPI_Comm comm = MPI_info->world;
 
   if (rank) {
-    int schur_m = m - n + BB_cols, j;
+    int schur_m = m - n + BB_cols;
     buff         = malloc((size_t) BB_cols * schur_m * sizeof(*buff));
 
     for( i = 0; i < BB_cols; i++)
       memcpy((void *) &buff[i*schur_m], (void *) &local_schur[i*m + m - schur_m], (size_t) schur_m * sizeof(*buff));
     
-    /* printf("%d sending %d elements\n", rank, BB_cols*schur_m); */
-    /* for ( i = 0; i < BB_cols; i++) { */
-    /*   for (j = 0; j < schur_m; j++) {  */
-    /* 	printf("%f\t", buff[i*schur_m + j]); */
-    /*   } */
-    /*   printf("\n"); */
-    /* } */
-
     MPI_Send(buff, BB_cols*schur_m, MPI_DOUBLE, 0, 0, comm);
   } else {
     int BB_global   = col_blocks->nb_BB_cols;

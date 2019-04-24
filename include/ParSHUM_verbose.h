@@ -1,5 +1,6 @@
 #ifndef   _ParSHUM_VERBOSE_H
 #define   _ParSHUM_VERBOSE_H
+#define ParSHUM_VERBOSITY  1
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,7 +61,6 @@ struct _ParSHUM_verbose_per_step {
   long nb_flops;
   int nb_pivots;
   int nb_candidates;
-
   ParSHUM_verbose_per_step next;
 };
 
@@ -91,7 +91,7 @@ struct _ParSHUM_verbose {
 
   double forward_error;
   double backward_error;
-  
+
   double schur_density;
 
   int n;

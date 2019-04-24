@@ -135,7 +135,7 @@ ParSHUM_matrix_allocate(ParSHUM_matrix self, int n, int m, long nnz,
   int  **index = NULL;
   long **ptr = NULL;
   double **val = NULL;
-  long size_index;
+  long size_index = 0;
   int size_ptr;
 
   switch (type)  
