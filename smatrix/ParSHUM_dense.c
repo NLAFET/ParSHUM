@@ -69,11 +69,13 @@ void
 ParSHUM_vector_permute(ParSHUM_vector self, int *perms, int n)
 {
   int     i;
-  double *vect = self->vect, tmp[n];
-  
+  double *vect = self->vect;
+  double *tmp = malloc (n*sizeof(*tmp));
+
   memcpy(tmp, vect, (size_t) n*sizeof(*vect));
   for(i = 0; i < n; i++) 
     vect[i] = tmp[perms[i]];
+  free(tmp);
 }
 
 void 

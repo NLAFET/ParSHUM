@@ -107,7 +107,8 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
   int local_nb_sing[nb_threads];
   int part_m = m / nb_threads;
   int part_n = n / nb_threads;
-
+  int bb = 0;
+  
   if ( nb_threads * NB_PER_THREAD > n) {
     nb_threads = nb_threads_ = n / NB_PER_THREAD;
     nb_threads = nb_threads_ = !nb_threads ? 1 : nb_threads;
@@ -120,7 +121,7 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
   sizes_m[nb_threads] = original_sizes_m[nb_threads] = m;
   sizes_n[nb_threads] = original_sizes_n[nb_threads] = n;
 
-#pragma omp  parallel num_threads(nb_threads) shared(self, rows, cols, row_perm, col_perm, invr_row_perm, invr_col_perm, done_pivots, _done_pivots, needed_pivots, nb_threads, nb_threads_, _nb_row_singletons, _nb_col_singletons, local_nb_sing, workspace, sizes_m, original_sizes_m, sizes_n, original_sizes_n, val_tol, nb_BB_cols) default(none) proc_bind(spread)
+#pragma omp  parallel num_threads(nb_threads) shared(self, rows, cols, row_perm, col_perm, invr_row_perm, invr_col_perm, done_pivots, _done_pivots, needed_pivots, nb_threads, nb_threads_, _nb_row_singletons, _nb_col_singletons, local_nb_sing, workspace, sizes_m, original_sizes_m, sizes_n, original_sizes_n, val_tol, nb_BB_cols, bb) default(none) proc_bind(spread)
   {
     int j;
     int me =  omp_get_thread_num();
@@ -144,9 +145,10 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
 
     sizes_m[me+1] = end - start ;
     local_nb_sing[me] = nb_singeltons;
+
 #pragma omp barrier
     int nb_elem = local_nb_sing[me];
-    
+    int tt = 0;
     int perm_place = 0;
     for  ( j = 0; j < me; j++)
       perm_place += local_nb_sing[j];
@@ -184,6 +186,26 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       done_pivots += nb_elem;
 #pragma omp atomic
       _nb_row_singletons += nb_elem;
+#pragma omp atomic capture
+      {      
+	bb++; tt = bb;
+      }
+      if (tt == nb_threads) {
+	int start = _done_pivots;
+	int end = _done_pivots + _nb_row_singletons;
+	for ( j = start; j < end; ) {
+	  if ( col_perm[j] != invr_col_perm[col_perm[j]]) {
+	      invr_row_perm[row_perm[j]] = ParSHUM_UNUSED_PIVOT;
+	      row_perm[j]   = row_perm[--end];
+	      row_perm[end] = ParSHUM_UNUSED_PIVOT;
+	      col_perm[j]   = col_perm[end];
+	      col_perm[end] = ParSHUM_UNUSED_PIVOT;
+	    } else {
+	      j++;
+	    }
+	}
+	_nb_row_singletons = end - _done_pivots;
+      }
 
 #pragma omp single
     {
