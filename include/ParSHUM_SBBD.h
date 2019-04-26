@@ -17,6 +17,7 @@ struct _ParSHUM_SBBD {
   ParSHUM_matrix input_A;
   char *matrix_file;
   ParSHUM_dense_matrix Schur;
+  double **buff;
 };
 
 typedef struct _ParSHUM_SBBD *ParSHUM_SBBD; 

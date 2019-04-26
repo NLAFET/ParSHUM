@@ -405,63 +405,68 @@ ParSHUM_check_blocks(ParSHUM_schur_matrix A, row_block row_blocks, col_block col
 }
 
 void
-ParSHUM_collect_BB_block(double *local_schur, double *global_schur, col_block col_blocks,
-			 row_block row_blocks,int m, int n, int BB_cols, ParSHUM_MPI_info MPI_info) 
+ParSHUM_collect_BB_block(double *local_schur, double *global_schur, double **buffers, col_block col_blocks,
+			 row_block row_blocks,int m, int n, int BB_cols, int nb_threads, ParSHUM_MPI_info MPI_info) 
 {
-  double *buff = NULL;
-  int i;
   int rank = MPI_info->rank;
-  MPI_Comm comm = MPI_info->world;
-
+    
   if (rank) {
+    int i;
+    MPI_Comm comm = MPI_info->world;
     int schur_m = m - n + BB_cols;
-    buff         = malloc((size_t) BB_cols * schur_m * sizeof(*buff));
+    MPI_Request request;
+    double *buff = malloc((size_t) BB_cols * schur_m * sizeof(*buff));
 
     for( i = 0; i < BB_cols; i++)
       memcpy((void *) &buff[i*schur_m], (void *) &local_schur[i*m + m - schur_m], (size_t) schur_m * sizeof(*buff));
     
-    MPI_Send(buff, BB_cols*schur_m, MPI_DOUBLE, 0, 0, comm);
+    MPI_Isend(buff, BB_cols*schur_m, MPI_DOUBLE, 0, 0, comm, &request);
   } else {
+/* #pragma omp parallel default(shared)  */
+/*     { */
+/* #pragma omp  single  */
+/*     { */
+    MPI_Comm comm = MPI_info->world;
     int BB_global   = col_blocks->nb_BB_cols;
     int nb_blocks   = col_blocks->nb_blocks;
     int *BB_indices = *col_blocks->BB_index;
     int *local_schur_m = col_blocks->local_schur_m;
-    int max_nnz = 0, local_n, local_m, local_nnz;
-    int block, current_row = 0;
+    int local_n, local_m, local_nnz;
+    int block;
     MPI_Status status;
+    MPI_Request requests[nb_blocks];
     
     for (block = 1; block < nb_blocks; block++) {
       local_n = col_blocks->BB_size[block];
       local_m = local_schur_m[block+1] - local_schur_m[block];
       local_nnz = local_n * local_m;
-      
-      max_nnz = max_nnz > local_nnz ? max_nnz : local_nnz;
+      MPI_Irecv(buffers[block], local_nnz, MPI_DOUBLE, block, 0, comm, &requests[block]);
     }
-    buff = malloc((size_t) max_nnz * sizeof(*buff));
-    
+     
     local_m = m - n + BB_cols;
-    /* first habdle my block */
-    for ( i = 0; i < BB_cols; i++)
+/* #pragma omp task shared(global_schur, BB_indices, BB_global, local_schur, m, BB_cols) firstprivate(local_m) */
+/*     { */
+    for ( int i = 0; i < BB_cols; i++)
       memcpy((void *) &global_schur[BB_indices[i]*BB_global], (void *) &local_schur[i*m + m - local_m], (size_t) local_m * sizeof(*global_schur));
-    current_row += local_m;
-
+    /* } */
     for (block = 1; block < nb_blocks; block++) {
-      local_n = col_blocks->BB_size[block];
-      local_m = local_schur_m[block+1] - local_schur_m[block]; 
-      BB_indices = col_blocks->BB_index[block];
+      int indx;
+      MPI_Waitany(nb_blocks-1, &requests[1], &indx, &status);
+      indx++;
+      local_n = col_blocks->BB_size[indx];
+      local_m = local_schur_m[indx+1] - local_schur_m[indx]; 
+      BB_indices = col_blocks->BB_index[indx];
+      double *rr = buffers[indx];
 
-      /* printf("recieving fro %d  %d elements\n", block, local_n * local_m); */
-      MPI_Recv(buff, local_n * local_m, MPI_DOUBLE, block, 0, comm, &status);
-
-      for ( i = 0; i < local_n; i++)
-	memcpy((void *) &global_schur[BB_indices[i]*BB_global + current_row], (void *) &buff[i*local_m],
+/* #pragma omp task shared(global_schur, BB_indices, BB_global, local_schur, local_schur_m) firstprivate(local_m, indx, rr) */
+/*     { */
+      for ( int i = 0; i < local_n; i++)
+	memcpy((void *) &global_schur[BB_indices[i]*BB_global + local_schur_m[indx]], (void *) &rr[i*local_m],
 	       (size_t) local_m * sizeof(*global_schur));
-      current_row += local_m;
+  /*   }	 */
+  /*   } */
+  /* } */
+  /* } */
     }
-    if (current_row != BB_global) 
-      printf("KO with BB_global = %d and current_row %d\n", BB_global, current_row);
   }
-
-  free(buff);
 }
-

@@ -32,7 +32,7 @@ main(int argc, char **argv)
   ParSHUM_SBBD_partition(self);
 
   ParSHUM_SBBD_factorize(self);
-
+  
   ParSHUM_SBBD_solve(self, B);
 
   if (! MPI_info->rank) {

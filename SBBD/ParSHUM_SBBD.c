@@ -28,6 +28,9 @@ ParSHUM_SBBD_create(MPI_Comm world)
   self->hypergraph     = ParSHUM_Zoltan_create(self->MPI_info);
   self->solver         = ParSHUM_solver_create();
 
+  if (!self->MPI_info->rank)
+    self->buff = malloc(self->MPI_info->MPI_size * sizeof(*self->buff));
+
   return self;
 }
 
@@ -98,10 +101,17 @@ ParSHUM_SBBD_partition(ParSHUM_SBBD self)
     ParSHUM_verbose_stop_timing(&timing);
     printf("check_block \t\t %f\n", timing/1e6);
 
+
     ParSHUM_blocks_print_stats(self->A, self->row_blocks, self->col_blocks);
     self->Schur = ParSHUM_dense_matrix_create(self->col_blocks->nb_BB_cols, self->col_blocks->nb_BB_cols);
     if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
       ParSHUM_print_blocks(self->row_blocks, self->col_blocks);
+    for(int i = 1; i < self->MPI_info->MPI_size; i++)  {
+      self->buff[i] = malloc(self->col_blocks->BB_size[i] *  sizeof(**self->buff) * 
+			     (self->col_blocks->local_schur_m[i+1] - self->col_blocks->local_schur_m[i]));
+      /* memset(self->buff[i], 1, self->col_blocks->BB_size[i] *  sizeof(**self->buff) *  */
+      /* 	     (self->col_blocks->local_schur_m[i+1] - self->col_blocks->local_schur_m[i+1])); */
+    }
   }
 
   ParSHUM_verbose_start_timing(&timing);
@@ -155,12 +165,14 @@ ParSHUM_SBBD_factorize(ParSHUM_SBBD self)
 
   local_S = self->solver->S_dense;
   if (rank ) {
-    ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m], NULL, NULL, NULL,
-  			     local_S->m, local_S->n, nb_BB_cols, self->MPI_info);
+    ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m], NULL, NULL, NULL, NULL,
+  			     local_S->m, local_S->n, nb_BB_cols, self->solver->exe_parms->nb_threads,
+			     self->MPI_info);
   } else {
-    ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m],
-			     self->Schur->val, self->col_blocks, self->row_blocks,
-			     local_S->m, local_S->n, nb_BB_cols, self->MPI_info);
+    ParSHUM_collect_BB_block(&local_S->val[(local_S->n - nb_BB_cols)  * local_S->m], 
+			     self->Schur->val, self->buff, self->col_blocks, self->row_blocks,
+			     local_S->m, local_S->n, nb_BB_cols, self->solver->exe_parms->nb_threads,
+			     self->MPI_info);
     /* ParSHUM_dense_matrix_print(self->Schur, "dense global schur"); */
 
     /* int i, j, m = self->Schur->m, n = self->Schur->n;  */
@@ -211,6 +223,7 @@ ParSHUM_SBBD_solve(ParSHUM_SBBD self, ParSHUM_vector RHS)
     if (self->solver->debug & ParSHUM_DEBUG_VERBOSE_EACH_STEP)
       ParSHUM_vector_print(RHS, "global RHS");
 
+    print_int_array(block_sizes, nb_blocks+1, "sizes");
     ParSHUM_vector_permute(RHS, row_perm, self->input_A->n);
     
     memcpy(tmp->vect, RHS->vect, size * sizeof(*tmp->vect));

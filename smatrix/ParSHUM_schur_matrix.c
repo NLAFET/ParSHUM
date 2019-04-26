@@ -121,7 +121,7 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
   sizes_m[nb_threads] = original_sizes_m[nb_threads] = m;
   sizes_n[nb_threads] = original_sizes_n[nb_threads] = n;
 
-#pragma omp  parallel num_threads(nb_threads) shared(self, rows, cols, row_perm, col_perm, invr_row_perm, invr_col_perm, done_pivots, _done_pivots, needed_pivots, nb_threads, nb_threads_, _nb_row_singletons, _nb_col_singletons, local_nb_sing, workspace, sizes_m, original_sizes_m, sizes_n, original_sizes_n, val_tol, nb_BB_cols, bb) default(none) proc_bind(spread)
+#pragma omp  parallel num_threads(nb_threads) shared(self, rows, cols, row_perm, col_perm, invr_row_perm, invr_col_perm, done_pivots, _done_pivots, needed_pivots, nb_threads, nb_threads_, _nb_row_singletons, _nb_col_singletons, local_nb_sing, workspace, sizes_m, original_sizes_m, sizes_n, original_sizes_n, val_tol, nb_BB_cols, bb) default(none) //proc_bind(spread)
   {
     int j;
     int me =  omp_get_thread_num();
@@ -187,24 +187,27 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
 #pragma omp atomic
       _nb_row_singletons += nb_elem;
 #pragma omp atomic capture
-      {      
+      {
 	bb++; tt = bb;
       }
+
+      printf("tt = %d nb_threads = %d\n", tt, nb_threads);
       if (tt == nb_threads) {
-	int start = _done_pivots;
-	int end = _done_pivots + _nb_row_singletons;
-	for ( j = start; j < end; ) {
-	  if ( col_perm[j] != invr_col_perm[col_perm[j]]) {
-	      invr_row_perm[row_perm[j]] = ParSHUM_UNUSED_PIVOT;
-	      row_perm[j]   = row_perm[--end];
-	      row_perm[end] = ParSHUM_UNUSED_PIVOT;
-	      col_perm[j]   = col_perm[end];
-	      col_perm[end] = ParSHUM_UNUSED_PIVOT;
-	    } else {
-	      j++;
-	    }
-	}
-	_nb_row_singletons = end - _done_pivots;
+      	int start = _done_pivots;
+      	int end = _done_pivots + _nb_row_singletons;
+      	for ( j = start; j < end; ) {
+      	  if ( j != invr_col_perm[col_perm[j]]) {
+      	      invr_row_perm[row_perm[j]] = ParSHUM_UNUSED_PIVOT;
+      	      /* invr_col_perm[col_perm[j]] = ParSHUM_UNUSED_PIVOT; */
+      	      row_perm[j]   = row_perm[--end];
+      	      row_perm[end] = ParSHUM_UNUSED_PIVOT;
+      	      col_perm[j]   = col_perm[end];
+      	      col_perm[end] = ParSHUM_UNUSED_PIVOT;
+      	    } else {
+      	      j++;
+      	    }
+      	}
+      	_nb_row_singletons = end - _done_pivots;
       }
 
 #pragma omp single
@@ -564,7 +567,7 @@ ParSHUM_schur_matrix_update_LD_singeltons(ParSHUM_schur_matrix self, ParSHUM_mat
   }
   D->n += nb_pivots;
 
-#pragma omp parallel num_threads(nb_threads) shared(L_input_size, D_input_size) firstprivate(nb_threads, nb_pivots, col_perm, row_perm, self, L, D, nb_steps) private(step) default(none) proc_bind(spread)
+#pragma omp parallel num_threads(nb_threads) shared(L_input_size, D_input_size) firstprivate(nb_threads, nb_pivots, col_perm, row_perm, self, L, D, nb_steps) private(step) default(none) //proc_bind(spread)
   {
     long S_nnz = 0;
     int me =  omp_get_thread_num();
@@ -637,7 +640,7 @@ ParSHUM_schur_matrix_update_LD(ParSHUM_schur_matrix self, ParSHUM_L_matrix L, Pa
   D->n += nb_pivots;
   L->n += nb_pivots;
 
-#pragma omp parallel for num_threads(nb_threads) shared(nb_pivots,L_input_size,D_input_size,nb_row_singeltons) firstprivate(self, workspace, col_perm, L, D, U, invr_row_perm) reduction(+:S_nnz) reduction(+:L_nnz) default(none) proc_bind(spread)
+#pragma omp parallel for num_threads(nb_threads) shared(nb_pivots,L_input_size,D_input_size,nb_row_singeltons) firstprivate(self, workspace, col_perm, L, D, U, invr_row_perm) reduction(+:S_nnz) reduction(+:L_nnz) default(none) //proc_bind(spread)
     for( int current_pivot = 0; current_pivot < nb_pivots; current_pivot++) {
       /* TODO: ParSHUM_verbose_trace_start_event(verbose, ParSHUM_UPDATE_L); */
       int me =  omp_get_thread_num();
@@ -727,7 +730,7 @@ ParSHUM_schur_matrix_update_U_singletons(ParSHUM_schur_matrix S, ParSHUM_U_matri
     L->col_ptr[L->n] = sthg;
   }
 
-#pragma omp parallel num_threads(nb_threads) firstprivate(nb_threads, nb_pivots, col_perm, row_perm, S,D,U, nb_steps) private(step) default(none) proc_bind(spread)
+#pragma omp parallel num_threads(nb_threads) firstprivate(nb_threads, nb_pivots, col_perm, row_perm, S,D,U, nb_steps) private(step) default(none) //proc_bind(spread)
   {
     int me =  omp_get_thread_num();
     for ( step = 0; step < nb_steps; step++) 
@@ -919,7 +922,7 @@ ParSHUM_schur_matrix_update_S(ParSHUM_schur_matrix S, ParSHUM_L_matrix L, ParSHU
   long U_new_nnz = 0;
   int start = done_pivots, end = done_pivots + nb_pivots;
   
-#pragma omp parallel num_threads(nb_threads) shared(S_new_nnz, U_new_nnz, workspace, U_new_n, start, end, L_new_n, ) firstprivate(S, L, U, done_pivots, U_struct, invr_row_perm, value_tol, L_struct, invr_col_perm, row_perms) default(none) proc_bind(spread)
+#pragma omp parallel num_threads(nb_threads) shared(S_new_nnz, U_new_nnz, workspace, U_new_n, start, end, L_new_n, ) firstprivate(S, L, U, done_pivots, U_struct, invr_row_perm, value_tol, L_struct, invr_col_perm, row_perms) default(none) //proc_bind(spread)
   {
   int me =  omp_get_thread_num();
   int m = S->m;
@@ -1139,7 +1142,7 @@ ParSHUM_schur_matrix_convert(ParSHUM_schur_matrix S, int done_pivots,
   if (k != n) 
     ParSHUM_fatal_error(__FUNCTION__, __FILE__, __LINE__, "the conversion to dense matrix has failed");
 
-#pragma omp parallel for private(col, i) shared(S, invr_row_perm, col_perm) firstprivate(done_pivots, n, m_schur) proc_bind(spread)
+#pragma omp parallel for private(col, i) shared(S, invr_row_perm, col_perm) firstprivate(done_pivots, n, m_schur) //proc_bind(spread)
   for(col = done_pivots;  col < n; col++){
     CSC_struct *CSC = &S->CSC[col_perm[col]];
     int local_row = (col - done_pivots) * m_schur;

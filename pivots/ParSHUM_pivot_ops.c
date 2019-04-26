@@ -97,7 +97,7 @@ get_possible_pivots(ParSHUM_solver solver, ParSHUM_schur_matrix matrix, int *ran
   int max_col_length = (int)  ( matrix->nnz / (matrix->n - solver->done_pivots) );
   max_col_length *= 2;
 
-#pragma omp parallel num_threads(nb_threads) proc_bind(spread) 
+#pragma omp parallel num_threads(nb_threads) //proc_bind(spread) 
   {
     int me =  omp_get_thread_num();
     int start = me * ( n / nb_threads);
