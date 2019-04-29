@@ -186,13 +186,16 @@ ParSHUM_schur_get_singletons(ParSHUM_schur_matrix self, int done_pivots, int pre
       done_pivots += nb_elem;
 #pragma omp atomic
       _nb_row_singletons += nb_elem;
-#pragma omp atomic capture
-      {
-	bb++; tt = bb;
-      }
+/* #pragma omp atomic capture */
+/*       { */
+/* 	bb++; tt = bb; */
+/*       } */
 
-      printf("tt = %d nb_threads = %d\n", tt, nb_threads);
-      if (tt == nb_threads) {
+/*       printf("tt = %d nb_threads = %d\n", tt, nb_threads); */
+      /* if (tt == nb_threads) { */
+#pragma omp barrier
+#pragma omp single 
+      {      
       	int start = _done_pivots;
       	int end = _done_pivots + _nb_row_singletons;
       	for ( j = start; j < end; ) {
