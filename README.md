@@ -1,5 +1,5 @@
-# The ParSHUM library
-This document is the UserGuide for the ParSHUM library that implements parallel sparse
+# The ParSHUM library 
+The ParSHUM library implements parallel sparse a
 LU factorization. The configuration and installation process for the library is explained
 next, followed by a description of how to use the driver that is provided by the library and
 the interface of the library. The last section explains how to obtain optimal performance
