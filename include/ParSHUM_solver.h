@@ -11,7 +11,7 @@
 #include "ParSHUM_schur_matrix.h" 
 #include "ParSHUM_dense.h"
 #include "ParSHUM_verbose.h"
-#include "ParSHUM_SBBD_util.h"
+/* #include "ParSHUM_SBBD_util.h" */
 
 
 typedef struct _ParSHUM_solver *ParSHUM_solver;
@@ -97,9 +97,9 @@ void           ParSHUM_solver_init(ParSHUM_solver self);
 void           ParSHUM_solver_read_matrix(ParSHUM_solver self);
 void           ParSHUM_solver_factorize(ParSHUM_solver self);
 void           ParSHUM_solver_solve(ParSHUM_solver self, ParSHUM_vector rhs);
-void           ParSHUM_solver_SBBD_solve(ParSHUM_solver self, ParSHUM_vector RHS, ParSHUM_vector schur_RHS, 
-					 ParSHUM_dense_matrix global_schur, int *distribution, 
-					 int **BB_index, int *BB_sizes, ParSHUM_MPI_info MPI_info);
+/* void           ParSHUM_solver_SBBD_solve(ParSHUM_solver self, ParSHUM_vector RHS, ParSHUM_vector schur_RHS,  */
+/* 					 ParSHUM_dense_matrix global_schur, int *distribution,  */
+/* 					 int **BB_index, int *BB_sizes, ParSHUM_MPI_info MPI_info); */
 /* void           ParSHUM_solver_iterative_refinement(ParSHUM_solver self, ParSHUM_vector X,  */
 /*     						      ParSHUM_vector rhs, double wanted_precision); */
 void           ParSHUM_solver_parse_args(ParSHUM_solver self, int argc, char **argv, int exit_on_notFound);
