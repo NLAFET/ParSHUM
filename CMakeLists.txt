@@ -15,6 +15,8 @@ file(GLOB_RECURSE SOURCES control/*.c pivots/*.c smatrix/*.c)
 
 add_library(ParSHUM STATIC ${SOURCES})
 
+find_package(BLAS)
+
 if( SPRAL_DIR )
   target_include_directories(ParSHUM PUBLIC ${SPRAL_DIR}/include)
   link_directories( ${SPRAL_DIR}/lib/)
@@ -24,13 +26,14 @@ if( SPRAL_DIR )
 endif()
 
 
-if(MKL_LDFLAGS  AND MKL_CFLAGS)
-  target_compile_options(ParSHUM PUBLIC ${MKL_CFLAGS})
-  target_link_libraries(ParSHUM ${MKL_LDFLAGS})
-else ()
-  message(FATAL_ERROR "MKL was not provided . Use -DMKL_LDFLAGS and -DMKL_CFLAGS  to provide these flags. (provided by the MKL LINK ADVISOR: https://software.intel.com/en-us/articles/intel-mkl-link-line-advisor) ")
-endif()
+# if(MKL_LDFLAGS  AND MKL_CFLAGS)
+#   target_compile_options(ParSHUM PUBLIC ${MKL_CFLAGS})
+#   target_link_libraries(ParSHUM ${MKL_LDFLAGS})
+# else ()
+#   message(FATAL_ERROR "MKL was not provided . Use -DMKL_LDFLAGS and -DMKL_CFLAGS  to provide these flags. (provided by the MKL LINK ADVISOR: https://software.intel.com/en-us/articles/intel-mkl-link-line-advisor) ")
+# endif()
 
 add_executable(ParSHUM_simple ${PROJECT_SOURCE_DIR}/test/test.c)
 
-target_link_libraries(ParSHUM_simple ParSHUM)
+target_link_libraries(ParSHUM_simple ParSHUM BLAS::BLAS)
+# target_link_libraries(ParSHUM_simple PRIVATE BLAS::BLAS)
